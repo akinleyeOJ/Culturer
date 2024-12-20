@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
-import Button from '@/components/Button'; // Importing the Button component
 
 const App = () => {
   const handleButtonPress = () => {
@@ -9,7 +8,6 @@ const App = () => {
 
   return (
     <View style={styles.container}>
-      <Button label="Press Me" onPress={handleButtonPress} />
     </View>
   );
 };
