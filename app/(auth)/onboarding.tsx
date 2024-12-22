@@ -1,6 +1,7 @@
+/* eslint-disable import/no-unresolved */
 import { router } from "expo-router";
 import React, { useState, useRef } from "react";
-import { View, Text, TouchableOpacity, Dimensions } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Swiper from "react-native-swiper";
 import { onboardingSteps } from "@/constants";
@@ -8,7 +9,6 @@ import { onboardingSteps } from "@/constants";
 const Onboarding = () => {
   const swiperRef = useRef<Swiper>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const { height } = Dimensions.get("window");
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -16,10 +16,10 @@ const Onboarding = () => {
         onPress={() => router.replace("/(auth)/sign-up")}
         className="w-full items-end p-5"
       >
-        <Text className="text-black text-md">Skip</Text>
+        <Text className="text-red-500 text-md font-semibold">Skip</Text>
       </TouchableOpacity>
 
-      <View style={{ height: height * 0.7 }}>
+      <View className="h-[70%]">
         <Swiper
           ref={swiperRef}
           loop={false}
