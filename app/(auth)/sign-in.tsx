@@ -1,14 +1,14 @@
 import React from "react";
 import { View, StyleSheet, Alert, Text } from "react-native";
 
-const Wishlist = () => {
+const SignIn = () => {
   const handleButtonPress = () => {
     Alert.alert("Button Pressed");
   };
 
   return (
     <View style={styles.container}>
-      <Text>tesstt</Text>
+      <Text>Wishlist</Text>
     </View>
   );
 };
@@ -21,4 +21,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Wishlist;
+export default SignIn;
