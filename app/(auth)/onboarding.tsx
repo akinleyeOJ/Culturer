@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Swiper from "react-native-swiper";
 import { onboardingSteps } from "../../constants";
 import { router } from "expo-router";
+import CustomButton from "../../components/CustomButton";
 
 const Onboarding = () => {
   const swiperRef = useRef(null);
@@ -35,6 +36,14 @@ const Onboarding = () => {
             </View>
           ))}
         </Swiper>
+        <CustomButton
+          title="Next"
+          onPress={() => {}}
+          IconLeft={null}
+          IconRight={null}
+          className="w-11/12 mt-10"
+          bgVariant="primary"
+        />
       </View>
     </SafeAreaView>
   );
@@ -53,10 +62,11 @@ const styles = StyleSheet.create({
   },
   skipText: {
     fontSize: 16,
-    color: "#0286ff", // You can use your app's color here
+    color: "#0286ff",
+    fontWeight: "bold",
   },
   swiperContainer: {
-    height: "70%",
+    height: "90%",
   },
   slide: {
     flex: 1,
