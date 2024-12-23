@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Swiper from "react-native-swiper";
 import { onboardingSteps } from "../../constants";
@@ -31,6 +31,11 @@ const Onboarding = () => {
         >
           {onboardingSteps.map((item) => (
             <View key={item.id} style={styles.slide}>
+              <Image
+                source={item.image}
+                resizeMode="contain"
+                style={{ width: "100%", height: 300 }}
+              />
               <Text style={styles.title}>{item.title}</Text>
               <Text style={styles.description}>{item.description}</Text>
             </View>
