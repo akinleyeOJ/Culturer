@@ -44,9 +44,7 @@ const Onboarding = () => {
         <CustomButton
           title="Next"
           onPress={() => {}}
-          IconLeft={null}
-          IconRight={null}
-          className="w-11/12 mt-10"
+          style={{ width: "100%", marginTop: 40 }}
           bgVariant="primary"
         />
       </View>
