@@ -9,6 +9,7 @@ import CustomButton from "../../components/CustomButton";
 const Onboarding = () => {
   const swiperRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const isLastSlide = activeIndex === onboardingSteps.length - 1;
 
   return (
     <SafeAreaView style={styles.container}>
