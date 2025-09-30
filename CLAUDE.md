@@ -70,11 +70,14 @@ A comprehensive cultural marketplace app with the following core features:
 
 ## Learning Timeline (18 months to job-ready)
 ### Phase 1: Foundation (Weeks 1-4) - Current Focus
-- [ ] Set up development environment ✅ (DONE)
-- [ ] Create basic 5-screen app structure (Home, Browse, Wishlist, Messages, Profile)
-- [ ] Implement bottom tab navigation
-- [ ] Learn basic styling and flexbox
-- [ ] Build reusable components (Button, Card)
+- [x] Set up development environment ✅ (DONE)
+- [x] Create basic 5-screen app structure (Home, Browse, Wishlist, Message, Profile) ✅ (DONE)
+- [x] Implement bottom tab navigation ✅ (DONE)
+- [x] Debug routing issues and understand file-based routing ✅ (DONE)
+- [x] Set up app entry point with redirect ✅ (DONE)
+- [x] Learn basic styling and flexbox ✅ (DONE)
+- [ ] Build reusable components (Button, Card) - NEXT FOCUS
+- [ ] Add real content to each screen
 
 ### Phase 2: Core Features (Weeks 5-8)
 - [ ] Build authentication system (login/register forms)
@@ -96,10 +99,43 @@ A comprehensive cultural marketplace app with the following core features:
 - [ ] App store deployment
 - [ ] Analytics and monitoring
 
-## Next Immediate Steps
-- [ ] Create basic 5-screen structure with bottom navigation
-- [ ] Set up placeholder content for each screen
-- [ ] Add basic styling and safe area handling
+## What We've Accomplished ✅
+- [x] Set up complete development environment (Xcode, iOS simulator, dependencies)
+- [x] Created 5-screen app structure with working navigation
+- [x] Implemented bottom tab navigation with FontAwesome icons
+- [x] Debugged and fixed routing issues (learned file-based routing)
+- [x] Set up proper app entry point with redirect
+- [x] Learned Expo Router fundamentals and route groups vs actual routes
+
+## Issues Debugged & Resolved
+4. **Unmatched Route Error**: Fixed file name/layout name mismatches (Message.tsx vs "Messages")
+5. **Redirect Path Error**: Learned difference between route groups `(tabs)` and actual routes `/Home`
+
+## Current App Structure
+```
+app/
+├── index.tsx (redirects to /Home)
+├── _layout.tsx (main app layout)
+├── (tabs)/
+│   ├── _layout.tsx (tab navigation with 5 tabs)
+│   ├── Home.tsx ✅
+│   ├── Browse.tsx ✅
+│   ├── Wishlist.tsx ✅
+│   ├── Message.tsx ✅
+│   └── Profile.tsx ✅
+└── (auth)/
+    ├── _layout.tsx
+    ├── sign-in.tsx
+    ├── sign-up.tsx
+    └── onboarding.tsx
+```
+
+## Next Immediate Steps - Week 1 Continued
+- [ ] Learn basic styling and flexbox - NEXT FOCUS
+- [ ] Add meaningful content to Home screen (welcome message, recent items placeholder)
+- [ ] Style the tab bar and screens to look more professional
+- [ ] Build reusable components (Button, Card)
+- [ ] Add safe area handling for different phone sizes
 
 ## Troubleshooting Notes
 - If TurboModule errors occur: ensure `@expo/metro-runtime` is installed

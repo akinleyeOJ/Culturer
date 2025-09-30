@@ -8,7 +8,7 @@ const Browse = () => {
 
   return (
     <View style={styles.container}>
-      <Text>tesstt</Text>
+      <Text>Browse</Text>
     </View>
   );
 };
