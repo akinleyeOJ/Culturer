@@ -12,19 +12,42 @@ const CustomButton = ({
   ...props
 }: ButtonProps) => {
   // Choose background variant dynamically
-  let bgStyle = styles.bgPrimary;
-  if (bgVariant === "secondary") bgStyle = styles.bgSecondary;
-  else if (bgVariant === "danger") bgStyle = styles.bgDanger;
-  else if (bgVariant === "outline") bgStyle = styles.bgOutline;
+  const getBgStyle = () => {
+    switch (bgVariant) {
+      case "secondary":
+        return styles.bgSecondary;
+      case "danger":
+        return styles.bgDanger;
+      case "outline":
+        return styles.bgOutline;
+      case "success":
+        return styles.bgSuccess;
+      default:
+        return styles.bgPrimary;
+    }
+  };
+
+  const getTextStyle = () => {
+    switch (textVariant) {
+      case "secondary":
+        return styles.textSecondary;
+      case "danger":
+        return styles.textDanger;
+      case "success":
+        return styles.textSuccess;
+      default:
+        return styles.textDefault;
+    }
+  };
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[styles.button, bgStyle, style]}
+      style={[styles.button, getBgStyle(), style]}
       {...props}
     >
       {IconLeft && <IconLeft />}
-      <Text style={styles.text}>{title}</Text>
+      <Text style={[styles.text, getTextStyle()]}>{title}</Text>
       {IconRight && <IconRight />}
     </TouchableOpacity>
   );
@@ -62,4 +85,5 @@ const styles = StyleSheet.create({
     borderColor: "#D1D5DB", // Neutral color for border
     borderWidth: 0.5,
   },
+
 });

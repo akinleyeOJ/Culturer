@@ -1,5 +1,13 @@
 // /src/constants/colors.ts
 
+//............................
+// to use color constants, import the color.ts file and use the color constants like this:
+// import { Colors } from "../constants/color";
+// backgroundColor: Colors.primary[100],
+//............................
+//to ask: need to find best/ recommended color mixture for the app and then update all color types with the new color mixture
+
+
 type ColorShades = {
   100: string;
   200: string;
