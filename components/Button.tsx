@@ -57,17 +57,13 @@ export default CustomButton;
 
 const styles = StyleSheet.create({
   button: {
-    width: "100%",
-    borderRadius: 9999, // for rounded-full
+    borderRadius: 12, // for rounded-full
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.1)", // shadow-md equivalent, use specific packages or custom shadow if needed
     padding: 12, // Example padding
-  },
-  text: {
-    fontSize: 16,
-    fontWeight: "bold",
+    gap: 8
   },
   // Add other specific styles based on your background variant and className
   // Example for different background variants:
@@ -85,5 +81,24 @@ const styles = StyleSheet.create({
     borderColor: "#D1D5DB", // Neutral color for border
     borderWidth: 0.5,
   },
+  bgSuccess: {
+    backgroundColor: "#10B981", // green-500
+  },
+  text: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  textSecondary: {
+    color: "#6B7280", // gray-500
+  },
+  textDanger: {
+    color: "#EF4444", // red-500
+  },
+  textSuccess: {
+    color: "#10B981", // green-500
+  },
+  textDefault: {
+    color: "#000000", // black
+  }
 
 });
