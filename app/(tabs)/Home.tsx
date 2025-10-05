@@ -1,5 +1,8 @@
-import React from "react";
+import React, {useState} from "react";
 import { View, StyleSheet, Alert, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import CustomButton from "../../components/Button";
+import {ProductCard, RecentlyViewedCard} from "../../components/Card";
 
 const Home = () => {
   const handleButtonPress = () => {
