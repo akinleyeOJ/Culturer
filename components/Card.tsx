@@ -244,13 +244,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   recentlyViewedCardImage: {
-    width: "100%",
-    height: 200,
+    width: 60, 
+    height: 60, 
     borderRadius: 8,
-    overflow: "hidden",
+    backgroundColor: "#ffecd2",
+    justifyContent: "center", 
+    alignItems: "center", 
+    marginBottom: 8,
   },
   recentlyViewedCardEmoji: {
-    fontSize: 40
+    fontSize: 30,
   },
   recentlyViewedCardName: {
     fontSize: 11,
@@ -262,6 +265,6 @@ const styles = StyleSheet.create({
   recentlyViewedCardPrice: {
     fontSize: 10,
     color: "#ff6b6b",
-    fontWeight: "500",
+    fontWeight: "600",
   },
 });
