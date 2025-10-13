@@ -1,5 +1,5 @@
 import React, { ReactNode } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, StyleProp } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, StyleProp, Image } from "react-native";
 
 interface CardProps {
   children?: ReactNode;
@@ -23,7 +23,7 @@ interface ProductCardProps extends CardProps {
     name: string;
     price: string;
     //Dont forget to add the image type
-    image: string;
+    image?: string;
     emoji: string;
     rating: number;
     reviews: number;
@@ -32,6 +32,7 @@ interface ProductCardProps extends CardProps {
     onPress?: () => void;
     onLike?: () => void;
     isLiked?: boolean;
+    variant?: "default" | "large";
     //Dont forget to add isInWishlist and isInCart
     // isInWishlist: boolean;
     // isInCart: boolean;
@@ -50,6 +51,7 @@ export const ProductCard = ({
     onLike, 
     isLiked = false,
     style,
+    variant = "default",
     // isInWishlist = false, 
     // isInCart = false 
 }: ProductCardProps) => { 
@@ -76,10 +78,19 @@ const shippingStyle =
       ? styles.shippingFree
       : styles.shippingPaid;
 
+//Choose card style based on varient
+const cardStyle = variant === "large" ? styles.productCardLarge : styles.productCard;
+const imageStyle = variant === "large" ? styles.productCardImageLarge : styles.productCardImage;
+const emojiStyle = variant === "large" ? styles.productCardEmojiLarge : styles.productCardEmoji;
+
 return (
-    <Card style={[styles.productCard, style]} onPress={onPress} >
-        <View style={styles.productCardImage}>
-            <Text style={styles.productCardEmoji}>{emoji}</Text>
+    <Card style={[cardStyle, style]} onPress={onPress} >
+        <View style={imageStyle}>
+            {image ? (
+                <Image source={{ uri: image }} style={styles.productImage} />
+            ) : (
+                <Text style={emojiStyle}>{emoji}</Text>
+            )}
             {outOfStock && (
                 <View style={styles.outOfStockContainer}>
                     <Text style={styles.outOfStockText}>Out of Stock</Text>
@@ -111,7 +122,7 @@ return (
 interface RecentlyViewedCardProps extends CardProps {
     name: string;
     price: string;
-    image: string;
+    image?: string;
     emoji: string;
     onPress: () => void;
 }
@@ -151,18 +162,40 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   productCard: {
-    width: "48%",
+    width: 180,  // Changed from 160
+    overflow: "hidden",
   },
   productCardImage: {
     width: "100%",
-    height: 200,
-    borderRadius: 8,
-    overflow: "hidden",
+    height: 140,  // Changed from 120
+    backgroundColor: "#ffecd2",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
   },
   productCardEmoji: {
-    fontSize: 40,
-    textAlign: "center",
-    marginBottom: 10,
+    fontSize: 50,  // Changed from 40
+  },
+  productImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  // NEW: Large Product Card styles (Hot at Culturer section)
+  productCardLarge: {
+    width: 240,
+    overflow: "hidden",
+  },
+  productCardImageLarge: {
+    width: "100%",
+    height: 180,
+    backgroundColor: "#ffecd2",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  productCardEmojiLarge: {
+    fontSize: 70,
   },
   outOfStockContainer: {
     position: "absolute",
@@ -236,11 +269,11 @@ const styles = StyleSheet.create({
     color: "#000",
   },
   recentlyViewedCard: {
-    width: 120,
+    width: 100,  // Changed from 120
     marginRight: 10,
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
-    padding: 12,
+    padding: 10,  // Changed from 12
     alignItems: "center",
   },
   recentlyViewedCardImage: {
@@ -253,17 +286,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   recentlyViewedCardEmoji: {
-    fontSize: 30,
+    fontSize: 28,  // Changed from 30
   },
   recentlyViewedCardName: {
-    fontSize: 11,
+    fontSize: 10,  // Changed from 11
     fontWeight: "500",
     color: "#2d3436",
     marginBottom: 4,
     textAlign: "center",
   },
   recentlyViewedCardPrice: {
-    fontSize: 10,
+    fontSize: 9,  // Changed from 10
     color: "#ff6b6b",
     fontWeight: "600",
   },
