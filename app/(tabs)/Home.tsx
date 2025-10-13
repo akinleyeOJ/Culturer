@@ -24,7 +24,13 @@ const Home = () => {
   return (
    <SafeAreaView style={styles.container}>
     {/* Home Header section*/}
-    <HomeHeader userName="John Doe" userAvatar="https://via.placeholder.com/150" />
+    <HomeHeader 
+    userName="John Doe" 
+    userAvatar="https://via.placeholder.com/150"
+    wishlistCount={likedProducts.length}
+    onSearchPress={() => console.log("Search pressed")}
+    onWishlistPress={() => console.log("Wishlist pressed")}
+    />
     
     <ScrollView showsVerticalScrollIndicator={false}>
     {/* Recently Viewed section*/}
@@ -136,9 +142,7 @@ const Home = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
     backgroundColor: "#fff",
-    alignItems: "center",
   },
   sectionHeader: {
     flexDirection: "row",
