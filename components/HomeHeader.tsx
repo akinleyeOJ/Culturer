@@ -1,102 +1,144 @@
-import React from "react";
-import { View, Text, StyleSheet, TextInput, Image } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import { View, Text, StyleSheet, TextInput, Image, TouchableOpacity, Keyboard } from "react-native";
 
 interface HomeHeaderProps {
     userName?: string;
     userAvatar?: string;
+    wishlistCount?: number;
+    onSearchPress?: () => void;
+    onWishlistPress?: () => void;
 }
 
-const HomeHeader = ({ userName = "User", userAvatar }: HomeHeaderProps) => {
+const HomeHeader = ({ 
+    userName = "User", 
+    userAvatar,
+    wishlistCount = 0,
+    onSearchPress,
+    onWishlistPress 
+}: HomeHeaderProps) => {
 
-//determine greeting based on the time of day
-const getGreeting = () => {
-    const hours = new Date().getHours();
-    if (hours < 12) return "Good Morning";
-    if (hours < 18) return "Good Afternoon";
-    return "Good Evening";
-}
+    const [showSearch, setShowSearch] = useState(false);
+    const searchInputRef = useRef<TextInput>(null);
 
-// Get user initials for avatar fallback
-const getUserInitials = () => {
-    return userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-}
+    const getGreeting = () => {
+        const hours = new Date().getHours();
+        if (hours < 12) return "Good Morning";
+        if (hours < 18) return "Good Afternoon";
+        return "Good Evening";
+    }
+
+    const getUserInitials = () => {
+        return userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+    }
+
+    const handleSearchPress = () => {
+        if (showSearch) {
+            // Close search
+            setShowSearch(false);
+            Keyboard.dismiss();
+        } else {
+            // Open search
+            setShowSearch(true);
+        }
+    };
+
+    // Focus input when showSearch becomes true
+    useEffect(() => {
+        if (showSearch) {
+            setTimeout(() => {
+                searchInputRef.current?.focus();
+            }, 100);
+        }
+    }, [showSearch]);
+
     return (
         <View style={styles.container}>
-            {/* Greeting Row */}
-            <View style={styles.greetingRow}>
-
-                {/* Avatar */}
-                <View style={styles.avatarContainer}>
-                    {userAvatar ? (
-                        <Image source={{ uri: userAvatar }} style={styles.avatar} />
-                    ) : (
-                        <View style={styles.avatarPlaceholder}>
-                            <Text style={styles.avatarText}>{getUserInitials()}</Text>
-                        </View>
-                    )}
-                </View>
+            <View style={styles.topBar}>
+                <Text style={styles.greetingText}>{getGreeting()}, {userName}</Text>
                 
-                {/* Greetings Text */}
-                <View style={styles.greetingTextContainer}>
-                    <Text style={styles.greetingText}>{getGreeting()}</Text>
-                    <Text style={styles.userName}>{userName}</Text>
+                <View style={styles.iconContainer}>
+                    <TouchableOpacity 
+                        onPress={handleSearchPress}
+                        style={styles.iconButton}
+                    >
+                        <Text style={styles.icon}>🔍</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity onPress={onWishlistPress} style={styles.iconButton}>
+                        <Text style={styles.icon}>🤍</Text>
+                        {wishlistCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{wishlistCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
                 </View>
             </View>
 
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-                <Text style={styles.searchIcon}>🔍</Text>
-                <TextInput style={styles.searchInput} placeholder="Search for anything" />
-            </View>
-
+            {showSearch && (
+                <View style={styles.searchContainer}>
+                    <Text style={styles.searchIcon}>🔍</Text>
+                    <TextInput 
+                        ref={searchInputRef}
+                        style={styles.searchInput} 
+                        placeholder="Search for anything"
+                        placeholderTextColor="#999"
+                        keyboardType="default"
+                        returnKeyType="search"
+                        onBlur={() => setShowSearch(false)}  // Add this back
+                    />
+                </View>
+            )}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        padding: 16,
+        width: "100%",
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        paddingBottom: 16,
         backgroundColor: "#f8f9fa",
     },
-    greetingRow: {
+    topBar: {
         flexDirection: "row",
+        justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 15,
+        marginBottom: 16,
     },
-    avatarContainer: {
-       marginRight: 12,
-    },  
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 22.5,
+    greetingText: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: "#212529",
     },
-    avatarPlaceholder: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "#e9ecef",
+    iconContainer: {
+        flexDirection: "row",
+        gap: 12,
+        alignItems: "center",
+    },
+    iconButton: {
+        position: "relative",
+        padding: 4,
+    },
+    icon: {
+        fontSize: 22,
+    },
+    badge: {
+        position: "absolute",
+        top: 0,
+        right: 0,
+        backgroundColor: "#ff6b6b",
+        borderRadius: 10,
+        minWidth: 18,
+        height: 18,
         justifyContent: "center",
         alignItems: "center",
     },
-    avatarText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#6c757d",
-    },
-    greetingTextContainer: {
-        flex: 1,
-    },
-    greetingText: {
-        fontSize: 14,
-        marginBottom: 2,
-        fontWeight: "600",
-        color: "#212529",
-    },
-    userName: {
-        fontSize: 14,
-        color: "#212529",
-        fontWeight: "700",
+    badgeText: {
+        fontSize: 10,
+        fontWeight: "bold",
+        color: "#fff",
     },
     searchContainer: {
         flexDirection: "row",
@@ -108,13 +150,15 @@ const styles = StyleSheet.create({
     },  
     searchIcon: {
         fontSize: 16,
-        color: "#212529",
+        color: "#999",
         marginRight: 10,
     },
     searchInput: {
         flex: 1,
         fontSize: 14,
         color: "#212529",
+        paddingVertical: 0,  // Add this - sometimes padding can interfere
+        height: 40,  // Add explicit height
     },
 });
 
