@@ -2,6 +2,7 @@ export interface Product {
     id: number;
     name: string;
     price: string;
+    image?: string;
     emoji: string;
     rating: number;
     reviews: number;
