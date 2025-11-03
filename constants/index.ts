@@ -10,20 +10,25 @@ export const images = {
 export const onboardingSteps = [
   {
     id: 1,
-    title: "Welcome to Our App",
-    description: "Discover amazing features and possibilities",
+    title: "Discover the World Through Culture",
+    description:
+      "Connect with authentic traditions, flavors, and crafts from communities around the globe",
     image: images.onboarding1,
   },
   {
     id: 2,
-    title: "Easy to Use",
-    description: "Simple and intuitive interface for the best experience",
+    title: "Buy, Sell & Share Cultural Treasures",
+    description:
+      "From handcrafted goods to traditional recipes and cultural experiences",
     image: images.onboarding2,
+    categories: ["Food", "Crafts", "Services", "Events"],
   },
   {
     id: 3,
-    title: "Get Started",
-    description: "Join us now and start your journey",
-    image: images.onboarding1,
+    title: "Your Cultural Journey Starts Here",
+    description:
+      "Tell us about your heritage and interests to discover your community",
+    image: images.onboarding3,
+    isPersonalization: true,
   },
 ];

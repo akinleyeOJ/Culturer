@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     color: "#10B981", // green-500
   },
   textDefault: {
-    color: "#000000", // black
+    color: "#FFFFFF", // white
   }
 
 });
