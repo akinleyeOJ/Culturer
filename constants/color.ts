@@ -5,8 +5,6 @@
 // import { Colors } from "../constants/color";
 // backgroundColor: Colors.primary[100],
 //............................
-//to ask: need to find best/ recommended color mixture for the app and then update all color types with the new color mixture
-
 
 type ColorShades = {
   100: string;
@@ -26,74 +24,102 @@ export type ColorsType = {
   success: ColorShades;
   danger: ColorShades;
   warning: ColorShades;
-  general: ColorShades;
+  neutral: ColorShades;
+  background: {
+    primary: string;
+    secondary: string;
+    tertiary: string;
+  };
+  text: {
+    primary: string;
+    secondary: string;
+    tertiary: string;
+  };
 };
 
 export const Colors: ColorsType = {
+  // Coral/Orange - Primary brand color (from buttons and accents)
   primary: {
-    100: "#F5F8FF",
-    200: "#EBF4FF",
-    300: "#C3D9FF",
-    400: "#9BBFFF",
-    500: "#0286FF",
-    600: "#6A85E6",
-    700: "#475A99",
-    800: "#364573",
-    900: "#242B4D",
+    100: "#FFF5F0",
+    200: "#FFE5D9",
+    300: "#FFC9B3",
+    400: "#FFAC8C",
+    500: "#FF8F66", // Main coral/orange
+    600: "#FF7A52",
+    700: "#F25C2E",
+    800: "#CC4A1F",
+    900: "#993715",
   },
+  // Pink/Rose - Secondary accent color
   secondary: {
-    100: "#F8F8F8",
-    200: "#F1F1F1",
-    300: "#D9D9D9",
-    400: "#C2C2C2",
-    500: "#AAAAAA",
-    600: "#999999",
-    700: "#666666",
-    800: "#4D4D4D",
-    900: "#333333",
+    100: "#FFF0F5",
+    200: "#FFE0EC",
+    300: "#FFC2D9",
+    400: "#FFA3C7",
+    500: "#FF85B5", // Main pink
+    600: "#FF6BA3",
+    700: "#E5507A",
+    800: "#B83D5F",
+    900: "#8C2E47",
   },
+  // Green - For success states and positive indicators
   success: {
-    100: "#F0FFF4",
-    200: "#C6F6D5",
-    300: "#9AE6B4",
-    400: "#68D391",
-    500: "#38A169",
-    600: "#2F855A",
-    700: "#276749",
-    800: "#22543D",
-    900: "#1C4532",
+    100: "#E8FAF0",
+    200: "#C6F2DC",
+    300: "#8FE6BA",
+    400: "#58DA98",
+    500: "#0CC25F", // Bright green (from "Free shipping" badge)
+    600: "#0AAA51",
+    700: "#088A42",
+    800: "#066D34",
+    900: "#045025",
   },
+  // Red - For errors and "out of stock" indicators
   danger: {
-    100: "#FFF5F5",
-    200: "#FED7D7",
-    300: "#FEB2B2",
-    400: "#FC8181",
-    500: "#F56565",
-    600: "#E53E3E",
-    700: "#C53030",
-    800: "#9B2C2C",
-    900: "#742A2A",
+    100: "#FFF0F0",
+    200: "#FFE0E0",
+    300: "#FFB8B8",
+    400: "#FF9090",
+    500: "#FF6868",
+    600: "#FF4040",
+    700: "#E02020",
+    800: "#B81818",
+    900: "#901010",
   },
+  // Orange/Amber - For warnings and time badges
   warning: {
-    100: "#FFFBEB",
-    200: "#FEF3C7",
-    300: "#FDE68A",
-    400: "#FACC15",
-    500: "#EAB308",
-    600: "#CA8A04",
-    700: "#A16207",
-    800: "#854D0E",
-    900: "#713F12",
+    100: "#FFF8E6",
+    200: "#FFEEB3",
+    300: "#FFE180",
+    400: "#FFD44D",
+    500: "#FFC61A",
+    600: "#F0B400",
+    700: "#CC9900",
+    800: "#997300",
+    900: "#664D00",
   },
-  general: {
-    100: "#CED1DD",
-    200: "#858585",
-    300: "#EEEEEE",
-    400: "#0CC25F",
-    500: "#F6F8FA",
-    600: "#E6F3FF",
-    700: "#EBEBEB",
-    800: "#ADADAD",
-    900: "#8A8A8A",
+  // Neutral/Gray - For text and borders
+  neutral: {
+    100: "#F9F9F9",
+    200: "#F0F0F0",
+    300: "#E0E0E0",
+    400: "#C4C4C4",
+    500: "#A0A0A0",
+    600: "#757575",
+    700: "#525252",
+    800: "#3D3D3D",
+    900: "#1F1F1F",
+  },
+  // Background colors
+  background: {
+    primary: "#FFFFFF",
+    secondary: "#FFF8F5", // Cream/warm white
+    tertiary: "#F9F9F9",
+  },
+  // Text colors
+  text: {
+    primary: "#1F1F1F",
+    secondary: "#525252",
+    tertiary: "#A0A0A0",
   },
 };
