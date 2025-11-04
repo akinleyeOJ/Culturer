@@ -9,6 +9,7 @@ const SignUp = () => {
   return (
     <View style={styles.container}>
       <Text>SignUP</Text>
+      <Button title="Sign Up" onPress={handleButtonPress} />
     </View>
   );
 };
