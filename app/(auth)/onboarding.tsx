@@ -287,9 +287,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: Colors.general[300],
+    backgroundColor: Colors.neutral[300],
     borderWidth: 1,
-    borderColor: Colors.general[700],
+    borderColor: Colors.neutral[700],
   },
   interestChipSelected: {
     backgroundColor: Colors.primary[500],
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 4,
     marginHorizontal: 5,
-    backgroundColor: Colors.general[700],
+    backgroundColor: Colors.neutral[700],
     borderRadius: 2,
   },
   activeDot: {
