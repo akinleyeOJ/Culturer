@@ -48,8 +48,8 @@ const Onboarding = () => {
 
   const handleNext = () => {
     if (isLastSlide) {
-      // Navigate to sign-up
-      router.replace("/(auth)/sign-up");
+      // Navigate to auth page (which handles both sign-in and sign-up)
+      router.replace("/(auth)/auth");
     } else {
       swiperRef.current?.scrollBy(1);
     }
@@ -149,7 +149,7 @@ const Onboarding = () => {
     <SafeAreaView style={styles.container}>
       {/* Skip Button */}
       <TouchableOpacity
-        onPress={() => router.replace("/(auth)/sign-up")}
+        onPress={() => router.replace("/(auth)/auth")}
         style={styles.skipButton}
       >
         <Text style={styles.skipButtonText}>Skip</Text>
