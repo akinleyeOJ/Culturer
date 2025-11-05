@@ -219,14 +219,14 @@ const SignIn = () => {
 
           {/* Form Container */}
           <Animated.View style={[styles.formContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.formTitle}>
-              {isSignUp ? "Create an Account" : "Log in to your account"}
-            </Text>
-            <Text style={styles.formSubtitle}>
-              {isSignUp
-                ? "Join our community and start exploring"
-                : "Access your messages, wishlists, and listings"}
-            </Text>
+            {isSignUp && (
+              <>
+                <Text style={styles.formTitle}>Create an Account</Text>
+                <Text style={styles.formSubtitle}>
+                  Join our community and start exploring
+                </Text>
+              </>
+            )}
 
             {/* Name Input - Sign Up Only */}
             {isSignUp && (
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   },
   toggleContainer: {
     flexDirection: "row",
-    backgroundColor: "#E0E0E0", // Darker grey for testing - change back to Colors.neutral[100]
+    backgroundColor: Colors.neutral[100],
     borderRadius: 25,
     padding: 4,
     marginBottom: 30,
