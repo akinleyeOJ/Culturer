@@ -122,6 +122,27 @@ const SignIn = () => {
         Alert.alert("Error", "Password must be at least 8 characters");
         return;
       }
+      // Check for uppercase letter
+      if (!/[A-Z]/.test(password)) {
+        Alert.alert(
+          "Error",
+          "Password must contain at least one uppercase letter",
+        );
+        return;
+      }
+      // Check for number
+      if (!/[0-9]/.test(password)) {
+        Alert.alert("Error", "Password must contain at least one number");
+        return;
+      }
+      // Check for special character
+      if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+        Alert.alert(
+          "Error",
+          "Password must contain at least one special character (!@#$%^&*)",
+        );
+        return;
+      }
       if (!agreeToTerms) {
         Alert.alert("Error", "Please agree to the terms and conditions");
         return;
@@ -143,11 +164,14 @@ const SignIn = () => {
 
         Alert.alert(
           "Success",
-          "Account created! Please check your email to verify your account.",
+          "Account created successfully! Please check your email to verify your account.",
           [
             {
               text: "OK",
-              onPress: () => router.replace("/(tabs)/Home"),
+              onPress: () => {
+                // Switch to sign in mode
+                handleToggle(false);
+              },
             },
           ],
         );
@@ -346,8 +370,8 @@ const SignIn = () => {
               </View>
               {isSignUp && (
                 <Text style={styles.passwordHint}>
-                  Must be at least 8 characters(at least one uppercase letter,
-                  one lowercase letter, one number, and one special character)
+                  Must be at least 8 characters with one uppercase letter, one
+                  number, and one special character (!@#$%^&*)
                 </Text>
               )}
             </View>
