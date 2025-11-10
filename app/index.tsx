@@ -27,7 +27,7 @@ const Index = () => {
 
   // If user is logged in, go to Home, otherwise go to auth
   if (user) {
-    return <Redirect href="/(tabs)/Profile" />;
+    return <Redirect href="/(tabs)/Home" />;
   }
 
   return <Redirect href="/(auth)/auth" />;
