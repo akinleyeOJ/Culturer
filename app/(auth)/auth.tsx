@@ -12,10 +12,12 @@ import {
   Animated,
   LayoutAnimation,
   UIManager,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Colors } from "../../constants/color";
+import { supabase } from "../../lib/supabase";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === "android") {
@@ -47,6 +49,9 @@ const SignIn = () => {
   const [name, setName] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+
+  // Loading state
+  const [loading, setLoading] = useState(false);
 
   // Animation on toggle change
   useEffect(() => {
@@ -100,28 +105,81 @@ const SignIn = () => {
     setIsSignUp(signUp);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    if (loading) return; // Prevent multiple submissions
+
     if (isSignUp) {
       // Sign Up validation
       if (!name || !email || !password || !confirmPassword) {
-        Alert.alert("Please fill in all fields");
+        Alert.alert("Error", "Please fill in all fields");
         return;
       }
       if (password !== confirmPassword) {
-        Alert.alert("Passwords do not match");
+        Alert.alert("Error", "Passwords do not match");
+        return;
+      }
+      if (password.length < 8) {
+        Alert.alert("Error", "Password must be at least 8 characters");
         return;
       }
       if (!agreeToTerms) {
-        Alert.alert("Please agree to the terms and conditions");
+        Alert.alert("Error", "Please agree to the terms and conditions");
         return;
       }
-      console.log("Sign up:", { name, email, password });
+
+      setLoading(true);
+      try {
+        const { error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              full_name: name,
+            },
+          },
+        });
+
+        if (error) throw error;
+
+        Alert.alert(
+          "Success",
+          "Account created! Please check your email to verify your account.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/(tabs)/Home"),
+            },
+          ],
+        );
+      } catch (error: any) {
+        Alert.alert("Sign Up Error", error.message || "An error occurred");
+      } finally {
+        setLoading(false);
+      }
     } else {
       // Sign In validation
-      console.log("Sign in:", { email, password, rememberMe });
+      if (!email || !password) {
+        Alert.alert("Error", "Please enter email and password");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (error) throw error;
+
+        // Navigate to the home screen after successful login
+        router.replace("/(tabs)/Home");
+      } catch (error: any) {
+        Alert.alert("Sign In Error", error.message || "Invalid credentials");
+      } finally {
+        setLoading(false);
+      }
     }
-    // Navigate to the home screen after successful login
-    router.replace("/(tabs)/Home");
   };
 
   const handleSocialLogin = (provider: string) => {
@@ -370,14 +428,24 @@ const SignIn = () => {
 
             {/* Continue Button */}
             <TouchableOpacity
-              style={styles.continueButton}
+              style={[
+                styles.continueButton,
+                (loading || (isSignUp && !agreeToTerms)) &&
+                  styles.continueButtonDisabled,
+              ]}
               onPress={handleContinue}
-              disabled={isSignUp && !agreeToTerms}
+              disabled={loading || (isSignUp && !agreeToTerms)}
             >
-              <Text style={styles.continueButtonIcon}>✉️</Text>
-              <Text style={styles.continueButtonText}>
-                {isSignUp ? "Create Account" : "Continue with Email"}
-              </Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.continueButtonIcon}>✉️</Text>
+                  <Text style={styles.continueButtonText}>
+                    {isSignUp ? "Create Account" : "Continue with Email"}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
 
             {/* Divider */}
@@ -602,6 +670,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: Colors.primary[500],
     gap: 8,
+  },
+  continueButtonDisabled: {
+    backgroundColor: Colors.neutral[300],
+    opacity: 0.6,
   },
   continueButtonIcon: {
     fontSize: 18,
