@@ -231,9 +231,22 @@ const SignIn = () => {
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    console.log(`${provider} Auth Pressed`);
-    // Implement social login logic here
+  const handleSocialLogin = async (provider: "google" | "apple") => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: provider,
+        options: {
+          redirectTo: "your-app-scheme://auth/callback", // Configure this
+          skipBrowserRedirect: false,
+        },
+      });
+
+      if (error) throw error;
+
+      // The OAuth flow will handle the redirect
+    } catch (error: any) {
+      Alert.alert("OAuth Error", error.message || "Failed to authenticate");
+    }
   };
 
   return (
@@ -552,7 +565,7 @@ const SignIn = () => {
             {/* Social Login Buttons */}
             <TouchableOpacity
               style={styles.socialLoginButton}
-              onPress={() => handleSocialLogin("Google")}
+              onPress={() => handleSocialLogin("google")}
             >
               <Text style={styles.socialLoginButtonIcon}>🔒</Text>
               <Text style={styles.socialLoginButtonText}>
@@ -561,7 +574,7 @@ const SignIn = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.socialLoginButton}
-              onPress={() => handleSocialLogin("Apple")}
+              onPress={() => handleSocialLogin("apple")}
             >
               <Text style={styles.socialLoginButtonIcon}>🍎</Text>
               <Text style={styles.socialLoginButtonText}>
