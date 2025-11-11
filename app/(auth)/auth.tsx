@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Colors } from "../../constants/color";
 import { supabase } from "../../lib/supabase";
+import * as WebBrowser from "expo-web-browser";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === "android") {
@@ -233,18 +234,43 @@ const SignIn = () => {
 
   const handleSocialLogin = async (provider: "google" | "apple") => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error, data } = await supabase.auth.signInWithOAuth({
         provider: provider,
         options: {
-          redirectTo: "your-app-scheme://auth/callback", // Configure this
-          skipBrowserRedirect: false,
+          redirectTo:
+            "https://ekjwtxsjlkhntqxoxvgf.supabase.co/auth/v1/callback",
+          skipBrowserRedirect: true,
         },
       });
 
       if (error) throw error;
 
-      // The OAuth flow will handle the redirect
+      // The OAuth flow to handle redirecting in browser
+      if (data?.url) {
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          "culturar://auth/callback",
+        );
+
+        if (result.type === "success") {
+          // Get the access token from the url
+          const params = new URLSearchParams(result.url.split("#")[1]);
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+
+          if (access_token && refresh_token) {
+            // Set the access token and refresh token in the database
+            await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+          }
+          // Navigate to the home screen after successful login
+          router.replace("/(tabs)/Home");
+        }
+      }
     } catch (error: any) {
+      console.error("OAuth Error", error);
       Alert.alert("OAuth Error", error.message || "Failed to authenticate");
     }
   };
