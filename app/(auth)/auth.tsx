@@ -53,6 +53,27 @@ const SignIn = () => {
   // Loading state
   const [loading, setLoading] = useState(false);
 
+  // Password strength state
+  const [passwordStrength, setPasswordStrength] = useState(0);
+
+  // Calculate password strength
+  const calculatePasswordStrength = (pwd: string) => {
+    let strength = 0;
+    if (pwd.length >= 8) strength++;
+    if (/[A-Z]/.test(pwd)) strength++;
+    if (/[0-9]/.test(pwd)) strength++;
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) strength++;
+    return strength;
+  };
+
+  // Handle password change with strength calculation
+  const handlePasswordChange = (pwd: string) => {
+    setPassword(pwd);
+    if (isSignUp) {
+      setPasswordStrength(calculatePasswordStrength(pwd));
+    }
+  };
+
   // Animation on toggle change
   useEffect(() => {
     // Configure layout animation
@@ -103,6 +124,10 @@ const SignIn = () => {
     ]).start();
 
     setIsSignUp(signUp);
+    // Reset password strength when switching modes
+    if (!signUp) {
+      setPasswordStrength(0);
+    }
   };
 
   const handleContinue = async () => {
@@ -359,7 +384,7 @@ const SignIn = () => {
                   autoCapitalize="none"
                   autoCorrect={false}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={handlePasswordChange}
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
@@ -368,6 +393,51 @@ const SignIn = () => {
                   <Text>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
                 </TouchableOpacity>
               </View>
+              {isSignUp && password.length > 0 && (
+                <View style={styles.passwordStrengthContainer}>
+                  <View style={styles.passwordStrengthBars}>
+                    <View
+                      style={[
+                        styles.strengthBar,
+                        passwordStrength >= 1 && styles.strengthBarWeak,
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.strengthBar,
+                        passwordStrength >= 2 && styles.strengthBarMedium,
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.strengthBar,
+                        passwordStrength >= 3 && styles.strengthBarGood,
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.strengthBar,
+                        passwordStrength >= 4 && styles.strengthBarStrong,
+                      ]}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.strengthText,
+                      passwordStrength === 1 && styles.strengthTextWeak,
+                      passwordStrength === 2 && styles.strengthTextMedium,
+                      passwordStrength === 3 && styles.strengthTextGood,
+                      passwordStrength === 4 && styles.strengthTextStrong,
+                    ]}
+                  >
+                    {passwordStrength === 0 && "Too weak"}
+                    {passwordStrength === 1 && "Weak"}
+                    {passwordStrength === 2 && "Medium"}
+                    {passwordStrength === 3 && "Good"}
+                    {passwordStrength === 4 && "Strong"}
+                  </Text>
+                </View>
+              )}
               {isSignUp && (
                 <Text style={styles.passwordHint}>
                   Must be at least 8 characters with one uppercase letter, one
@@ -631,6 +701,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.neutral[500],
     marginTop: 4,
+  },
+  passwordStrengthContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  passwordStrengthBars: {
+    flexDirection: "row",
+    gap: 4,
+    marginBottom: 4,
+  },
+  strengthBar: {
+    flex: 1,
+    height: 4,
+    backgroundColor: Colors.neutral[300],
+    borderRadius: 2,
+  },
+  strengthBarWeak: {
+    backgroundColor: "#ef4444",
+  },
+  strengthBarMedium: {
+    backgroundColor: "#9eed90",
+  },
+  strengthBarGood: {
+    backgroundColor: "#0cda2b",
+  },
+  strengthBarStrong: {
+    backgroundColor: "#10b981",
+  },
+  strengthText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.neutral[500],
+  },
+  strengthTextWeak: {
+    color: "#ef4444",
+  },
+  strengthTextMedium: {
+    color: "#9eed90",
+  },
+  strengthTextGood: {
+    color: "#0cda2b",
+  },
+  strengthTextStrong: {
+    color: "#10b981",
   },
   termsContainer: {
     flexDirection: "row",
