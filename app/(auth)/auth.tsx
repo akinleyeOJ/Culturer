@@ -696,8 +696,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   continueButtonDisabled: {
-    backgroundColor: Colors.neutral[300],
-    opacity: 0.6,
+    backgroundColor: Colors.neutral[400],
   },
   continueButtonIcon: {
     fontSize: 18,
