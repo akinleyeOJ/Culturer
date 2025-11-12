@@ -124,6 +124,12 @@ const SignIn = () => {
       }),
     ]).start();
 
+    // Clear password when switching from sign-in to sign-up
+    if (!isSignUp && signUp) {
+      setPassword("");
+      setConfirmPassword("");
+    }
+
     setIsSignUp(signUp);
     // Reset password strength when switching modes
     if (!signUp) {
@@ -186,7 +192,20 @@ const SignIn = () => {
           },
         });
 
-        if (error) throw error;
+        if (error) {
+          // Check for duplicate email error
+          if (
+            error.message.toLowerCase().includes("already") ||
+            error.message.toLowerCase().includes("exist")
+          ) {
+            Alert.alert(
+              "Account Exists",
+              "This email is already registered. Please sign in instead or use 'Continue with Google' if you signed up with Google.",
+            );
+            return;
+          }
+          throw error;
+        }
 
         Alert.alert(
           "Success",
@@ -220,7 +239,20 @@ const SignIn = () => {
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+          // Check if this might be a Google-registered account
+          if (
+            error.message.toLowerCase().includes("invalid") ||
+            error.message.toLowerCase().includes("credentials")
+          ) {
+            Alert.alert(
+              "Sign In Failed",
+              "Invalid email or password. If you signed up with Google, please use 'Continue with Google' instead.",
+            );
+            return;
+          }
+          throw error;
+        }
 
         // Navigate to the home screen after successful login
         router.replace("/(tabs)/Home");
@@ -233,6 +265,9 @@ const SignIn = () => {
   };
 
   const handleSocialLogin = async (provider: "google" | "apple") => {
+    if (loading) return; // Prevent multiple submissions
+
+    setLoading(true);
     try {
       const { error, data } = await supabase.auth.signInWithOAuth({
         provider: provider,
@@ -263,14 +298,57 @@ const SignIn = () => {
               access_token,
               refresh_token,
             });
+
+            // Check if user already has email/password provider
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
+
+            if (user && user.identities) {
+              // Check if user has BOTH email and OAuth providers
+              const hasEmailProvider = user.identities.some(
+                (identity) => identity.provider === "email",
+              );
+              const hasOAuthProvider = user.identities.some(
+                (identity) =>
+                  identity.provider === "google" ||
+                  identity.provider === "apple",
+              );
+
+              if (hasEmailProvider && hasOAuthProvider) {
+                // User has both - this means account linking happened
+                // Sign them out and show error
+                await supabase.auth.signOut();
+                Alert.alert(
+                  "Account Exists",
+                  "This email is already registered with email/password. Please sign in with your email and password instead.",
+                );
+                return;
+              }
+            }
+
+            // Navigate to the home screen after successful login
+            router.replace("/(tabs)/Home");
           }
-          // Navigate to the home screen after successful login
-          router.replace("/(tabs)/Home");
+        } else if (result.type === "cancel") {
+          Alert.alert("Cancelled", "Sign in was cancelled");
         }
       }
     } catch (error: any) {
       console.error("OAuth Error", error);
-      Alert.alert("OAuth Error", error.message || "Failed to authenticate");
+
+      // Better error messages
+      let errorMessage = "Failed to authenticate";
+      if (error.message.toLowerCase().includes("already")) {
+        errorMessage =
+          "This email is already registered with email/password. Please use email sign-in instead.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert("Sign In Error", errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -594,7 +672,7 @@ const SignIn = () => {
             >
               <Text style={styles.socialLoginButtonIcon}>🔒</Text>
               <Text style={styles.socialLoginButtonText}>
-                {isSignUp ? "Sign up" : "Continue"} with Google
+                {isSignUp ? "Continue" : "Continue"} with Google
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -603,7 +681,7 @@ const SignIn = () => {
             >
               <Text style={styles.socialLoginButtonIcon}>🍎</Text>
               <Text style={styles.socialLoginButtonText}>
-                {isSignUp ? "Sign up" : "Continue"} with Apple
+                {isSignUp ? "Continue" : "Continue"} with Apple
               </Text>
             </TouchableOpacity>
           </Animated.View>
