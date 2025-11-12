@@ -13,12 +13,14 @@ import {
   LayoutAnimation,
   UIManager,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Colors } from "../../constants/color";
 import { supabase } from "../../lib/supabase";
 import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === "android") {
@@ -74,6 +76,57 @@ const SignIn = () => {
       setPasswordStrength(calculatePasswordStrength(pwd));
     }
   };
+
+  // Listen for deep link when returning from email confirmation
+  useEffect(() => {
+    // Check if user just came back from email confirmation
+    const checkEmailVerification = async () => {
+      try {
+        // Refresh the session from the server to get latest email confirmation status
+        const {
+          data: { session },
+        } = await supabase.auth.refreshSession();
+
+        if (session?.user?.email_confirmed_at) {
+          console.log("Email confirmed! Navigating to home...");
+          // Email is confirmed, navigate to home
+          router.replace("/(tabs)/Home");
+        } else {
+          console.log("Email not yet confirmed");
+        }
+      } catch (error) {
+        console.error("Error checking email verification:", error);
+      }
+    };
+
+    checkEmailVerification();
+
+    // Listen for deep links
+    const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
+      console.log("Deep link received:", url);
+      if (url.includes("auth/success")) {
+        // User confirmed email, refresh session
+        setTimeout(() => checkEmailVerification(), 500);
+      }
+    });
+
+    // Listen for app state changes (when user returns to app from browser)
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextAppState) => {
+        if (nextAppState === "active") {
+          console.log("App came to foreground, checking email verification");
+          // Add small delay to ensure network request completes
+          setTimeout(() => checkEmailVerification(), 500);
+        }
+      },
+    );
+
+    return () => {
+      linkingSubscription.remove();
+      appStateSubscription.remove();
+    };
+  }, []);
 
   // Animation on toggle change
   useEffect(() => {
@@ -138,7 +191,7 @@ const SignIn = () => {
   };
 
   const handleContinue = async () => {
-    if (loading) return; // Prevent multiple submissions
+    if (loading) return;
 
     if (isSignUp) {
       // Sign Up validation
@@ -146,7 +199,6 @@ const SignIn = () => {
         Alert.alert("Error", "Please fill in all fields");
         return;
       }
-      // Name validation
       if (name.trim().length < 2) {
         Alert.alert("Error", "Name must be at least 2 characters");
         return;
@@ -155,7 +207,6 @@ const SignIn = () => {
         Alert.alert("Error", "Name must be less than 50 characters");
         return;
       }
-      // Email format validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) {
         Alert.alert("Error", "Please enter a valid email address");
@@ -169,7 +220,6 @@ const SignIn = () => {
         Alert.alert("Error", "Password must be at least 8 characters");
         return;
       }
-      // Check for uppercase letter
       if (!/[A-Z]/.test(password)) {
         Alert.alert(
           "Error",
@@ -177,12 +227,10 @@ const SignIn = () => {
         );
         return;
       }
-      // Check for number
       if (!/[0-9]/.test(password)) {
         Alert.alert("Error", "Password must contain at least one number");
         return;
       }
-      // Check for special character
       if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
         Alert.alert(
           "Error",
@@ -204,11 +252,11 @@ const SignIn = () => {
             data: {
               full_name: name,
             },
+            emailRedirectTo: "https://culturar.netlify.app",
           },
         });
 
         if (error) {
-          // Check for duplicate email error
           if (
             error.message.toLowerCase().includes("already") ||
             error.message.toLowerCase().includes("exist")
@@ -223,14 +271,14 @@ const SignIn = () => {
         }
 
         Alert.alert(
-          "Success",
-          "Account created successfully! Please check your email to verify your account.",
+          "Success! 📧",
+          "Please check your email to verify your account. Click the confirmation link in the email we just sent you.",
           [
             {
               text: "OK",
               onPress: () => {
-                // Switch to sign in mode
-                handleToggle(false);
+                // Don't switch to sign in mode, stay here
+                // User will come back after clicking email link
               },
             },
           ],
@@ -246,7 +294,6 @@ const SignIn = () => {
         Alert.alert("Error", "Please enter email and password");
         return;
       }
-      // Email format validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) {
         Alert.alert("Error", "Please enter a valid email address");
@@ -255,13 +302,42 @@ const SignIn = () => {
 
       setLoading(true);
       try {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error, data } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
 
         if (error) {
-          // Check if this might be a Google-registered account
+          // Check for unconfirmed email
+          if (error.message.toLowerCase().includes("email not confirmed")) {
+            Alert.alert(
+              "Email Not Confirmed",
+              "Please check your email and click the confirmation link to verify your account. Check your spam folder if you don't see it.",
+              [
+                {
+                  text: "Resend Email",
+                  onPress: async () => {
+                    try {
+                      const { error } = await supabase.auth.resend({
+                        type: "signup",
+                        email: email.trim(),
+                      });
+                      if (error) throw error;
+                      Alert.alert(
+                        "Success",
+                        "Confirmation email sent! Please check your inbox.",
+                      );
+                    } catch (err: any) {
+                      Alert.alert("Error", err.message);
+                    }
+                  },
+                },
+                { text: "OK" },
+              ],
+            );
+            return;
+          }
+
           if (
             error.message.toLowerCase().includes("invalid") ||
             error.message.toLowerCase().includes("credentials")
@@ -275,6 +351,38 @@ const SignIn = () => {
           throw error;
         }
 
+        // Check if email is confirmed
+        if (data.user && !data.user.email_confirmed_at) {
+          Alert.alert(
+            "Email Not Confirmed",
+            "Please verify your email before signing in. Check your inbox for the confirmation link.",
+            [
+              {
+                text: "Resend Email",
+                onPress: async () => {
+                  try {
+                    const { error } = await supabase.auth.resend({
+                      type: "signup",
+                      email: email.trim(),
+                    });
+                    if (error) throw error;
+                    Alert.alert(
+                      "Success",
+                      "Confirmation email sent! Please check your inbox.",
+                    );
+                  } catch (err: any) {
+                    Alert.alert("Error", err.message);
+                  }
+                },
+              },
+              { text: "OK" },
+            ],
+          );
+          // Sign them out since email isn't confirmed
+          await supabase.auth.signOut();
+          return;
+        }
+
         // Navigate to the home screen after successful login
         router.replace("/(tabs)/Home");
       } catch (error: any) {
@@ -286,7 +394,7 @@ const SignIn = () => {
   };
 
   const handleSocialLogin = async (provider: "google" | "apple") => {
-    if (loading) return; // Prevent multiple submissions
+    if (loading) return;
 
     setLoading(true);
     try {
@@ -300,7 +408,6 @@ const SignIn = () => {
 
       if (error) throw error;
 
-      // The OAuth flow to handle redirecting in browser
       if (data?.url) {
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
@@ -308,25 +415,21 @@ const SignIn = () => {
         );
 
         if (result.type === "success") {
-          // Get the access token from the url
           const params = new URLSearchParams(result.url.split("#")[1]);
           const access_token = params.get("access_token");
           const refresh_token = params.get("refresh_token");
 
           if (access_token && refresh_token) {
-            // Set the access token and refresh token in the database
             await supabase.auth.setSession({
               access_token,
               refresh_token,
             });
 
-            // Check if user already has email/password provider
             const {
               data: { user },
             } = await supabase.auth.getUser();
 
             if (user && user.identities) {
-              // Check if user has BOTH email and OAuth providers
               const hasEmailProvider = user.identities.some(
                 (identity) => identity.provider === "email",
               );
@@ -337,8 +440,6 @@ const SignIn = () => {
               );
 
               if (hasEmailProvider && hasOAuthProvider) {
-                // User has both - this means account linking happened
-                // Sign them out and show error
                 await supabase.auth.signOut();
                 Alert.alert(
                   "Account Exists",
@@ -348,7 +449,6 @@ const SignIn = () => {
               }
             }
 
-            // Navigate to the home screen after successful login
             router.replace("/(tabs)/Home");
           }
         } else if (result.type === "cancel") {
@@ -358,7 +458,6 @@ const SignIn = () => {
     } catch (error: any) {
       console.error("OAuth Error", error);
 
-      // Better error messages
       let errorMessage = "Failed to authenticate";
       if (error.message.toLowerCase().includes("already")) {
         errorMessage =
@@ -397,7 +496,6 @@ const SignIn = () => {
               setContainerWidth(width);
             }}
           >
-            {/* Animated sliding background indicator */}
             <Animated.View
               style={[
                 styles.toggleIndicator,
@@ -508,6 +606,7 @@ const SignIn = () => {
                 />
               </View>
             </View>
+
             {/* Password Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Password</Text>

@@ -9,10 +9,25 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.akinleyeoj.culturar"
+      "bundleIdentifier": "com.akinleyeoj.culturar",
+      "associatedDomains": ["applinks:culturar.netlify.app"]
     },
     "android": {
-      "package": "com.akinleyeoj.culturar"
+      "package": "com.akinleyeoj.culturar",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "culturar.netlify.app",
+              "pathPrefix": "/auth"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
