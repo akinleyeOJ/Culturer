@@ -237,8 +237,7 @@ const SignIn = () => {
       const { error, data } = await supabase.auth.signInWithOAuth({
         provider: provider,
         options: {
-          redirectTo:
-            "https://ekjwtxsjlkhntqxoxvgf.supabase.co/auth/v1/callback",
+          redirectTo: "culturar://auth/callback",
           skipBrowserRedirect: true,
         },
       });

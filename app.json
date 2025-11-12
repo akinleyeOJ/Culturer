@@ -4,7 +4,6 @@
     "slug": "culturar",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
     "scheme": "culturar",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,30 +12,15 @@
       "bundleIdentifier": "com.akinleyeoj.culturar"
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
       "package": "com.akinleyeoj.culturar"
     },
     "web": {
       "bundler": "metro",
-      "output": "single-page",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single-page"
     },
     "plugins": [
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ],
       "expo-font",
-      "expo-router",
-      "expo-web-browser"
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
