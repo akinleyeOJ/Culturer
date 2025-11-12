@@ -146,6 +146,21 @@ const SignIn = () => {
         Alert.alert("Error", "Please fill in all fields");
         return;
       }
+      // Name validation
+      if (name.trim().length < 2) {
+        Alert.alert("Error", "Name must be at least 2 characters");
+        return;
+      }
+      if (name.trim().length > 50) {
+        Alert.alert("Error", "Name must be less than 50 characters");
+        return;
+      }
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        Alert.alert("Error", "Please enter a valid email address");
+        return;
+      }
       if (password !== confirmPassword) {
         Alert.alert("Error", "Passwords do not match");
         return;
@@ -229,6 +244,12 @@ const SignIn = () => {
       // Sign In validation
       if (!email || !password) {
         Alert.alert("Error", "Please enter email and password");
+        return;
+      }
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        Alert.alert("Error", "Please enter a valid email address");
         return;
       }
 
