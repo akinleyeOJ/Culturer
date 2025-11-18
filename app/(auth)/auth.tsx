@@ -881,7 +881,7 @@ const SignIn = () => {
                   <Text style={styles.rememberMeText}>Remember Me</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push("/(auth)/forgotPassword")}>
                   <Text style={styles.forgotPasswordText}>
                     Forgot Password?
                   </Text>
