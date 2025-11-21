@@ -28,7 +28,7 @@ const ForgotPassword = () => {
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), 
             {
-                redirectTo: "https://culturar.netlify.app/reset-password",
+                redirectTo: "https://culturar.netlify.app/forgotpassword",
             }
           );
 

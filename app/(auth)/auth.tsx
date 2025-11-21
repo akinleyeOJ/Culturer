@@ -880,7 +880,7 @@ const SignIn = () => {
                   </View>
                   <Text style={styles.rememberMeText}>Remember Me</Text>
                 </TouchableOpacity>
-
+                
                 <TouchableOpacity onPress={() => router.push("/(auth)/forgotPassword")}>
                   <Text style={styles.forgotPasswordText}>
                     Forgot Password?
