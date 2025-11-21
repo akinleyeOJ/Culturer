@@ -54,16 +54,17 @@ const styles = StyleSheet.create({
     checkmarkCircle: {
         width: 120,
         height: 120,
-        borderRadius: 40,
+        borderRadius: 60, // Changed to make it circular
         borderWidth: 4,
-        backgroundColor: "#fff",
+        borderColor: "#fff",
+        backgroundColor: "rgba(255, 255, 255, 0.2)", 
         justifyContent: "center",
         alignItems: "center",
     },
     checkmark: {
         fontSize: 70,
         color: "#fff",
-        fontWeight: "300",
+        fontWeight: "700",
     },
     title: {
         fontSize: 48,
