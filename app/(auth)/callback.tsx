@@ -30,12 +30,15 @@ export default function AuthCallback() {
             return;
           }
 
-          // If this is email confirmation, show success and navigate to home
-          if (type === "signup") {
+          // Handle different callback types
+          if (type === "recovery") {
+            // Password reset - navigate to reset password screen
+            router.replace("/(auth)/reset-password");
+          } else if (type === "signup") {
             // Email confirmed successfully
             router.replace("/(tabs)/Home");
           } else {
-            // Regular OAuth callback
+            // Regular OAuth callback or other types
             router.replace("/(tabs)/Home");
           }
         } else {

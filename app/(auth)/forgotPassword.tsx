@@ -26,41 +26,22 @@ const ForgotPassword = () => {
 
     setLoading(true);
     try {
-        // Try to sign in to check if user exists and get their provider
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password: 'dummy_password_to_check_provider' // This will fail but tell us why
-        });
-
-        // If error mentions OAuth or we can detect it's a social login
-        if (signInError) {
-            // Check error message for OAuth indicators
-            const errorMsg = signInError.message.toLowerCase();
-            
-            if (errorMsg.includes('oauth') || 
-                errorMsg.includes('social') || 
-                errorMsg.includes('provider')) {
-                Alert.alert(
-                    "Google Account Detected 🔐", 
-                    "This account uses Google Sign-In. Please tap 'Continue with Google' on the sign-in screen instead.",
-                    [
-                        {
-                            text: "Got it",
-                            onPress: () => router.back()
-                        }
-                    ]
-                );
-                return;
+        console.log('Attempting to send password reset to:', email.trim());
+        
+        // Send password reset email
+        const { data, error } = await supabase.auth.resetPasswordForEmail(
+            email.trim(), 
+            {
+                redirectTo: "https://culturar.netlify.app/forgotpassword",
             }
+        );
+
+        if (error) {
+            console.error('Password reset error:', error);
+            throw error;
         }
 
-        // If we get here, proceed with normal password reset
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), 
-        {
-            redirectTo: "https://culturar.netlify.app/forgotpassword",
-        });
-
-        if (error) { throw error; }
+        console.log('Password reset email sent successfully:', data);
 
         // Navigate to password reset sent screen
         router.push({
@@ -68,9 +49,10 @@ const ForgotPassword = () => {
             params: { email: email.trim() },
         });
     } catch (error: any) {
+        console.error('Caught error:', error);
         Alert.alert(
             "Error", 
-            error.message || "Failed to send reset email. Please try again"
+            error.message || "Failed to send reset email. Please try again."
         );
     } finally {
         setLoading(false);
