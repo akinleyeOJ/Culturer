@@ -12,42 +12,70 @@ const ForgotPassword = () => {
   const handleForgotPassword = async () => {
     if (loading) return;
 
-        // Validation
-        if (!email.trim()) {
-            Alert.alert("Error", "Please enter your email address");
-            return;
-        }
+    // Validation
+    if (!email.trim()) {
+        Alert.alert("Error", "Please enter your email address");
+        return;
+    }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email.trim())) {
-            Alert.alert("Error", "Please enter a valid email address");
-            return;
-        }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+        Alert.alert("Error", "Please enter a valid email address");
+        return;
+    }
 
-        setLoading(true);
-        try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), 
-            {
-                redirectTo: "https://culturar.netlify.app/forgotpassword",
+    setLoading(true);
+    try {
+        // Try to sign in to check if user exists and get their provider
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password: 'dummy_password_to_check_provider' // This will fail but tell us why
+        });
+
+        // If error mentions OAuth or we can detect it's a social login
+        if (signInError) {
+            // Check error message for OAuth indicators
+            const errorMsg = signInError.message.toLowerCase();
+            
+            if (errorMsg.includes('oauth') || 
+                errorMsg.includes('social') || 
+                errorMsg.includes('provider')) {
+                Alert.alert(
+                    "Google Account Detected 🔐", 
+                    "This account uses Google Sign-In. Please tap 'Continue with Google' on the sign-in screen instead.",
+                    [
+                        {
+                            text: "Got it",
+                            onPress: () => router.back()
+                        }
+                    ]
+                );
+                return;
             }
-          );
+        }
 
-          if (error) { throw error; }
+        // If we get here, proceed with normal password reset
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), 
+        {
+            redirectTo: "https://culturar.netlify.app/forgotpassword",
+        });
 
-         // Navigate to password reset sent screen
-         router.push({
+        if (error) { throw error; }
+
+        // Navigate to password reset sent screen
+        router.push({
             pathname: "/(auth)/password-reset-sent",
             params: { email: email.trim() },
-         });
-        } catch (error: any) {
-            Alert.alert(
-                "Error", 
-                error.message || "Failed to send reset email. Please try again"
-            );
-        } finally {
-            setLoading(false);
-        }
+        });
+    } catch (error: any) {
+        Alert.alert(
+            "Error", 
+            error.message || "Failed to send reset email. Please try again"
+        );
+    } finally {
+        setLoading(false);
     }
+}
 
   return (  
     <SafeAreaView style={styles.container}>
