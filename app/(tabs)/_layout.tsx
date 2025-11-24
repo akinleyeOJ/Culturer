@@ -6,19 +6,19 @@ import { View, ActivityIndicator, StyleSheet } from "react-native";
 export default function TabLayout() {
   const { user, loading } = useAuth();
 
-  // Show loading spinner while checking auth
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#FF8F66" />
-      </View>
-    );
-  }
+  // // Show loading spinner while checking auth
+  // if (loading) {
+  //   return (
+  //     <View style={styles.container}>
+  //       <ActivityIndicator size="large" color="#FF8F66" />
+  //     </View>
+  //   );
+  // }
 
-  // Redirect to auth if not logged in
-  if (!user) {
-    return <Redirect href="/(auth)/auth" />;
-  }
+  // // Redirect to auth if not logged in
+  // if (!user) {
+  //   return <Redirect href="/(auth)/auth" />;
+  // }
 
   // User is authenticated, show tabs
   return (

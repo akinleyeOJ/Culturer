@@ -1,31 +1,124 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Text, ScrollView } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, Text, ScrollView, Alert, RefreshControl, ActivityIndicator, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import CustomButton from "../../components/Button";
 import { ProductCard, RecentlyViewedCard } from "../../components/Card";
 import HomeHeader from "../../components/HomeHeader";
-import {
-  recentlyViewedProducts,
-  forYouProducts,
-  hotProducts,
-} from "../../data/mockProducts";
+import { Colors } from "../../constants/color";
+
+import { 
+  fetchForYouProducts, 
+  fetchHotProducts, 
+  fetchRecentlyViewed,
+  toggleFavorite,
+  trackProductView 
+} from "../../lib/services/productService";
+
 import { useAuth } from "../../contexts/AuthContext";
+
+// Type definitions
+interface Product {
+  id: string;
+  name: string;
+  price: string;
+  emoji: string;
+  image?: string;
+  rating: number;
+  reviews: number;
+  shipping: string;
+  outOfStock: boolean;
+  isFavorited?: boolean;
+}
+
+interface RecentlyViewedProduct {
+  id: string;
+  name: string;
+  price: string;
+  emoji: string;
+  image?: string;
+}
 
 const Home = () => {
   const { user } = useAuth();
-  const [likedProducts, setLikedProducts] = useState<number[]>([]);
 
-  const handleLike = (productId: number) => {
-    setLikedProducts((prev) =>
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId],
+  // State for products
+  const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
+  const [forYouProducts, setForYouProducts] = useState<Product[]>([]);
+  const [hotProducts, setHotProducts] = useState<Product[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Load all products
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all sections in parallel
+      const [recentlyViewedData, forYouData, hotData] = await Promise.all([
+        user ? fetchRecentlyViewed(user.id) : [],
+        fetchForYouProducts(user?.id),
+        fetchHotProducts(user?.id),
+      ]);
+
+      setRecentlyViewed(recentlyViewedData);
+      setForYouProducts(forYouData);
+      setHotProducts(hotData);
+    } catch (error) {
+      console.error('Error loading products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Handle favorite toggle
+  const handleLike = async (productId: string) => {
+    if (!user) {
+      // Show login prompt
+      Alert.alert("Sign in required", "Please sign in to favorite products");
+      return;
+    }
+
+    try {
+      await toggleFavorite(user.id, productId);
+      // Refresh products to update favorite status
+      loadProducts();
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
+
+  // Handle product press
+  const handleProductPress = async (productId: string) => {
+    if (user) {
+      await trackProductView(user.id, productId);
+    }
+    // Navigate to product detail
+    // router.push(`/product/${productId}`);
+  };
+
+  // Refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadProducts();
+    setRefreshing(false);
+  };
+
+  // Load products on mount
+  useEffect(() => {
+    loadProducts();
+  }, [user]);
+
+  // Calculate wishlist count from favorited products
+  const wishlistCount = [...forYouProducts, ...hotProducts].filter(p => p.isFavorited).length;
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary[500]} />
+        </View>
+      </SafeAreaView>
     );
-  };
-
-  const handleProductPress = (productId: number) => {
-    console.log(`Product ${productId} pressed`);
-  };
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -35,56 +128,61 @@ const Home = () => {
           user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User"
         }
         userAvatar="https://via.placeholder.com/150"
-        wishlistCount={likedProducts.length}
+        wishlistCount={wishlistCount}
         onSearchPress={() => console.log("Search pressed")}
         onWishlistPress={() => console.log("Wishlist pressed")}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Recently Viewed section*/}
-        <View style={styles.recentlyViewedContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recently Viewed</Text>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Recently Viewed section - only show if user is logged in and has history */}
+        {user && recentlyViewed.length > 0 && (
+          <View style={styles.recentlyViewedContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recently Viewed</Text>
 
-            <CustomButton
-              title="View All"
-              onPress={() => console.log("View All Recently Viewed")}
-              bgVariant="outline"
-              textVariant="default"
-              style={styles.viewMoreButton}
-            />
+              <TouchableOpacity 
+                onPress={() => console.log("View All Recently Viewed")}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewMore}>View More ›</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recentlyViewedScroll}
+            >
+              {recentlyViewed.map((product) => (
+                <RecentlyViewedCard
+                  key={product.id}
+                  name={product.name}
+                  price={product.price}
+                  emoji={product.emoji}
+                  image={product.image}
+                  onPress={() => handleProductPress(product.id)}
+                />
+              ))}
+            </ScrollView>
           </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.recentlyViewedScroll}
-          >
-            {recentlyViewedProducts.map((product) => (
-              <RecentlyViewedCard
-                key={product.id}
-                name={product.name}
-                price={product.price}
-                emoji={product.emoji}
-                image={product.image}
-                onPress={() => handleProductPress(product.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
+        )}
 
         {/* For You section*/}
         <View style={styles.forYouContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>For You 👀</Text>
 
-            <CustomButton
-              title="View All"
+            <TouchableOpacity 
               onPress={() => console.log("View All For You")}
-              bgVariant="secondary"
-              textVariant="default"
-              style={styles.viewMoreButton}
-            />
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewMore}>View More ›</Text>
+            </TouchableOpacity>
           </View>
 
           <ScrollView
@@ -105,7 +203,7 @@ const Home = () => {
                 outOfStock={product.outOfStock}
                 onPress={() => handleProductPress(product.id)}
                 onLike={() => handleLike(product.id)}
-                isLiked={likedProducts.includes(product.id)}
+                isLiked={product.isFavorited || false}
                 variant="default"
               />
             ))}
@@ -115,15 +213,14 @@ const Home = () => {
         {/* Hot Products section*/}
         <View style={styles.hotProductsContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Hot Products</Text>
+            <Text style={styles.sectionTitle}>Hot at Culturar 🔥</Text>
 
-            <CustomButton
-              title="View All"
-              onPress={() => console.log("View All Hot Products")}
-              bgVariant="secondary"
-              textVariant="secondary"
-              style={styles.viewMoreButton}
-            />
+            <TouchableOpacity 
+              onPress={() => console.log("View Hot Products")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewMore}>View More ›</Text>
+            </TouchableOpacity>
           </View>
 
           <ScrollView
@@ -144,7 +241,7 @@ const Home = () => {
                 outOfStock={product.outOfStock}
                 onPress={() => handleProductPress(product.id)}
                 onLike={() => handleLike(product.id)}
-                isLiked={likedProducts.includes(product.id)}
+                isLiked={product.isFavorited || false}
                 variant="large"
               />
             ))}
@@ -160,6 +257,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -172,9 +274,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#212529",
   },
-  viewMoreButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  viewMore: {
+    fontSize: 14,
+    color: Colors.primary[500],
+    fontWeight: "600",
   },
 
   // recently viewed styling
