@@ -2,8 +2,32 @@
 import { supabase } from "../supabase";
 import type { Database } from "../../types/database";
 
-// Type helpers
 type Product = Database['public']['Tables']['products']['Row'];
+
+// Helper function to get user's favorite product IDs from wishlist
+const getUserFavorites = async (userId: string): Promise<string[]> => {
+  const { data } = await supabase
+    .from('wishlist')
+    .select('product_id')
+    .eq('user_id', userId) as { data: { product_id: string }[] | null };
+  
+  return data?.map(f => f.product_id) || [];
+};
+
+// Transform product to UI format
+const transformProduct = (product: Product, favoriteIds: string[] = []) => ({
+  id: product.id,
+  name: product.name,
+  price: `$${product.price.toFixed(2)}`,
+  emoji: product.emoji || '🎨',
+  image: product.image_url || product.images?.[0],
+  rating: product.rating,
+  reviews: product.reviews_count,
+  shipping: product.shipping,
+  outOfStock: product.out_of_stock || !product.in_stock,
+  isFavorited: favoriteIds.includes(product.id),
+  badge: product.is_featured ? 'HOT' as const : null,
+});
 
 // Fetch products for "For You" section
 export const fetchForYouProducts = async (userId?: string) => {
@@ -14,37 +38,13 @@ export const fetchForYouProducts = async (userId?: string) => {
     .order('created_at', { ascending: false })
     .limit(10);
 
-  if (error) {
+  if (error || !data) {
     console.error('Error fetching products:', error);
     return [];
   }
 
-  if (!data) return [];
-
-  // If user is logged in, fetch their wishlist to mark favorites
-  let wishlistIds: string[] = [];
-  if (userId) {
-    const { data: wishlistData } = await supabase
-      .from('wishlist')
-      .select('product_id')
-      .eq('user_id', userId) as { data: { product_id: string }[] | null };
-    
-    wishlistIds = wishlistData?.map(w => w.product_id) || [];
-  }
-
-  // Transform database format to UI format
-  return data.map((product: Product) => ({
-    id: product.id,
-    name: product.name,
-    price: `$${product.price.toFixed(2)}`,
-    emoji: product.emoji || '🎨',
-    image: product.image_url || product.images?.[0],
-    rating: product.rating,
-    reviews: product.reviews_count,
-    shipping: product.shipping,
-    outOfStock: product.out_of_stock || !product.in_stock,
-    isFavorited: wishlistIds.includes(product.id),
-  }));
+  const favoriteIds = userId ? await getUserFavorites(userId) : [];
+  return data.map(p => transformProduct(p, favoriteIds));
 };
 
 // Fetch hot/featured products
@@ -57,41 +57,17 @@ export const fetchHotProducts = async (userId?: string) => {
     .order('total_favorites', { ascending: false })
     .limit(10);
 
-  if (error) {
+  if (error || !data) {
     console.error('Error fetching hot products:', error);
     return [];
   }
 
-  if (!data) return [];
-
-  // If user is logged in, fetch their wishlist
-  let wishlistIds: string[] = [];
-  if (userId) {
-    const { data: wishlistData } = await supabase
-      .from('wishlist')
-      .select('product_id')
-      .eq('user_id', userId) as { data: { product_id: string }[] | null };
-    
-    wishlistIds = wishlistData?.map(w => w.product_id) || [];
-  }
-
-  return data.map((product: Product) => ({
-    id: product.id,
-    name: product.name,
-    price: `$${product.price.toFixed(2)}`,
-    emoji: product.emoji || '🎨',
-    image: product.image_url || product.images?.[0],
-    rating: product.rating,
-    reviews: product.reviews_count,
-    shipping: product.shipping,
-    outOfStock: product.out_of_stock || !product.in_stock,
-    isFavorited: wishlistIds.includes(product.id),
-  }));
+  const favoriteIds = userId ? await getUserFavorites(userId) : [];
+  return data.map(p => transformProduct(p, favoriteIds));
 };
 
 // Fetch user's recently viewed products
 export const fetchRecentlyViewed = async (userId: string) => {
-  // First get recently viewed product IDs
   const { data: recentlyViewedData, error: rvError } = await supabase
     .from('recently_viewed')
     .select('product_id, viewed_at')
@@ -100,11 +76,9 @@ export const fetchRecentlyViewed = async (userId: string) => {
     .limit(10);
 
   if (rvError || !recentlyViewedData || recentlyViewedData.length === 0) {
-    console.error('Error fetching recently viewed:', rvError);
     return [];
   }
 
-  // Get the actual products
   const productIds = (recentlyViewedData as any[]).map((rv: any) => rv.product_id);
   const { data: products, error: productsError } = await supabase
     .from('products')
@@ -112,11 +86,9 @@ export const fetchRecentlyViewed = async (userId: string) => {
     .in('id', productIds);
 
   if (productsError || !products) {
-    console.error('Error fetching products:', productsError);
     return [];
   }
 
-  // Map products in the order they were viewed
   return (recentlyViewedData as any[]).map((rv: any) => {
     const product = (products as any[]).find((p: any) => p.id === rv.product_id);
     if (!product) return null;
@@ -131,20 +103,15 @@ export const fetchRecentlyViewed = async (userId: string) => {
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };
 
-// Toggle favorite/wishlist
+// Toggle favorite - uses wishlist table
 export const toggleFavorite = async (userId: string, productId: string) => {
   // Check if already favorited
-  const { data: existing, error: checkError } = await supabase
+  const { data: existing } = await supabase
     .from('wishlist')
     .select('id')
     .eq('user_id', userId)
     .eq('product_id', productId)
     .maybeSingle();
-
-  if (checkError) {
-    console.error('Error checking favorite:', checkError);
-    return { error: checkError };
-  }
 
   if (existing) {
     // Remove from wishlist
@@ -153,20 +120,28 @@ export const toggleFavorite = async (userId: string, productId: string) => {
       .delete()
       .eq('id', (existing as any).id);
     
-    return { error };
+    return { success: !error, isFavorited: false };
   } else {
     // Add to wishlist
     const { error } = await supabase
       .from('wishlist')
       .insert([{ user_id: userId, product_id: productId }] as any);
     
-    return { error };
+    return { success: !error, isFavorited: true };
   }
+};
+
+// Add to wishlist (different from favorites - this is for "save for later")
+export const addToWishlist = async (userId: string, productId: string) => {
+  const { error } = await supabase
+    .from('wishlist')
+    .insert([{ user_id: userId, product_id: productId }] as any);
+  
+  return { success: !error };
 };
 
 // Track when user views a product
 export const trackProductView = async (userId: string, productId: string) => {
-  // Upsert: update viewed_at if exists, insert if doesn't
   const { error } = await supabase
     .from('recently_viewed')
     .upsert(
@@ -185,7 +160,6 @@ export const trackProductView = async (userId: string, productId: string) => {
 
 // Fetch user's wishlist
 export const fetchWishlist = async (userId: string) => {
-  // First get wishlist items
   const { data: wishlistData, error: wishlistError } = await supabase
     .from('wishlist')
     .select('product_id, created_at')
@@ -193,11 +167,9 @@ export const fetchWishlist = async (userId: string) => {
     .order('created_at', { ascending: false });
 
   if (wishlistError || !wishlistData || wishlistData.length === 0) {
-    console.error('Error fetching wishlist:', wishlistError);
     return [];
   }
 
-  // Get the actual products
   const productIds = (wishlistData as any[]).map((w: any) => w.product_id);
   const { data: products, error: productsError } = await supabase
     .from('products')
@@ -205,26 +177,15 @@ export const fetchWishlist = async (userId: string) => {
     .in('id', productIds);
 
   if (productsError || !products) {
-    console.error('Error fetching products:', productsError);
     return [];
   }
 
-  // Map products in wishlist order
+  const favoriteIds = await getUserFavorites(userId);
+
   return (wishlistData as any[]).map((wl: any) => {
     const product = (products as any[]).find((p: any) => p.id === wl.product_id);
     if (!product) return null;
 
-    return {
-      id: product.id,
-      name: product.name,
-      price: `$${product.price.toFixed(2)}`,
-      emoji: product.emoji || '🎨',
-      image: product.image_url || product.images?.[0],
-      rating: product.rating,
-      reviews: product.reviews_count,
-      shipping: product.shipping,
-      outOfStock: product.out_of_stock || !product.in_stock,
-      isFavorited: true,
-    };
+    return transformProduct(product, favoriteIds);
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };

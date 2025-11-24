@@ -81,6 +81,15 @@ export interface Database {
     reviews: number;            // maps to reviews_count
     shipping: string;
     outOfStock: boolean;        // maps to out_of_stock or !in_stock
-    isFavorited?: boolean;
+    isFavorited?: boolean;      // true if in wishlist
     badge?: "NEW" | "HOT" | null;
+  }
+  
+  // Recently viewed product type
+  export interface UIRecentlyViewedProduct {
+    id: string;
+    name: string;
+    price: string;
+    emoji: string;
+    image?: string;
   }
