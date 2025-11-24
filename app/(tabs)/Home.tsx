@@ -132,14 +132,14 @@ const Home = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary[500]} />
-          <Text style={styles.loadingText}>Loading amazing products...</Text>
+          <Text style={styles.loadingText}>Loading Items</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <HomeHeader
         userName={
           user?.user_metadata?.full_name || 
@@ -166,7 +166,7 @@ const Home = () => {
       >
         {/* Recently Viewed section */}
         {user && recentlyViewed.length > 0 && (
-          <View style={styles.section}>
+          <View style={styles.recentlyViewedSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recently Viewed</Text>
               <TouchableOpacity 
@@ -303,9 +303,6 @@ const Home = () => {
             ))}
           </ScrollView>
         </View>
-
-        {/* Spacer for bottom */}
-        <View style={styles.bottomSpacer} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -329,14 +326,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.neutral[600],
   },
-  section: {
+  recentlyViewedSection: {
     marginBottom: 0,
     backgroundColor: '#fff',
-    paddingVertical: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+ },
+  section: {
+     marginBottom: 0,
+     backgroundColor: '#fff',
+     paddingTop: 20,
+     paddingBottom: 5,
   },
   lastSection: {
-    paddingBottom: 0,
-    marginBottom: 0,
+     paddingBottom: 0,
+     marginBottom: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -357,15 +361,12 @@ const styles = StyleSheet.create({
   },
   horizontalScroll: {
     paddingHorizontal: 16,
-    paddingRight: 16, // Changed from 60 to align better at the end
+    paddingRight: 6, 
   },
   gridRow: {
     flexDirection: 'row',
     marginBottom: 12,
     gap: 12,
-  },
-  bottomSpacer: {
-    height: 40, // Removed extra spacing
   },
 });
 
