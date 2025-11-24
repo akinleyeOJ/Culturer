@@ -162,6 +162,7 @@ const Home = () => {
           />
         }
         contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="never"
       >
         {/* Recently Viewed section */}
         {user && recentlyViewed.length > 0 && (
@@ -211,6 +212,9 @@ const Home = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalScroll}
+            snapToInterval={300} // Snap to show 2 cards at a time
+            decelerationRate="fast"
+            snapToAlignment="start"
           >
             <View>
               {/* Row 1 */}
@@ -263,7 +267,7 @@ const Home = () => {
         </View>
 
         {/* Hot at Culturar section */}
-        <View style={styles.section}>
+        <View style={[styles.section, styles.lastSection]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Hot at Culturar 🔥</Text>
             <TouchableOpacity 
@@ -313,7 +317,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAFA',
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -326,9 +330,13 @@ const styles = StyleSheet.create({
     color: Colors.neutral[600],
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 0,
     backgroundColor: '#fff',
     paddingVertical: 20,
+  },
+  lastSection: {
+    paddingBottom: 0,
+    marginBottom: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -349,7 +357,7 @@ const styles = StyleSheet.create({
   },
   horizontalScroll: {
     paddingHorizontal: 16,
-    paddingRight: 60, // Show peek of next items
+    paddingRight: 16, // Changed from 60 to align better at the end
   },
   gridRow: {
     flexDirection: 'row',
@@ -357,7 +365,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bottomSpacer: {
-    height: 20,
+    height: 40, // Removed extra spacing
   },
 });
 

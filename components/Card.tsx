@@ -231,9 +231,10 @@ const styles = StyleSheet.create({
   cardContent: {
     padding: 12,
     position: 'relative',
+    minHeight: 120, // Ensure enough height for content + button
   },
   cardPrice: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#212529',
     marginBottom: 4,
@@ -241,7 +242,7 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: 13,
     color: '#495057',
-    marginBottom: 8,
+    marginBottom: 6,
     lineHeight: 18,
     minHeight: 36,
   },
@@ -251,22 +252,22 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stars: {
-    fontSize: 12,
+    fontSize: 7.5,
     marginRight: 4,
   },
   reviewText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#6c757d',
   },
   
   // Favorite Button - Bottom Right
   favoriteButton: {
     position: 'absolute',
-    bottom: 8,
+    bottom: 25,
     right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -277,7 +278,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   favoriteIcon: {
-    fontSize: 18,
+    fontSize: 10,
   },
   
   // Recently Viewed Card
