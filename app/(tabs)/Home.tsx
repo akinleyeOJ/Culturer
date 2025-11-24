@@ -1,14 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { 
-  View, 
-  StyleSheet, 
-  Text, 
-  ScrollView, 
-  Alert, 
-  RefreshControl, 
-  ActivityIndicator, 
-  TouchableOpacity 
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, RefreshControl, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ProductCard, RecentlyViewedCard } from "../../components/Card";
 import HomeHeader from "../../components/HomeHeader";
@@ -334,3 +325,5 @@ const styles = StyleSheet.create({
     height: 20,
   },
 });
+
+export default Home;
