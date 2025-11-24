@@ -195,7 +195,7 @@ const Home = () => {
           </View>
         )}
 
-        {/* For You section */}
+        {/* For You section - 2 ROW GRID */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>For You 👀</Text>
@@ -212,24 +212,53 @@ const Home = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalScroll}
           >
-            {forYouProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                name={product.name}
-                price={product.price}
-                emoji={product.emoji}
-                image={product.image}
-                rating={product.rating}
-                reviews={product.reviews}
-                shipping={product.shipping}
-                outOfStock={product.outOfStock}
-                badge={product.badge}
-                onPress={() => handleProductPress(product.id)}
-                onLike={() => handleLike(product.id)}
-                isLiked={product.isFavorited || false}
-                variant="default"
-              />
-            ))}
+            <View>
+              {/* Row 1 */}
+              <View style={styles.gridRow}>
+                {forYouProducts.filter((_, index) => index % 2 === 0).map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    name={product.name}
+                    price={product.price}
+                    emoji={product.emoji}
+                    image={product.image}
+                    rating={product.rating}
+                    reviews={product.reviews}
+                    shipping={product.shipping}
+                    outOfStock={product.outOfStock}
+                    badge={product.badge}
+                    onPress={() => handleProductPress(product.id)}
+                    onLike={() => handleLike(product.id)}
+                    isLiked={product.isFavorited || false}
+                    variant="default"
+                    style={{ width: 140 }}
+                  />
+                ))}
+              </View>
+              
+              {/* Row 2 */}
+              <View style={styles.gridRow}>
+                {forYouProducts.filter((_, index) => index % 2 === 1).map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    name={product.name}
+                    price={product.price}
+                    emoji={product.emoji}
+                    image={product.image}
+                    rating={product.rating}
+                    reviews={product.reviews}
+                    shipping={product.shipping}
+                    outOfStock={product.outOfStock}
+                    badge={product.badge}
+                    onPress={() => handleProductPress(product.id)}
+                    onLike={() => handleLike(product.id)}
+                    isLiked={product.isFavorited || false}
+                    variant="default"
+                    style={{ width: 140 }}
+                  />
+                ))}
+              </View>
+            </View>
           </ScrollView>
         </View>
 
@@ -320,6 +349,12 @@ const styles = StyleSheet.create({
   },
   horizontalScroll: {
     paddingHorizontal: 16,
+    paddingRight: 60, // Show peek of next items
+  },
+  gridRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 12,
   },
   bottomSpacer: {
     height: 20,
