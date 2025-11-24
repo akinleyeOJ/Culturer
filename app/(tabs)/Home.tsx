@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Text, ScrollView, Alert, RefreshControl, ActivityIndicator, TouchableOpacity } from "react-native";
+import { 
+  View, 
+  StyleSheet, 
+  Text, 
+  ScrollView, 
+  Alert, 
+  RefreshControl, 
+  ActivityIndicator, 
+  TouchableOpacity 
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import CustomButton from "../../components/Button";
 import { ProductCard, RecentlyViewedCard } from "../../components/Card";
 import HomeHeader from "../../components/HomeHeader";
 import { Colors } from "../../constants/color";
-
 import { 
   fetchForYouProducts, 
   fetchHotProducts, 
@@ -13,10 +20,8 @@ import {
   toggleFavorite,
   trackProductView 
 } from "../../lib/services/productService";
-
 import { useAuth } from "../../contexts/AuthContext";
 
-// Type definitions
 interface Product {
   id: string;
   name: string;
@@ -28,6 +33,7 @@ interface Product {
   shipping: string;
   outOfStock: boolean;
   isFavorited?: boolean;
+  badge?: "NEW" | "HOT" | null;
 }
 
 interface RecentlyViewedProduct {
@@ -40,8 +46,6 @@ interface RecentlyViewedProduct {
 
 const Home = () => {
   const { user } = useAuth();
-
-  // State for products
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
   const [forYouProducts, setForYouProducts] = useState<Product[]>([]);
   const [hotProducts, setHotProducts] = useState<Product[]>([]);
@@ -53,9 +57,8 @@ const Home = () => {
     try {
       setLoading(true);
       
-      // Fetch all sections in parallel
       const [recentlyViewedData, forYouData, hotData] = await Promise.all([
-        user ? fetchRecentlyViewed(user.id) : [],
+        user ? fetchRecentlyViewed(user.id) : Promise.resolve([]),
         fetchForYouProducts(user?.id),
         fetchHotProducts(user?.id),
       ]);
@@ -65,23 +68,41 @@ const Home = () => {
       setHotProducts(hotData);
     } catch (error) {
       console.error('Error loading products:', error);
+      Alert.alert('Error', 'Failed to load products. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-  // Handle favorite toggle
+
+  // Handle favorite toggle with optimistic update
   const handleLike = async (productId: string) => {
     if (!user) {
-      // Show login prompt
       Alert.alert("Sign in required", "Please sign in to favorite products");
       return;
     }
 
+    // Optimistically update UI
+    const updateProducts = (products: Product[]) => 
+      products.map(p => 
+        p.id === productId ? { ...p, isFavorited: !p.isFavorited } : p
+      );
+
+    setForYouProducts(prev => updateProducts(prev));
+    setHotProducts(prev => updateProducts(prev));
+
     try {
-      await toggleFavorite(user.id, productId);
-      // Refresh products to update favorite status
-      loadProducts();
+      const result = await toggleFavorite(user.id, productId);
+      
+      if (!result.success) {
+        // Revert on error
+        setForYouProducts(prev => updateProducts(prev));
+        setHotProducts(prev => updateProducts(prev));
+        Alert.alert('Error', 'Failed to update favorite. Please try again.');
+      }
     } catch (error) {
+      // Revert on error
+      setForYouProducts(prev => updateProducts(prev));
+      setHotProducts(prev => updateProducts(prev));
       console.error('Error toggling favorite:', error);
     }
   };
@@ -90,9 +111,13 @@ const Home = () => {
   const handleProductPress = async (productId: string) => {
     if (user) {
       await trackProductView(user.id, productId);
+      // Reload recently viewed
+      const recentData = await fetchRecentlyViewed(user.id);
+      setRecentlyViewed(recentData);
     }
-    // Navigate to product detail
-    // router.push(`/product/${productId}`);
+    // TODO: Navigate to product detail
+    // router.push(`/(product)/${productId}`);
+    Alert.alert('Product', `Opening product: ${productId}`);
   };
 
   // Refresh handler
@@ -108,13 +133,15 @@ const Home = () => {
   }, [user]);
 
   // Calculate wishlist count from favorited products
-  const wishlistCount = [...forYouProducts, ...hotProducts].filter(p => p.isFavorited).length;
+  const wishlistCount = [...forYouProducts, ...hotProducts]
+    .filter(p => p.isFavorited).length;
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary[500]} />
+          <Text style={styles.loadingText}>Loading amazing products...</Text>
         </View>
       </SafeAreaView>
     );
@@ -122,31 +149,36 @@ const Home = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Home Header section*/}
       <HomeHeader
         userName={
-          user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User"
+          user?.user_metadata?.full_name || 
+          user?.email?.split("@")[0] || 
+          "User"
         }
         userAvatar="https://via.placeholder.com/150"
         wishlistCount={wishlistCount}
-        onSearchPress={() => console.log("Search pressed")}
-        onWishlistPress={() => console.log("Wishlist pressed")}
+        onSearchPress={() => Alert.alert('Search', 'Search functionality coming soon!')}
+        onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
       />
 
       <ScrollView 
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={Colors.primary[500]}
+          />
         }
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* Recently Viewed section - only show if user is logged in and has history */}
+        {/* Recently Viewed section */}
         {user && recentlyViewed.length > 0 && (
-          <View style={styles.recentlyViewedContainer}>
+          <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recently Viewed</Text>
-
               <TouchableOpacity 
-                onPress={() => console.log("View All Recently Viewed")}
+                onPress={() => Alert.alert('Recently Viewed', 'View all recently viewed products')}
                 activeOpacity={0.7}
               >
                 <Text style={styles.viewMore}>View More ›</Text>
@@ -156,7 +188,7 @@ const Home = () => {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.recentlyViewedScroll}
+              contentContainerStyle={styles.horizontalScroll}
             >
               {recentlyViewed.map((product) => (
                 <RecentlyViewedCard
@@ -172,13 +204,12 @@ const Home = () => {
           </View>
         )}
 
-        {/* For You section*/}
-        <View style={styles.forYouContainer}>
+        {/* For You section */}
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>For You 👀</Text>
-
             <TouchableOpacity 
-              onPress={() => console.log("View All For You")}
+              onPress={() => Alert.alert('For You', 'View all personalized products')}
               activeOpacity={0.7}
             >
               <Text style={styles.viewMore}>View More ›</Text>
@@ -188,7 +219,7 @@ const Home = () => {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.forYouScroll}
+            contentContainerStyle={styles.horizontalScroll}
           >
             {forYouProducts.map((product) => (
               <ProductCard
@@ -201,6 +232,7 @@ const Home = () => {
                 reviews={product.reviews}
                 shipping={product.shipping}
                 outOfStock={product.outOfStock}
+                badge={product.badge}
                 onPress={() => handleProductPress(product.id)}
                 onLike={() => handleLike(product.id)}
                 isLiked={product.isFavorited || false}
@@ -210,13 +242,12 @@ const Home = () => {
           </ScrollView>
         </View>
 
-        {/* Hot Products section*/}
-        <View style={styles.hotProductsContainer}>
+        {/* Hot at Culturar section */}
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Hot at Culturar 🔥</Text>
-
             <TouchableOpacity 
-              onPress={() => console.log("View Hot Products")}
+              onPress={() => Alert.alert('Hot Products', 'View all trending products')}
               activeOpacity={0.7}
             >
               <Text style={styles.viewMore}>View More ›</Text>
@@ -226,7 +257,7 @@ const Home = () => {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.hotProductsScroll}
+            contentContainerStyle={styles.horizontalScroll}
           >
             {hotProducts.map((product) => (
               <ProductCard
@@ -239,6 +270,7 @@ const Home = () => {
                 reviews={product.reviews}
                 shipping={product.shipping}
                 outOfStock={product.outOfStock}
+                badge="HOT"
                 onPress={() => handleProductPress(product.id)}
                 onLike={() => handleLike(product.id)}
                 isLiked={product.isFavorited || false}
@@ -247,6 +279,9 @@ const Home = () => {
             ))}
           </ScrollView>
         </View>
+
+        {/* Spacer for bottom */}
+        <View style={styles.bottomSpacer} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -255,67 +290,47 @@ const Home = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: '#FAFAFA',
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.neutral[600],
+  },
+  section: {
+    marginBottom: 24,
+    backgroundColor: '#fff',
+    paddingVertical: 20,
   },
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: "#212529",
+    fontWeight: '700',
+    color: '#212529',
   },
   viewMore: {
     fontSize: 14,
     color: Colors.primary[500],
-    fontWeight: "600",
+    fontWeight: '600',
   },
-
-  // recently viewed styling
-  recentlyViewedContainer: {
-    marginBottom: 10,
-    paddingTop: 15,
-    paddingBottom: 10,
-    backgroundColor: "#fff",
+  horizontalScroll: {
+    paddingHorizontal: 16,
   },
-  recentlyViewedScroll: {
-    paddingLeft: 20,
-    paddingRight: 20,
-  },
-
-  // for you styling
-  forYouContainer: {
-    marginBottom: 10,
-    paddingTop: 20,
-    paddingBottom: 15,
-    backgroundColor: "#fff",
-  },
-  forYouScroll: {
-    paddingLeft: 20,
-    paddingRight: 20,
-    gap: 12,
-  },
-
-  // hot products styling
-  hotProductsContainer: {
-    paddingTop: 20,
-    paddingBottom: 15,
-    backgroundColor: "#fff",
-  },
-  hotProductsScroll: {
-    paddingLeft: 20,
-    paddingRight: 20,
-    gap: 15,
+  bottomSpacer: {
+    height: 20,
   },
 });
-
-export default Home;
