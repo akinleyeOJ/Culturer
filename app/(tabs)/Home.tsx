@@ -35,6 +35,27 @@ interface RecentlyViewedProduct {
   image?: string;
 }
 
+// Skeleton Card Components
+const RecentlyViewedSkeleton = () => (
+  <View style={styles.skeletonRecentlyViewed}>
+    <View style={styles.skeletonRecentlyViewedImage} />
+    <View style={styles.skeletonRecentlyViewedText} />
+    <View style={styles.skeletonRecentlyViewedTextSmall} />
+  </View>
+);
+
+const ProductCardSkeleton = ({ variant = "default" }: { variant?: "default" | "large" }) => (
+  <View style={[styles.skeletonProductCard, variant === "large" && styles.skeletonProductCardLarge]}>
+    <View style={[styles.skeletonProductImage, variant === "large" && styles.skeletonProductImageLarge]} />
+    <View style={styles.skeletonProductContent}>
+      <View style={styles.skeletonProductPrice} />
+      <View style={styles.skeletonProductName} />
+      <View style={styles.skeletonProductNameShort} />
+      <View style={styles.skeletonProductRating} />
+    </View>
+  </View>
+);
+
 const Home = () => {
   const { user } = useAuth();
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
@@ -42,6 +63,7 @@ const Home = () => {
   const [hotProducts, setHotProducts] = useState<Product[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   // Load all products
   const loadProducts = async () => {
@@ -54,7 +76,6 @@ const Home = () => {
         fetchHotProducts(user?.id),
       ]);
 
-      // Update all state together - React 18+ batches these automatically
       setRecentlyViewed(recentlyViewedData);
       setForYouProducts(forYouData);
       setHotProducts(hotData);
@@ -128,21 +149,9 @@ const Home = () => {
   const wishlistCount = useMemo(() => {
     const allProducts = [...forYouProducts, ...hotProducts];
     const favoritedProducts = allProducts.filter(p => p.isFavorited);
-    // Deduplicate by product ID to avoid counting duplicates
     const uniqueFavoritedIds = new Set(favoritedProducts.map(p => p.id));
     return uniqueFavoritedIds.size;
   }, [forYouProducts, hotProducts]);
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary[500]} />
-          <Text style={styles.loadingText}>Loading Items</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -154,6 +163,7 @@ const Home = () => {
         }
         userAvatar="https://via.placeholder.com/150"
         wishlistCount={wishlistCount}
+        isScrolled={isScrolled}
         onSearchPress={() => Alert.alert('Search', 'Search functionality coming soon!')}
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
       />
@@ -169,18 +179,25 @@ const Home = () => {
         }
         contentContainerStyle={styles.scrollContent}
         contentInsetAdjustmentBehavior="never"
+        onScroll={(event) => {
+          const offsetY = event.nativeEvent.contentOffset.y;
+          setIsScrolled(offsetY > 50); // Trigger collapse after 50px scroll
+        }}
+        scrollEventThrottle={16}
       >
-        {/* Recently Viewed section */}
-        {user && recentlyViewed.length > 0 && (
+        {/* Recently Viewed section - Show skeleton while loading for logged in users */}
+        {user && (
           <View style={styles.recentlyViewedSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recently Viewed</Text>
-              <TouchableOpacity 
-                onPress={() => Alert.alert('Recently Viewed', 'View all recently viewed products')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.viewMore}>View More ›</Text>
-              </TouchableOpacity>
+              {!loading && recentlyViewed.length > 0 && (
+                <TouchableOpacity 
+                  onPress={() => Alert.alert('Recently Viewed', 'View all recently viewed products')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.viewMore}>View More ›</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <ScrollView
@@ -188,16 +205,28 @@ const Home = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalScroll}
             >
-              {recentlyViewed.map((product) => (
-                <RecentlyViewedCard
-                  key={product.id}
-                  name={product.name}
-                  price={product.price}
-                  emoji={product.emoji}
-                  image={product.image}
-                  onPress={() => handleProductPress(product.id)}
-                />
-              ))}
+              {loading ? (
+                // Show skeleton cards while loading
+                Array.from({ length: 4 }).map((_, i) => (
+                  <RecentlyViewedSkeleton key={`rv-skeleton-${i}`} />
+                ))
+              ) : recentlyViewed.length > 0 ? (
+                recentlyViewed.map((product) => (
+                  <RecentlyViewedCard
+                    key={product.id}
+                    name={product.name}
+                    price={product.price}
+                    emoji={product.emoji}
+                    image={product.image}
+                    onPress={() => handleProductPress(product.id)}
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No recently viewed items yet</Text>
+                  <Text style={styles.emptySubtext}>Start browsing to see your history here</Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         )}
@@ -206,69 +235,91 @@ const Home = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>For You 👀</Text>
-            <TouchableOpacity 
-              onPress={() => Alert.alert('For You', 'View all personalized products')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.viewMore}>View More ›</Text>
-            </TouchableOpacity>
+            {!loading && forYouProducts.length > 0 && (
+              <TouchableOpacity 
+                onPress={() => Alert.alert('For You', 'View all personalized products')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewMore}>View More ›</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalScroll}
-            snapToInterval={300} // Snap to show 2 cards at a time
+            snapToInterval={300}
             decelerationRate="fast"
             snapToAlignment="start"
           >
-            <View>
-              {/* Row 1 */}
-              <View style={styles.gridRow}>
-                {forYouProducts.filter((_, index) => index % 2 === 0).map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    name={product.name}
-                    price={product.price}
-                    emoji={product.emoji}
-                    image={product.image}
-                    rating={product.rating}
-                    reviews={product.reviews}
-                    shipping={product.shipping}
-                    outOfStock={product.outOfStock}
-                    badge={product.badge}
-                    onPress={() => handleProductPress(product.id)}
-                    onLike={() => handleLike(product.id)}
-                    isLiked={product.isFavorited || false}
-                    variant="default"
-                    style={{ width: 140 }}
-                  />
-                ))}
+            {loading ? (
+              // Show skeleton grid while loading
+              <View>
+                <View style={styles.gridRow}>
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <ProductCardSkeleton key={`foryou-skeleton-1-${i}`} />
+                  ))}
+                </View>
+                <View style={styles.gridRow}>
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <ProductCardSkeleton key={`foryou-skeleton-2-${i}`} />
+                  ))}
+                </View>
               </View>
-              
-              {/* Row 2 */}
-              <View style={styles.gridRow}>
-                {forYouProducts.filter((_, index) => index % 2 === 1).map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    name={product.name}
-                    price={product.price}
-                    emoji={product.emoji}
-                    image={product.image}
-                    rating={product.rating}
-                    reviews={product.reviews}
-                    shipping={product.shipping}
-                    outOfStock={product.outOfStock}
-                    badge={product.badge}
-                    onPress={() => handleProductPress(product.id)}
-                    onLike={() => handleLike(product.id)}
-                    isLiked={product.isFavorited || false}
-                    variant="default"
-                    style={{ width: 140 }}
-                  />
-                ))}
+            ) : forYouProducts.length > 0 ? (
+              <View>
+                {/* Row 1 */}
+                <View style={styles.gridRow}>
+                  {forYouProducts.filter((_, index) => index % 2 === 0).map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      name={product.name}
+                      price={product.price}
+                      emoji={product.emoji}
+                      image={product.image}
+                      rating={product.rating}
+                      reviews={product.reviews}
+                      shipping={product.shipping}
+                      outOfStock={product.outOfStock}
+                      badge={product.badge}
+                      onPress={() => handleProductPress(product.id)}
+                      onLike={() => handleLike(product.id)}
+                      isLiked={product.isFavorited || false}
+                      variant="default"
+                      style={{ width: 140 }}
+                    />
+                  ))}
+                </View>
+                
+                {/* Row 2 */}
+                <View style={styles.gridRow}>
+                  {forYouProducts.filter((_, index) => index % 2 === 1).map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      name={product.name}
+                      price={product.price}
+                      emoji={product.emoji}
+                      image={product.image}
+                      rating={product.rating}
+                      reviews={product.reviews}
+                      shipping={product.shipping}
+                      outOfStock={product.outOfStock}
+                      badge={product.badge}
+                      onPress={() => handleProductPress(product.id)}
+                      onLike={() => handleLike(product.id)}
+                      isLiked={product.isFavorited || false}
+                      variant="default"
+                      style={{ width: 140 }}
+                    />
+                  ))}
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No products available</Text>
+              </View>
+            )}
           </ScrollView>
         </View>
 
@@ -276,12 +327,14 @@ const Home = () => {
         <View style={[styles.section, styles.lastSection]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Hot at Culturar 🔥</Text>
-            <TouchableOpacity 
-              onPress={() => Alert.alert('Hot Products', 'View all trending products')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.viewMore}>View More ›</Text>
-            </TouchableOpacity>
+            {!loading && hotProducts.length > 0 && (
+              <TouchableOpacity 
+                onPress={() => Alert.alert('Hot Products', 'View all trending products')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewMore}>View More ›</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <ScrollView
@@ -289,24 +342,35 @@ const Home = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalScroll}
           >
-            {hotProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                name={product.name}
-                price={product.price}
-                emoji={product.emoji}
-                image={product.image}
-                rating={product.rating}
-                reviews={product.reviews}
-                shipping={product.shipping}
-                outOfStock={product.outOfStock}
-                badge="HOT"
-                onPress={() => handleProductPress(product.id)}
-                onLike={() => handleLike(product.id)}
-                isLiked={product.isFavorited || false}
-                variant="large"
-              />
-            ))}
+            {loading ? (
+              // Show skeleton cards while loading
+              Array.from({ length: 3 }).map((_, i) => (
+                <ProductCardSkeleton key={`hot-skeleton-${i}`} variant="large" />
+              ))
+            ) : hotProducts.length > 0 ? (
+              hotProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  name={product.name}
+                  price={product.price}
+                  emoji={product.emoji}
+                  image={product.image}
+                  rating={product.rating}
+                  reviews={product.reviews}
+                  shipping={product.shipping}
+                  outOfStock={product.outOfStock}
+                  badge="HOT"
+                  onPress={() => handleProductPress(product.id)}
+                  onLike={() => handleLike(product.id)}
+                  isLiked={product.isFavorited || false}
+                  variant="large"
+                />
+              ))
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No hot products available</Text>
+              </View>
+            )}
           </ScrollView>
         </View>
       </ScrollView>
@@ -322,31 +386,21 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 0,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: Colors.neutral[600],
-  },
   recentlyViewedSection: {
     marginBottom: 0,
     backgroundColor: '#fff',
     paddingTop: 20,
     paddingBottom: 20,
- },
+  },
   section: {
-     marginBottom: 0,
-     backgroundColor: '#fff',
-     paddingTop: 20,
-     paddingBottom: 5,
+    marginBottom: 0,
+    backgroundColor: '#fff',
+    paddingTop: 20,
+    paddingBottom: 5,
   },
   lastSection: {
-     paddingBottom: 0,
-     marginBottom: 0,
+    paddingBottom: 0,
+    marginBottom: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -373,6 +427,103 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 12,
     gap: 12,
+  },
+  emptyContainer: {
+    paddingVertical: 40,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 15,
+    color: Colors.neutral[600],
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: Colors.neutral[500],
+    textAlign: 'center',
+  },
+
+  // Skeleton styles for Recently Viewed
+  skeletonRecentlyViewed: {
+    width: 100,
+    marginRight: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 8,
+    alignItems: 'center',
+  },
+  skeletonRecentlyViewedImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#E0E0E0',
+    marginBottom: 8,
+  },
+  skeletonRecentlyViewedText: {
+    width: '80%',
+    height: 12,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  skeletonRecentlyViewedTextSmall: {
+    width: '60%',
+    height: 10,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+  },
+
+  // Skeleton styles for Product Cards
+  skeletonProductCard: {
+    width: 140,
+    marginRight: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  skeletonProductCardLarge: {
+    width: 200,
+    marginRight: 15,
+  },
+  skeletonProductImage: {
+    width: '100%',
+    height: 160,
+    backgroundColor: '#E0E0E0',
+  },
+  skeletonProductImageLarge: {
+    height: 200,
+  },
+  skeletonProductContent: {
+    padding: 12,
+  },
+  skeletonProductPrice: {
+    width: '50%',
+    height: 16,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  skeletonProductName: {
+    width: '100%',
+    height: 12,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  skeletonProductNameShort: {
+    width: '80%',
+    height: 12,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  skeletonProductRating: {
+    width: '60%',
+    height: 10,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
   },
 });
 

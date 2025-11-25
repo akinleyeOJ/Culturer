@@ -1,11 +1,13 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import Animated, { useAnimatedStyle, withTiming, useSharedValue } from "react-native-reanimated";
 
 interface HomeHeaderProps {
     userName?: string;
     userAvatar?: string;
     wishlistCount?: number;
+    isScrolled?: boolean;
     onSearchPress?: () => void;
     onWishlistPress?: () => void;
 }
@@ -14,9 +16,55 @@ const HomeHeader = ({
     userName = "User", 
     userAvatar,
     wishlistCount = 0,
+    isScrolled = false,
     onSearchPress,
     onWishlistPress 
 }: HomeHeaderProps) => {
+    // Animation values for search box collapse
+    const searchHeight = useSharedValue(48);
+    const searchOpacity = useSharedValue(1);
+    const searchIconOpacity = useSharedValue(0);
+    const greetingOpacity = useSharedValue(1);
+    const topBarMargin = useSharedValue(16);
+
+    // Animate based on scroll state
+    React.useEffect(() => {
+        if (isScrolled) {
+            // Collapse search box - keep greeting visible
+            searchHeight.value = withTiming(0, { duration: 300 });
+            searchOpacity.value = withTiming(0, { duration: 300 });
+            searchIconOpacity.value = withTiming(1, { duration: 300 });
+            topBarMargin.value = withTiming(0, { duration: 300 }); // Remove margin when scrolled
+            // Keep greeting visible - don't fade it out
+            greetingOpacity.value = 1;
+        } else {
+            // Expand search box
+            searchHeight.value = withTiming(48, { duration: 300 });
+            searchOpacity.value = withTiming(1, { duration: 300 });
+            searchIconOpacity.value = withTiming(0, { duration: 300 });
+            topBarMargin.value = withTiming(16, { duration: 300 }); // Restore margin when not scrolled
+            greetingOpacity.value = 1;
+        }
+    }, [isScrolled, searchHeight, searchOpacity, searchIconOpacity, greetingOpacity, topBarMargin]);
+
+    // Animated styles
+    const searchContainerStyle = useAnimatedStyle(() => ({
+        height: searchHeight.value,
+        opacity: searchOpacity.value,
+        marginBottom: searchHeight.value > 0 ? 16 : 0,
+    }));
+
+    const searchIconStyle = useAnimatedStyle(() => ({
+        opacity: searchIconOpacity.value,
+    }));
+
+    const greetingStyle = useAnimatedStyle(() => ({
+        opacity: greetingOpacity.value,
+    }));
+
+    const topBarStyle = useAnimatedStyle(() => ({
+        marginBottom: topBarMargin.value,
+    }));
 
     // Memoize greeting to prevent it from changing on every render
     // Use a stable seed based on date + hour so it stays consistent within the same hour
@@ -67,35 +115,45 @@ const HomeHeader = ({
 
     return (
         <View style={styles.container}>
-            <View style={styles.topBar}>
+            <Animated.View style={[styles.topBar, topBarStyle]}>
                 <View style={styles.leftSection}>
                     <View style={styles.avatar}>
                         <Text style={styles.avatarText}>{getUserInitials()}</Text>
                     </View>
-                    <View style={styles.greetingContainer}>
+                    <Animated.View style={[styles.greetingContainer, greetingStyle]}>
                         <Text style={styles.greetingLabel}>{greeting},</Text>
                         <Text style={styles.userName}>{userName}</Text>
-                    </View>
+                    </Animated.View>
                 </View>
                 
-                <TouchableOpacity onPress={onWishlistPress} style={styles.heartButton}>
-                    <FontAwesome name="heart-o" size={22} color="#4A4A4A" />
-                    {wishlistCount > 0 && (
-                        <View style={styles.badge}>
-                            <Text style={styles.badgeText}>{wishlistCount}</Text>
-                        </View>
-                    )}
-                </TouchableOpacity>
-            </View>
+                <View style={styles.rightSection}>
+                    {/* Search icon when scrolled */}
+                    <Animated.View style={[styles.searchIconButton, searchIconStyle]}>
+                        <TouchableOpacity onPress={onSearchPress} style={styles.searchIconButtonTouchable}>
+                            <FontAwesome name="search" size={20} color="#4A4A4A" />
+                        </TouchableOpacity>
+                    </Animated.View>
+                    <TouchableOpacity onPress={onWishlistPress} style={styles.heartButton}>
+                        <FontAwesome name="heart-o" size={22} color="#4A4A4A" />
+                        {wishlistCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{wishlistCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </Animated.View>
 
-            <TouchableOpacity 
-                style={styles.searchContainer}
-                onPress={onSearchPress}
-                activeOpacity={0.7}
-            >
-                <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
-                <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
-            </TouchableOpacity>
+            <Animated.View style={[styles.searchContainerWrapper, searchContainerStyle]}>
+                <TouchableOpacity 
+                    style={styles.searchContainer}
+                    onPress={onSearchPress}
+                    activeOpacity={0.7}
+                >
+                    <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
+                    <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
+                </TouchableOpacity>
+            </Animated.View>
         </View>
     );
 };
@@ -120,6 +178,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         flex: 1,
+        position: "relative",
     },
     avatar: {
         width: 48,
@@ -137,6 +196,17 @@ const styles = StyleSheet.create({
     },
     greetingContainer: {
         flex: 1,
+    },
+    rightSection: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    searchIconButton: {
+        marginRight: 8,
+        opacity: 0,
+    },
+    searchIconButtonTouchable: {
+        padding: 8,
     },
     greetingLabel: {
         fontSize: 14,
@@ -169,6 +239,9 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: "700",
         color: "#FFFFFF",
+    },
+    searchContainerWrapper: {
+        overflow: "hidden",
     },
     searchContainer: {
         flexDirection: "row",
