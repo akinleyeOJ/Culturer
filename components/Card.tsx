@@ -2,7 +2,7 @@ import React, { ReactNode, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, StyleProp, Image } from "react-native";
 import { Colors } from "../constants/color";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from "react-native-reanimated";
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withTiming } from "react-native-reanimated";
 
 interface CardProps {
   children?: ReactNode;
@@ -77,20 +77,17 @@ export const ProductCard = ({
       return;
     }
 
-    // Only animate if the value actually changed (user clicked)
+    // Only animate if the value actually changed (user clicked) AND it's being favorited (not unfavorited)
     if (prevLikedRef.current !== isLiked) {
       if (isLiked) {
-        // Scale up and down animation when liked
+        // Quick scale up and down animation when liked - fast timing-based animation
         scale.value = withSequence(
-          withSpring(1.3, { damping: 8, stiffness: 200 }),
-          withSpring(1, { damping: 8, stiffness: 200 })
+          withTiming(1.3, { duration: 150 }),
+          withTiming(1, { duration: 150 })
         );
       } else {
-        // Subtle pulse when unliked
-        scale.value = withSpring(0.9, { damping: 10, stiffness: 150 });
-        setTimeout(() => {
-          scale.value = withSpring(1, { damping: 10, stiffness: 150 });
-        }, 100);
+        // Reset to original size immediately when unfavoriting (no animation)
+        scale.value = 1;
       }
       // Update the ref to track the current state
       prevLikedRef.current = isLiked;
@@ -321,14 +318,14 @@ const styles = StyleSheet.create({
   favoriteButton: {
     position: 'absolute',
     bottom: 25,
-    right: 8,
+    right: 2,
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#fff',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
