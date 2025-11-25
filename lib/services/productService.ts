@@ -62,8 +62,13 @@ export const fetchHotProducts = async (userId?: string) => {
     return [];
   }
 
+  // Deduplicate by product ID to prevent showing the same product twice
+  const uniqueProducts = Array.from(
+    new Map((data as Product[]).map(p => [p.id, p])).values()
+  ) as Product[];
+
   const favoriteIds = userId ? await getUserFavorites(userId) : [];
-  return data.map(p => transformProduct(p, favoriteIds));
+  return uniqueProducts.map(p => transformProduct(p, favoriteIds));
 };
 
 // Fetch user's recently viewed products
