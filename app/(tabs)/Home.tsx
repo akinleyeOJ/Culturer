@@ -1,5 +1,17 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, RefreshControl, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Alert, 
+  RefreshControl, 
+  ScrollView,
+  ActivityIndicator,
+  Animated,
+  NativeSyntheticEvent,
+  NativeScrollEvent
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ProductCard, RecentlyViewedCard } from "../../components/Card";
 import HomeHeader from "../../components/HomeHeader";
@@ -64,6 +76,46 @@ const Home = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isScrolled, setIsScrolled] = useState(false);
+  
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const lastScrollY = useRef(0);
+  const scrollDirection = useRef<'up' | 'down'>('down');
+  const animationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Improved scroll handler with direction tracking
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    
+    // Determine scroll direction
+    scrollDirection.current = offsetY > lastScrollY.current ? 'down' : 'up';
+    lastScrollY.current = offsetY;
+
+    // Clear any existing timeout
+    if (animationTimeout.current) {
+      clearTimeout(animationTimeout.current);
+    }
+
+    // Use requestAnimationFrame for smoother updates
+    animationTimeout.current = setTimeout(() => {
+      const scrollThreshold = 60;
+      
+      // Different behavior based on scroll direction for better UX
+      if (scrollDirection.current === 'down') {
+        // When scrolling down, hide search bar quickly
+        if (offsetY > scrollThreshold && !isScrolled) {
+          setIsScrolled(true);
+        }
+      } else {
+        // When scrolling up, show search bar with more sensitivity
+        if (offsetY <= scrollThreshold && isScrolled) {
+          setIsScrolled(false);
+        } else if (offsetY <= 10 && isScrolled) {
+          // Always show when very close to top
+          setIsScrolled(false);
+        }
+      }
+    }, 10); // Small delay to batch updates
+  };
 
   // Load all products
   const loadProducts = async () => {
@@ -128,8 +180,6 @@ const Home = () => {
       const recentData = await fetchRecentlyViewed(user.id);
       setRecentlyViewed(recentData);
     }
-    // TODO: Navigate to product detail
-    // router.push(`/(product)/${productId}`);
     Alert.alert('Product', `Opening product: ${productId}`);
   };
 
@@ -145,7 +195,16 @@ const Home = () => {
     loadProducts();
   }, [user]);
 
-  // Calculate wishlist count from favorited products (deduplicate by product ID)
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (animationTimeout.current) {
+        clearTimeout(animationTimeout.current);
+      }
+    };
+  }, []);
+
+  // Calculate wishlist count from favorited products
   const wishlistCount = useMemo(() => {
     const allProducts = [...forYouProducts, ...hotProducts];
     const favoritedProducts = allProducts.filter(p => p.isFavorited);
@@ -168,7 +227,7 @@ const Home = () => {
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
       />
 
-      <ScrollView 
+      <Animated.ScrollView 
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl 
@@ -179,23 +238,16 @@ const Home = () => {
         }
         contentContainerStyle={styles.scrollContent}
         contentInsetAdjustmentBehavior="never"
-        onScroll={(event) => {
-          const offsetY = event.nativeEvent.contentOffset.y;
-          
-          // Smooth threshold with deadzone to prevent bouncing
-          const collapseThreshold = 60;
-          const expandThreshold = 40;
-          
-          // Use hysteresis (different thresholds) to prevent rapid toggling
-          if (offsetY > collapseThreshold && !isScrolled) {
-            setIsScrolled(true);
-          } else if (offsetY < expandThreshold && isScrolled) {
-            setIsScrolled(false);
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          {
+            useNativeDriver: true,
+            listener: handleScroll
           }
-        }}
-        scrollEventThrottle={16}
+        )}
+        scrollEventThrottle={500}
       >
-        {/* Recently Viewed section - Show skeleton while loading for logged in users */}
+        {/* Recently Viewed section */}
         {user && (
           <View style={styles.recentlyViewedSection}>
             <View style={styles.sectionHeader}>
@@ -216,7 +268,6 @@ const Home = () => {
               contentContainerStyle={styles.horizontalScroll}
             >
               {loading ? (
-                // Show skeleton cards while loading
                 Array.from({ length: 4 }).map((_, i) => (
                   <RecentlyViewedSkeleton key={`rv-skeleton-${i}`} />
                 ))
@@ -241,7 +292,7 @@ const Home = () => {
           </View>
         )}
 
-        {/* For You section - 2 ROW GRID */}
+        {/* For You section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>For You 👀</Text>
@@ -264,7 +315,6 @@ const Home = () => {
             snapToAlignment="start"
           >
             {loading ? (
-              // Show skeleton grid while loading
               <View>
                 <View style={styles.gridRow}>
                   {Array.from({ length: 3 }).map((_, i) => (
@@ -279,7 +329,6 @@ const Home = () => {
               </View>
             ) : forYouProducts.length > 0 ? (
               <View>
-                {/* Row 1 */}
                 <View style={styles.gridRow}>
                   {forYouProducts.filter((_, index) => index % 2 === 0).map((product) => (
                     <ProductCard
@@ -302,7 +351,6 @@ const Home = () => {
                   ))}
                 </View>
                 
-                {/* Row 2 */}
                 <View style={styles.gridRow}>
                   {forYouProducts.filter((_, index) => index % 2 === 1).map((product) => (
                     <ProductCard
@@ -353,7 +401,6 @@ const Home = () => {
             contentContainerStyle={styles.horizontalScroll}
           >
             {loading ? (
-              // Show skeleton cards while loading
               Array.from({ length: 3 }).map((_, i) => (
                 <ProductCardSkeleton key={`hot-skeleton-${i}`} variant="large" />
               ))
@@ -383,11 +430,12 @@ const Home = () => {
             )}
           </ScrollView>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 };
 
+// ... keep your existing styles the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,

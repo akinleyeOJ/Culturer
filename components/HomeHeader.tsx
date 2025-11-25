@@ -38,18 +38,23 @@ const HomeHeader = ({
     });
 
     const searchBarOpacity = animationProgress.interpolate({
-        inputRange: [0, 0.3, 1],
-        outputRange: [1, 0, 0], // Fade out quickly in first 30% of animation
+        inputRange: [0, 0.5, 1],
+        outputRange: [1, 0.3, 0], // More gradual fade out
     });
 
     const searchBarScale = animationProgress.interpolate({
         inputRange: [0, 1],
-        outputRange: [1, 0.95], // Slight scale down for style
+        outputRange: [1, 0.8], // More noticeable scale down
     });
 
     const searchContainerMargin = animationProgress.interpolate({
         inputRange: [0, 1],
         outputRange: [12, 0], // Margin collapses
+    });
+
+    const searchContainerPadding = animationProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 0], // Keep padding consistent
     });
 
     const topBarMargin = animationProgress.interpolate({
@@ -58,14 +63,17 @@ const HomeHeader = ({
     });
 
     const searchIconOpacity = animationProgress.interpolate({
-        inputRange: [0, 0.7, 1],
-        outputRange: [0, 0, 1], // Fade in during last 30% of animation
+        inputRange: [0, 0.3, 1],
+        outputRange: [0, 1, 1], // Fade in quickly during first 30% of animation
     });
 
     const searchIconScale = animationProgress.interpolate({
-        inputRange: [0, 0.7, 1],
-        outputRange: [0.8, 0.8, 1], // Pop in effect
+        inputRange: [0, 0.3, 1],
+        outputRange: [0.8, 1, 1], // Pop in effect early
     });
+
+    // Control search bar visibility and pointer events
+    const searchBarPointerEvents = isScrolled ? 'none' : 'auto';
 
     // Memoize greeting
     const greeting = useMemo(() => {
@@ -129,7 +137,6 @@ const HomeHeader = ({
                         <TouchableOpacity 
                             onPress={onSearchPress} 
                             style={styles.searchIconButton}
-                            disabled={!isScrolled}
                         >
                             <FontAwesome name="search" size={20} color="#4A4A4A" />
                         </TouchableOpacity>
@@ -145,32 +152,34 @@ const HomeHeader = ({
                 </View>
             </Animated.View>
 
-            {/* Search bar with smooth collapse */}
+            {/* Search bar with smooth collapse and expand */}
             <Animated.View 
                 style={[
                     styles.searchContainerWrapper,
                     { 
                         height: searchBarHeight,
                         marginBottom: searchContainerMargin,
+                        paddingVertical: searchContainerPadding,
                         opacity: searchBarOpacity,
                     }
                 ]}
-                pointerEvents={isScrolled ? 'none' : 'auto'}
+                pointerEvents={searchBarPointerEvents}
             >
-                <Animated.View
-                    style={{
-                        transform: [{ scale: searchBarScale }],
-                    }}
+                <TouchableOpacity 
+                    style={styles.searchButton}
+                    onPress={onSearchPress}
+                    activeOpacity={0.7}
                 >
-                    <TouchableOpacity 
-                        style={styles.searchButton}
-                        onPress={onSearchPress}
-                        activeOpacity={0.7}
-                    >
+                    <Animated.View style={[
+                        styles.searchButtonContent,
+                        {
+                            transform: [{ scale: searchBarScale }],
+                        }
+                    ]}>
                         <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
                         <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
-                    </TouchableOpacity>
-                </Animated.View>
+                    </Animated.View>
+                </TouchableOpacity>
             </Animated.View>
         </View>
     );
@@ -261,12 +270,17 @@ const styles = StyleSheet.create({
         alignItems: "center",
         backgroundColor: "#FFFFFF",
         borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
         borderWidth: 1,
         borderColor: "#E5E5E5",
         height: 48,
-    },  
+    },
+    searchButtonContent: {
+        flexDirection: "row",
+        alignItems: "center",
+        flex: 1,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
     searchIcon: {
         marginRight: 12,
     },
