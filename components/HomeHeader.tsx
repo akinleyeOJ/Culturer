@@ -20,11 +20,42 @@ const HomeHeader = ({
 
     const getGreeting = () => {
         const hours = new Date().getHours();
-        if (hours < 12) return "Good Morning";
-        if (hours < 18) return "Good Afternoon";
-        return "Good Evening";
+        
+        // Late night (12 AM - 4 AM)
+        if (hours >= 0 && hours < 4) {
+            const greetings = ["Burning the midnight oil I see", "Hey there, night owl", "Still awake"];
+            return greetings[Math.floor(Math.random() * greetings.length)];
+        }
+        // Early morning (4 AM - 6 AM)
+        if (hours >= 4 && hours < 6) {
+            const greetings = ["Rise and shine", "Early bird", "Good morning"];
+            return greetings[Math.floor(Math.random() * greetings.length)];
+        }
+        // Morning (6 AM - 9 AM)
+        if (hours >= 6 && hours < 9) {
+            const greetings = ["Good morning", "Morning sunshine", "Wakey wakey", "Hello there"];
+            return greetings[Math.floor(Math.random() * greetings.length)];
+        }
+        // Late morning (9 AM - 12 PM)
+        if (hours >= 9 && hours < 12) {
+            const greetings = ["Getting productive", "Good morning", "Hello there"];
+            return greetings[Math.floor(Math.random() * greetings.length)];
+        }
+        // Afternoon (12 PM - 5 PM)
+        if (hours >= 12 && hours < 17) {
+            const greetings = ["Good afternoon", "Afternoon vibes", "Hey there"];
+            return greetings[Math.floor(Math.random() * greetings.length)];
+        }
+        // Evening (5 PM - 9 PM)
+        if (hours >= 17 && hours < 21) {
+            const greetings = ["Good evening", "Hello there, evening explorer", "It's golden hour", "Getting dark out there"];
+            return greetings[Math.floor(Math.random() * greetings.length)];
+        }
+        // Night (9 PM - 12 AM)
+        const greetings = ["Good night", "Late night browsing", "Cozy evening?", "Moonlight shopping?"];
+        return greetings[Math.floor(Math.random() * greetings.length)];
     }
-
+    
     const getUserInitials = () => {
         return userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
     }
