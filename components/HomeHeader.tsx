@@ -27,7 +27,7 @@ const HomeHeader = ({
     const greetingOpacity = useSharedValue(1);
     const topBarMargin = useSharedValue(16);
 
-    // Animate based on scroll state
+    // Animate based on scroll state - smooth animation with immediate state update
     React.useEffect(() => {
         if (isScrolled) {
             // Collapse search box - keep greeting visible
@@ -38,7 +38,7 @@ const HomeHeader = ({
             // Keep greeting visible - don't fade it out
             greetingOpacity.value = 1;
         } else {
-            // Expand search box
+            // Expand search box - smooth slide back in
             searchHeight.value = withTiming(48, { duration: 300 });
             searchOpacity.value = withTiming(1, { duration: 300 });
             searchIconOpacity.value = withTiming(0, { duration: 300 });
@@ -51,7 +51,7 @@ const HomeHeader = ({
     const searchContainerStyle = useAnimatedStyle(() => ({
         height: searchHeight.value,
         opacity: searchOpacity.value,
-        marginBottom: searchHeight.value > 0 ? 16 : 0,
+        marginBottom: 0, // No margin - let container padding handle spacing
     }));
 
     const searchIconStyle = useAnimatedStyle(() => ({
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
         width: "100%",
         paddingHorizontal: 16,
         paddingTop: 12,
-        paddingBottom: 16,
+        paddingBottom: 5,
         backgroundColor: "#FFFFFF",
         borderBottomWidth: 1,
         borderBottomColor: "#E5E5E5",

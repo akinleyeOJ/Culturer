@@ -181,7 +181,19 @@ const Home = () => {
         contentInsetAdjustmentBehavior="never"
         onScroll={(event) => {
           const offsetY = event.nativeEvent.contentOffset.y;
-          setIsScrolled(offsetY > 50); // Trigger collapse after 50px scroll
+          
+          // Use hysteresis: different thresholds for scrolling down vs up
+          // This prevents rapid toggling and makes the transition smoother
+          const thresholdDown = 80; // Collapse when scrolling down past 80px
+          const thresholdUp = 30; // Expand when scrolling back up past 30px
+          
+          if (offsetY > thresholdDown && !isScrolled) {
+            // Scrolling down - collapse search bar immediately
+            setIsScrolled(true);
+          } else if (offsetY < thresholdUp && isScrolled) {
+            // Scrolling up - expand search bar immediately
+            setIsScrolled(false);
+          }
         }}
         scrollEventThrottle={16}
       >
