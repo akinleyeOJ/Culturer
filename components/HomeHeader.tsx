@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, TextInput, Image, TouchableOpacity, Keyboard } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 interface HomeHeaderProps {
     userName?: string;
@@ -17,9 +18,6 @@ const HomeHeader = ({
     onWishlistPress 
 }: HomeHeaderProps) => {
 
-    const [showSearch, setShowSearch] = useState(false);
-    const searchInputRef = useRef<TextInput>(null);
-
     const getGreeting = () => {
         const hours = new Date().getHours();
         if (hours < 12) return "Good Morning";
@@ -31,64 +29,37 @@ const HomeHeader = ({
         return userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
     }
 
-    const handleSearchPress = () => {
-        if (showSearch) {
-            // Close search
-            setShowSearch(false);
-            Keyboard.dismiss();
-        } else {
-            // Open search
-            setShowSearch(true);
-        }
-    };
-
-    // Focus input when showSearch becomes true
-    useEffect(() => {
-        if (showSearch) {
-            setTimeout(() => {
-                searchInputRef.current?.focus();
-            }, 100);
-        }
-    }, [showSearch]);
-
     return (
         <View style={styles.container}>
             <View style={styles.topBar}>
-                <Text style={styles.greetingText}>{getGreeting()}, {userName}</Text>
-                
-                <View style={styles.iconContainer}>
-                    <TouchableOpacity 
-                        onPress={handleSearchPress}
-                        style={styles.iconButton}
-                    >
-                        <Text style={styles.icon}>🔍</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity onPress={onWishlistPress} style={styles.iconButton}>
-                        <Text style={styles.icon}>🤍</Text>
-                        {wishlistCount > 0 && (
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>{wishlistCount}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
+                <View style={styles.leftSection}>
+                    <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{getUserInitials()}</Text>
+                    </View>
+                    <View style={styles.greetingContainer}>
+                        <Text style={styles.greetingLabel}>{getGreeting()},</Text>
+                        <Text style={styles.userName}>{userName}</Text>
+                    </View>
                 </View>
+                
+                <TouchableOpacity onPress={onWishlistPress} style={styles.heartButton}>
+                    <FontAwesome name="heart-o" size={22} color="#4A4A4A" />
+                    {wishlistCount > 0 && (
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{wishlistCount}</Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
             </View>
 
-            {showSearch && (
-                <View style={styles.searchContainer}>
-                    <Text style={styles.searchIcon}>🔍</Text>
-                    <TextInput 
-                        ref={searchInputRef}
-                        style={styles.searchInput} 
-                        placeholder="Search for anything"
-                        placeholderTextColor="#999"
-                        keyboardType="default"
-                        returnKeyType="search"
-                        onBlur={() => setShowSearch(false)}  // Add this back
-                    />
-                </View>
-            )}
+            <TouchableOpacity 
+                style={styles.searchContainer}
+                onPress={onSearchPress}
+                activeOpacity={0.7}
+            >
+                <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
+                <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
+            </TouchableOpacity>
         </View>
     );
 };
@@ -97,9 +68,11 @@ const styles = StyleSheet.create({
     container: {
         width: "100%",
         paddingHorizontal: 16,
-        paddingTop: 8,
+        paddingTop: 12,
         paddingBottom: 16,
-        backgroundColor: "#f8f9fa",
+        backgroundColor: "#FFFFFF",
+        borderBottomWidth: 1,
+        borderBottomColor: "#E5E5E5",
     },
     topBar: {
         flexDirection: "row",
@@ -107,58 +80,77 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginBottom: 16,
     },
-    greetingText: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: "#212529",
-    },
-    iconContainer: {
+    leftSection: {
         flexDirection: "row",
-        gap: 12,
         alignItems: "center",
+        flex: 1,
     },
-    iconButton: {
+    avatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: "#8B5CF6", // Purple color
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 12,
+    },
+    avatarText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#FFFFFF",
+    },
+    greetingContainer: {
+        flex: 1,
+    },
+    greetingLabel: {
+        fontSize: 14,
+        fontWeight: "400",
+        color: "#9CA3AF", // Light gray
+        marginBottom: 2,
+    },
+    userName: {
+        fontSize: 20,
+        fontWeight: "700",
+        color: "#1F2937", // Dark gray
+    },
+    heartButton: {
+        padding: 8,
         position: "relative",
-        padding: 4,
-    },
-    icon: {
-        fontSize: 22,
     },
     badge: {
         position: "absolute",
-        top: 0,
-        right: 0,
-        backgroundColor: "#ff6b6b",
+        top: 2,
+        right: 2,
+        backgroundColor: "#EF4444", // Red color
         borderRadius: 10,
         minWidth: 18,
         height: 18,
         justifyContent: "center",
         alignItems: "center",
+        paddingHorizontal: 5,
     },
     badgeText: {
-        fontSize: 10,
-        fontWeight: "bold",
-        color: "#fff",
+        fontSize: 11,
+        fontWeight: "700",
+        color: "#FFFFFF",
     },
     searchContainer: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#fff",
+        backgroundColor: "#FFFFFF",
         borderRadius: 12,
-        paddingHorizontal: 15,
+        paddingHorizontal: 16,
         paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: "#E5E5E5",
     },  
     searchIcon: {
-        fontSize: 16,
-        color: "#999",
-        marginRight: 10,
+        marginRight: 12,
     },
-    searchInput: {
+    searchPlaceholder: {
         flex: 1,
         fontSize: 14,
-        color: "#212529",
-        paddingVertical: 0,  // Add this - sometimes padding can interfere
-        height: 40,  // Add explicit height
+        color: "#9CA3AF", // Light gray
     },
 });
 
