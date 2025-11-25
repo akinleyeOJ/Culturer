@@ -1,7 +1,6 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useMemo, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import Animated, { useAnimatedStyle, withTiming, useSharedValue } from "react-native-reanimated";
 
 interface HomeHeaderProps {
     userName?: string;
@@ -20,94 +19,87 @@ const HomeHeader = ({
     onSearchPress,
     onWishlistPress 
 }: HomeHeaderProps) => {
-    // Animation values for search box collapse
-    const searchHeight = useSharedValue(48);
-    const searchOpacity = useSharedValue(1);
-    const searchIconOpacity = useSharedValue(0);
-    const greetingOpacity = useSharedValue(1);
-    const topBarMargin = useSharedValue(16);
+    // Single animation progress value for perfect synchronization
+    const animationProgress = useRef(new Animated.Value(0)).current;
 
-    // Animate based on scroll state - smooth animation with immediate state update
-    React.useEffect(() => {
-        if (isScrolled) {
-            // Collapse search box - keep greeting visible
-            searchHeight.value = withTiming(0, { duration: 300 });
-            searchOpacity.value = withTiming(0, { duration: 300 });
-            searchIconOpacity.value = withTiming(1, { duration: 300 });
-            topBarMargin.value = withTiming(0, { duration: 300 }); // Remove margin when scrolled
-            // Keep greeting visible - don't fade it out
-            greetingOpacity.value = 1;
-        } else {
-            // Expand search box - smooth slide back in
-            searchHeight.value = withTiming(48, { duration: 300 });
-            searchOpacity.value = withTiming(1, { duration: 300 });
-            searchIconOpacity.value = withTiming(0, { duration: 300 });
-            topBarMargin.value = withTiming(16, { duration: 300 }); // Restore margin when not scrolled
-            greetingOpacity.value = 1;
-        }
-    }, [isScrolled, searchHeight, searchOpacity, searchIconOpacity, greetingOpacity, topBarMargin]);
+    useEffect(() => {
+        Animated.timing(animationProgress, {
+            toValue: isScrolled ? 1 : 0,
+            duration: 300,
+            easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth ease-in-out curve
+            useNativeDriver: false, // Need false for height/margin
+        }).start();
+    }, [isScrolled]);
 
-    // Animated styles
-    const searchContainerStyle = useAnimatedStyle(() => ({
-        height: searchHeight.value,
-        opacity: searchOpacity.value,
-        marginBottom: 0, // No margin - let container padding handle spacing
-    }));
+    // Interpolate all values from single progress
+    const searchBarHeight = animationProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [48, 0], // Search bar height collapses from 48 to 0
+    });
 
-    const searchIconStyle = useAnimatedStyle(() => ({
-        opacity: searchIconOpacity.value,
-    }));
+    const searchBarOpacity = animationProgress.interpolate({
+        inputRange: [0, 0.3, 1],
+        outputRange: [1, 0, 0], // Fade out quickly in first 30% of animation
+    });
 
-    const greetingStyle = useAnimatedStyle(() => ({
-        opacity: greetingOpacity.value,
-    }));
+    const searchBarScale = animationProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0.95], // Slight scale down for style
+    });
 
-    const topBarStyle = useAnimatedStyle(() => ({
-        marginBottom: topBarMargin.value,
-    }));
+    const searchContainerMargin = animationProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [12, 0], // Margin collapses
+    });
 
-    // Memoize greeting to prevent it from changing on every render
-    // Use a stable seed based on date + hour so it stays consistent within the same hour
+    const topBarMargin = animationProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [16, 8], // Reduce top bar margin when scrolled
+    });
+
+    const searchIconOpacity = animationProgress.interpolate({
+        inputRange: [0, 0.7, 1],
+        outputRange: [0, 0, 1], // Fade in during last 30% of animation
+    });
+
+    const searchIconScale = animationProgress.interpolate({
+        inputRange: [0, 0.7, 1],
+        outputRange: [0.8, 0.8, 1], // Pop in effect
+    });
+
+    // Memoize greeting
     const greeting = useMemo(() => {
         const date = new Date();
         const hours = date.getHours();
-        // Use date + hour as seed for consistent greeting per hour
         const seed = date.getDate() + date.getMonth() + hours;
         
-        // Late night (12 AM - 4 AM)
         if (hours >= 0 && hours < 4) {
             const greetings = ["Burning the midnight oil I see", "Hey there, night owl", "Still awake"];
             return greetings[seed % greetings.length];
         }
-        // Early morning (4 AM - 6 AM)
         if (hours >= 4 && hours < 6) {
             const greetings = ["Rise and shine", "Early bird", "Good morning"];
             return greetings[seed % greetings.length];
         }
-        // Morning (6 AM - 9 AM)
         if (hours >= 6 && hours < 9) {
             const greetings = ["Good morning", "Morning sunshine", "Wakey wakey", "Hello there"];
             return greetings[seed % greetings.length];
         }
-        // Late morning (9 AM - 12 PM)
         if (hours >= 9 && hours < 12) {
             const greetings = ["Getting productive", "Good morning", "Hello there"];
             return greetings[seed % greetings.length];
         }
-        // Afternoon (12 PM - 5 PM)
         if (hours >= 12 && hours < 17) {
             const greetings = ["Good afternoon", "Afternoon vibes", "Hey there"];
             return greetings[seed % greetings.length];
         }
-        // Evening (5 PM - 9 PM)
         if (hours >= 17 && hours < 21) {
             const greetings = ["Good evening", "Hello there, evening explorer", "It's golden hour", "Getting dark out there"];
             return greetings[seed % greetings.length];
         }
-        // Night (9 PM - 12 AM)
         const greetings = ["Good night", "Late night browsing", "Cozy evening?", "Moonlight shopping?"];
         return greetings[seed % greetings.length];
-    }, []); // Calculate once on mount - greeting stays stable during session
+    }, []);
     
     const getUserInitials = () => {
         return userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -115,21 +107,30 @@ const HomeHeader = ({
 
     return (
         <View style={styles.container}>
-            <Animated.View style={[styles.topBar, topBarStyle]}>
+            <Animated.View style={[styles.topBar, { marginBottom: topBarMargin }]}>
                 <View style={styles.leftSection}>
                     <View style={styles.avatar}>
                         <Text style={styles.avatarText}>{getUserInitials()}</Text>
                     </View>
-                    <Animated.View style={[styles.greetingContainer, greetingStyle]}>
+                    <View style={styles.greetingContainer}>
                         <Text style={styles.greetingLabel}>{greeting},</Text>
                         <Text style={styles.userName}>{userName}</Text>
-                    </Animated.View>
+                    </View>
                 </View>
                 
                 <View style={styles.rightSection}>
-                    {/* Search icon when scrolled */}
-                    <Animated.View style={[styles.searchIconButton, searchIconStyle]}>
-                        <TouchableOpacity onPress={onSearchPress} style={styles.searchIconButtonTouchable}>
+                    {/* Search icon when scrolled - with pop animation */}
+                    <Animated.View 
+                        style={{ 
+                            opacity: searchIconOpacity,
+                            transform: [{ scale: searchIconScale }],
+                        }}
+                    >
+                        <TouchableOpacity 
+                            onPress={onSearchPress} 
+                            style={styles.searchIconButton}
+                            disabled={!isScrolled}
+                        >
                             <FontAwesome name="search" size={20} color="#4A4A4A" />
                         </TouchableOpacity>
                     </Animated.View>
@@ -144,15 +145,32 @@ const HomeHeader = ({
                 </View>
             </Animated.View>
 
-            <Animated.View style={[styles.searchContainerWrapper, searchContainerStyle]}>
-                <TouchableOpacity 
-                    style={styles.searchContainer}
-                    onPress={onSearchPress}
-                    activeOpacity={0.7}
+            {/* Search bar with smooth collapse */}
+            <Animated.View 
+                style={[
+                    styles.searchContainerWrapper,
+                    { 
+                        height: searchBarHeight,
+                        marginBottom: searchContainerMargin,
+                        opacity: searchBarOpacity,
+                    }
+                ]}
+                pointerEvents={isScrolled ? 'none' : 'auto'}
+            >
+                <Animated.View
+                    style={{
+                        transform: [{ scale: searchBarScale }],
+                    }}
                 >
-                    <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
-                    <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
-                </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={styles.searchButton}
+                        onPress={onSearchPress}
+                        activeOpacity={0.7}
+                    >
+                        <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
+                        <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
+                    </TouchableOpacity>
+                </Animated.View>
             </Animated.View>
         </View>
     );
@@ -172,19 +190,17 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 16,
     },
     leftSection: {
         flexDirection: "row",
         alignItems: "center",
         flex: 1,
-        position: "relative",
     },
     avatar: {
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: "#8B5CF6", // Purple color
+        backgroundColor: "#8B5CF6",
         justifyContent: "center",
         alignItems: "center",
         marginRight: 12,
@@ -202,22 +218,19 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     searchIconButton: {
-        marginRight: 8,
-        opacity: 0,
-    },
-    searchIconButtonTouchable: {
         padding: 8,
+        marginRight: 8,
     },
     greetingLabel: {
         fontSize: 14,
         fontWeight: "400",
-        color: "#9CA3AF", // Light gray
+        color: "#9CA3AF",
         marginBottom: 2,
     },
     userName: {
         fontSize: 20,
         fontWeight: "700",
-        color: "#1F2937", // Dark gray
+        color: "#1F2937",
     },
     heartButton: {
         padding: 8,
@@ -227,7 +240,7 @@ const styles = StyleSheet.create({
         position: "absolute",
         top: 2,
         right: 2,
-        backgroundColor: "#EF4444", // Red color
+        backgroundColor: "#EF4444",
         borderRadius: 10,
         minWidth: 18,
         height: 18,
@@ -241,9 +254,9 @@ const styles = StyleSheet.create({
         color: "#FFFFFF",
     },
     searchContainerWrapper: {
-        overflow: "hidden",
+        overflow: 'hidden',
     },
-    searchContainer: {
+    searchButton: {
         flexDirection: "row",
         alignItems: "center",
         backgroundColor: "#FFFFFF",
@@ -252,6 +265,7 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderWidth: 1,
         borderColor: "#E5E5E5",
+        height: 48,
     },  
     searchIcon: {
         marginRight: 12,
@@ -259,7 +273,7 @@ const styles = StyleSheet.create({
     searchPlaceholder: {
         flex: 1,
         fontSize: 14,
-        color: "#9CA3AF", // Light gray
+        color: "#9CA3AF",
     },
 });
 

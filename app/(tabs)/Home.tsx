@@ -182,16 +182,14 @@ const Home = () => {
         onScroll={(event) => {
           const offsetY = event.nativeEvent.contentOffset.y;
           
-          // Use hysteresis: different thresholds for scrolling down vs up
-          // This prevents rapid toggling and makes the transition smoother
-          const thresholdDown = 80; // Collapse when scrolling down past 80px
-          const thresholdUp = 30; // Expand when scrolling back up past 30px
+          // Smooth threshold with deadzone to prevent bouncing
+          const collapseThreshold = 60;
+          const expandThreshold = 40;
           
-          if (offsetY > thresholdDown && !isScrolled) {
-            // Scrolling down - collapse search bar immediately
+          // Use hysteresis (different thresholds) to prevent rapid toggling
+          if (offsetY > collapseThreshold && !isScrolled) {
             setIsScrolled(true);
-          } else if (offsetY < thresholdUp && isScrolled) {
-            // Scrolling up - expand search bar immediately
+          } else if (offsetY < expandThreshold && isScrolled) {
             setIsScrolled(false);
           }
         }}
