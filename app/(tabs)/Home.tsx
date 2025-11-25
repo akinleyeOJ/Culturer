@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, RefreshControl, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ProductCard, RecentlyViewedCard } from "../../components/Card";
@@ -54,6 +54,7 @@ const Home = () => {
         fetchHotProducts(user?.id),
       ]);
 
+      // Update all state together - React 18+ batches these automatically
       setRecentlyViewed(recentlyViewedData);
       setForYouProducts(forYouData);
       setHotProducts(hotData);
@@ -123,9 +124,14 @@ const Home = () => {
     loadProducts();
   }, [user]);
 
-  // Calculate wishlist count from favorited products
-  const wishlistCount = [...forYouProducts, ...hotProducts]
-    .filter(p => p.isFavorited).length;
+  // Calculate wishlist count from favorited products (deduplicate by product ID)
+  const wishlistCount = useMemo(() => {
+    const allProducts = [...forYouProducts, ...hotProducts];
+    const favoritedProducts = allProducts.filter(p => p.isFavorited);
+    // Deduplicate by product ID to avoid counting duplicates
+    const uniqueFavoritedIds = new Set(favoritedProducts.map(p => p.id));
+    return uniqueFavoritedIds.size;
+  }, [forYouProducts, hotProducts]);
 
   if (loading) {
     return (

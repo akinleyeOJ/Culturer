@@ -94,18 +94,23 @@ export const fetchRecentlyViewed = async (userId: string) => {
     return [];
   }
 
-  return (recentlyViewedData as any[]).map((rv: any) => {
-    const product = (products as any[]).find((p: any) => p.id === rv.product_id);
-    if (!product) return null;
-    
-    return {
-      id: product.id,
-      name: product.name,
-      price: `$${product.price.toFixed(2)}`,
-      emoji: product.emoji || '🎨',
-      image: product.image_url || product.images?.[0],
-    };
-  }).filter((p): p is NonNullable<typeof p> => p !== null);
+  // Create a map for O(1) lookup instead of O(n) find
+  const productsMap = new Map((products as any[]).map(p => [p.id, p]));
+
+  return (recentlyViewedData as any[])
+    .map((rv: any) => {
+      const product = productsMap.get(rv.product_id);
+      if (!product) return null;
+      
+      return {
+        id: product.id,
+        name: product.name,
+        price: `$${product.price.toFixed(2)}`,
+        emoji: product.emoji || '🎨',
+        image: product.image_url || product.images?.[0],
+      };
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null);
 };
 
 // Toggle favorite - uses wishlist table

@@ -1,6 +1,8 @@
-import React, { ReactNode } from "react";
+import React, { ReactNode, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, StyleProp, Image } from "react-native";
 import { Colors } from "../constants/color";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from "react-native-reanimated";
 
 interface CardProps {
   children?: ReactNode;
@@ -51,6 +53,57 @@ export const ProductCard = ({
   variant = "default",
   badge = null,
 }: ProductCardProps) => { 
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+  const prevLikedRef = useRef(isLiked);
+  const hasSettledRef = useRef(false);
+
+  // Wait for component to settle after initial data load before allowing animations
+  useEffect(() => {
+    // Give component time to settle after initial data load
+    const timer = setTimeout(() => {
+      hasSettledRef.current = true;
+      prevLikedRef.current = isLiked;
+    }, 300); // 300ms delay to allow data to load
+
+    return () => clearTimeout(timer);
+  }, []); // Only run once on mount
+
+  // Animate only when isLiked changes AFTER component has settled (user interaction)
+  useEffect(() => {
+    // Don't animate until component has settled after initial load
+    if (!hasSettledRef.current) {
+      prevLikedRef.current = isLiked;
+      return;
+    }
+
+    // Only animate if the value actually changed (user clicked)
+    if (prevLikedRef.current !== isLiked) {
+      if (isLiked) {
+        // Scale up and down animation when liked
+        scale.value = withSequence(
+          withSpring(1.3, { damping: 8, stiffness: 200 }),
+          withSpring(1, { damping: 8, stiffness: 200 })
+        );
+      } else {
+        // Subtle pulse when unliked
+        scale.value = withSpring(0.9, { damping: 10, stiffness: 150 });
+        setTimeout(() => {
+          scale.value = withSpring(1, { damping: 10, stiffness: 150 });
+        }, 100);
+      }
+      // Update the ref to track the current state
+      prevLikedRef.current = isLiked;
+    }
+  }, [isLiked, scale]);
+
+  const animatedIconStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+      opacity: opacity.value,
+    };
+  });
+
   const renderStars = (rating: number) => {
     return "⭐".repeat(Math.floor(rating));
   };
@@ -101,9 +154,13 @@ export const ProductCard = ({
           }}
           activeOpacity={0.7}
         >
-          <Text style={styles.favoriteIcon}>
-            {isLiked ? "❤️" : "🤍"}
-          </Text>
+          <Animated.View style={animatedIconStyle}>
+            <FontAwesome 
+              name={isLiked ? "heart" : "heart-o"} 
+              size={14} 
+              color={isLiked ? "#EF4444" : "#4A4A4A"} 
+            />
+          </Animated.View>
         </TouchableOpacity>
       </View>
     </Card>

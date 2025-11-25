@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
@@ -18,43 +18,48 @@ const HomeHeader = ({
     onWishlistPress 
 }: HomeHeaderProps) => {
 
-    const getGreeting = () => {
-        const hours = new Date().getHours();
+    // Memoize greeting to prevent it from changing on every render
+    // Use a stable seed based on date + hour so it stays consistent within the same hour
+    const greeting = useMemo(() => {
+        const date = new Date();
+        const hours = date.getHours();
+        // Use date + hour as seed for consistent greeting per hour
+        const seed = date.getDate() + date.getMonth() + hours;
         
         // Late night (12 AM - 4 AM)
         if (hours >= 0 && hours < 4) {
             const greetings = ["Burning the midnight oil I see", "Hey there, night owl", "Still awake"];
-            return greetings[Math.floor(Math.random() * greetings.length)];
+            return greetings[seed % greetings.length];
         }
         // Early morning (4 AM - 6 AM)
         if (hours >= 4 && hours < 6) {
             const greetings = ["Rise and shine", "Early bird", "Good morning"];
-            return greetings[Math.floor(Math.random() * greetings.length)];
+            return greetings[seed % greetings.length];
         }
         // Morning (6 AM - 9 AM)
         if (hours >= 6 && hours < 9) {
             const greetings = ["Good morning", "Morning sunshine", "Wakey wakey", "Hello there"];
-            return greetings[Math.floor(Math.random() * greetings.length)];
+            return greetings[seed % greetings.length];
         }
         // Late morning (9 AM - 12 PM)
         if (hours >= 9 && hours < 12) {
             const greetings = ["Getting productive", "Good morning", "Hello there"];
-            return greetings[Math.floor(Math.random() * greetings.length)];
+            return greetings[seed % greetings.length];
         }
         // Afternoon (12 PM - 5 PM)
         if (hours >= 12 && hours < 17) {
             const greetings = ["Good afternoon", "Afternoon vibes", "Hey there"];
-            return greetings[Math.floor(Math.random() * greetings.length)];
+            return greetings[seed % greetings.length];
         }
         // Evening (5 PM - 9 PM)
         if (hours >= 17 && hours < 21) {
             const greetings = ["Good evening", "Hello there, evening explorer", "It's golden hour", "Getting dark out there"];
-            return greetings[Math.floor(Math.random() * greetings.length)];
+            return greetings[seed % greetings.length];
         }
         // Night (9 PM - 12 AM)
         const greetings = ["Good night", "Late night browsing", "Cozy evening?", "Moonlight shopping?"];
-        return greetings[Math.floor(Math.random() * greetings.length)];
-    }
+        return greetings[seed % greetings.length];
+    }, []); // Calculate once on mount - greeting stays stable during session
     
     const getUserInitials = () => {
         return userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -68,7 +73,7 @@ const HomeHeader = ({
                         <Text style={styles.avatarText}>{getUserInitials()}</Text>
                     </View>
                     <View style={styles.greetingContainer}>
-                        <Text style={styles.greetingLabel}>{getGreeting()},</Text>
+                        <Text style={styles.greetingLabel}>{greeting},</Text>
                         <Text style={styles.userName}>{userName}</Text>
                     </View>
                 </View>
