@@ -86,7 +86,7 @@ const HomeHeader = ({
             return greetings[seed % greetings.length];
         }
         if (hours >= 4 && hours < 6) {
-            const greetings = ["Rise and shine", "Early bird", "Good morning"];
+            const greetings = ["Good morning"];
             return greetings[seed % greetings.length];
         }
         if (hours >= 6 && hours < 9) {
