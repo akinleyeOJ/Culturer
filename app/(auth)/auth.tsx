@@ -641,7 +641,7 @@ const SignIn = () => {
         >
           {/* App Logo */}
           <View style={styles.logoContainer}>
-            <FontAwesome name="shopping-bag" size={40} color={Colors.primary[500]} />
+            <Text style={styles.logoIcon}>🛍️</Text>
             <Text style={styles.appName}>Culturar</Text>
           </View>
 
@@ -1005,7 +1005,10 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     marginBottom: 25,
-    gap: 8,
+  },
+  logoIcon: {
+    fontSize: 40,
+    marginBottom: 8,
   },
   appName: {
     fontSize: 32,
