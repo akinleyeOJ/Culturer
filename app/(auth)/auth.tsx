@@ -14,6 +14,7 @@ import {
   UIManager,
   ActivityIndicator,
   AppState,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -21,6 +22,7 @@ import { Colors } from "../../constants/color";
 import { supabase } from "../../lib/supabase";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === "android") {
@@ -639,7 +641,7 @@ const SignIn = () => {
         >
           {/* App Logo */}
           <View style={styles.logoContainer}>
-            <Text style={styles.logoIcon}>🛍️</Text>
+            <FontAwesome name="shopping-bag" size={40} color={Colors.primary[500]} />
             <Text style={styles.appName}>Culturar</Text>
           </View>
 
@@ -678,7 +680,11 @@ const SignIn = () => {
                   { transform: [{ scale: !isSignUp ? scaleAnim : 1 }] },
                 ]}
               >
-                <Text style={styles.toogleIcon}>🔓</Text>
+                <FontAwesome 
+                  name="sign-in" 
+                  size={16} 
+                  color={!isSignUp ? "#fff" : "#666"} 
+                />
                 <Text
                   style={[
                     styles.toggleText,
@@ -701,7 +707,11 @@ const SignIn = () => {
                   { transform: [{ scale: isSignUp ? scaleAnim : 1 }] },
                 ]}
               >
-                <Text style={styles.toogleIcon}>👤</Text>
+                <FontAwesome 
+                  name="user-plus" 
+                  size={16} 
+                  color={isSignUp ? "#fff" : "#666"} 
+                />
                 <Text
                   style={[
                     styles.toggleText,
@@ -730,7 +740,7 @@ const SignIn = () => {
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Full Name</Text>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.inputIcon}>👤</Text>
+                  <FontAwesome name="user" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     placeholder="Enter your name"
@@ -748,7 +758,7 @@ const SignIn = () => {
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Email</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>📧</Text>
+                <FontAwesome name="envelope" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="you@example.com"
@@ -766,7 +776,7 @@ const SignIn = () => {
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>🔒</Text>
+                <FontAwesome name="lock" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="***********"
@@ -781,7 +791,11 @@ const SignIn = () => {
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeIcon}
                 >
-                  <Text>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+                  <FontAwesome 
+                    name={showPassword ? "eye" : "eye-slash"} 
+                    size={18} 
+                    color={Colors.neutral[500]} 
+                  />
                 </TouchableOpacity>
               </View>
               {isSignUp && password.length > 0 && (
@@ -842,7 +856,7 @@ const SignIn = () => {
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Confirm Password</Text>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.inputIcon}>🔒</Text>
+                  <FontAwesome name="lock" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     placeholder="***********"
@@ -857,7 +871,11 @@ const SignIn = () => {
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeIcon}
                   >
-                    <Text>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+                    <FontAwesome 
+                      name={showPassword ? "eye" : "eye-slash"} 
+                      size={18} 
+                      color={Colors.neutral[500]} 
+                    />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -925,7 +943,7 @@ const SignIn = () => {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <>
-                  <Text style={styles.continueButtonIcon}>✉️</Text>
+                  <FontAwesome name="envelope" size={18} color="#fff" />
                   <Text style={styles.continueButtonText}>
                     {isSignUp ? "Create Account" : "Continue with Email"}
                   </Text>
@@ -945,7 +963,13 @@ const SignIn = () => {
               style={styles.socialLoginButton}
               onPress={() => handleSocialLogin("google")}
             >
-              <Text style={styles.socialLoginButtonIcon}>🔒</Text>
+              <Image
+                source={{
+                  uri: "https://www.gstatic.com/images/branding/googleg/1x/googleg_standard_color_18dp.png",
+                }}
+                style={styles.googleLogo}
+                resizeMode="contain"
+              />
               <Text style={styles.socialLoginButtonText}>
                 {isSignUp ? "Continue" : "Continue"} with Google
               </Text>
@@ -954,7 +978,7 @@ const SignIn = () => {
               style={styles.socialLoginButton}
               onPress={() => handleSocialLogin("apple")}
             >
-              <Text style={styles.socialLoginButtonIcon}>🍎</Text>
+              <FontAwesome name="apple" size={25} color="#000000" />
               <Text style={styles.socialLoginButtonText}>
                 {isSignUp ? "Continue" : "Continue"} with Apple
               </Text>
@@ -981,10 +1005,7 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     marginBottom: 25,
-  },
-  logoIcon: {
-    fontSize: 40,
-    marginBottom: 8,
+    gap: 8,
   },
   appName: {
     fontSize: 32,
@@ -1032,9 +1053,6 @@ const styles = StyleSheet.create({
   toggleButtonActive: {
     backgroundColor: "transparent",
   },
-  toogleIcon: {
-    fontSize: 16,
-  },
   toggleText: {
     fontSize: 15,
     fontWeight: "600",
@@ -1076,7 +1094,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.neutral[100],
   },
   inputIcon: {
-    fontSize: 18,
     marginRight: 10,
   },
   input: {
@@ -1203,9 +1220,6 @@ const styles = StyleSheet.create({
   continueButtonDisabled: {
     backgroundColor: Colors.neutral[400],
   },
-  continueButtonIcon: {
-    fontSize: 18,
-  },
   continueButtonText: {
     fontSize: 15,
     fontWeight: "700",
@@ -1236,8 +1250,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
   },
-  socialLoginButtonIcon: {
-    fontSize: 20,
+  googleLogo: {
+    left: 4,
+    width: 20,
+    height: 20,
   },
   socialLoginButtonText: {
     fontSize: 15,
