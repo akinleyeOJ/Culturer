@@ -577,14 +577,10 @@ const SignIn = () => {
           const refresh_token = params.get("refresh_token");
 
           if (access_token && refresh_token) {
-            await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-
+            // FIX: Check user identities BEFORE setting session to prevent "Home screen flash"
             const {
               data: { user },
-            } = await supabase.auth.getUser();
+            } = await supabase.auth.getUser(access_token);
 
             if (user && user.identities) {
               const hasEmailProvider = user.identities.some(
@@ -596,15 +592,23 @@ const SignIn = () => {
                   identity.provider === "apple",
               );
 
+              // Check if we have conflicting providers (Email + Social)
+              // This means an account exists with email, but they are trying to login with Social
               if (hasEmailProvider && hasOAuthProvider) {
-                await supabase.auth.signOut();
+                // DO NOT set the session here. Just show the alert.
                 Alert.alert(
                   "Account Exists",
                   "This email is already registered. Please sign in with your email and password instead.",
                 );
-                return;
+                return; // Stop execution here
               }
             }
+
+            // Only set session if no conflict found
+            await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
 
             router.replace("/(tabs)/Home");
           }
@@ -641,7 +645,7 @@ const SignIn = () => {
         >
           {/* App Logo */}
           <View style={styles.logoContainer}>
-            <Text style={styles.logoIcon}>🛍️</Text>
+            <FontAwesome name="shopping-bag" size={40} color={Colors.primary[500]} />
             <Text style={styles.appName}>Culturar</Text>
           </View>
 
@@ -1005,10 +1009,7 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     marginBottom: 25,
-  },
-  logoIcon: {
-    fontSize: 40,
-    marginBottom: 8,
+    gap: 8,
   },
   appName: {
     fontSize: 32,

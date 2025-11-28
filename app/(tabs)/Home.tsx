@@ -24,6 +24,7 @@ import {
   trackProductView 
 } from "../../lib/services/productService";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 
 interface Product {
   id: string;
@@ -76,6 +77,7 @@ const Home = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [displayName, setDisplayName] = useState("");
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
@@ -116,6 +118,37 @@ const Home = () => {
       }
     }, 10); // Small delay to batch updates
   };
+
+  // Fetch user profile name
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+
+        // FIX: Explicitly cast data to handle TS 'never' error
+        const profileData = data as { full_name: string | null } | null;
+
+        if (profileData?.full_name) {
+          setDisplayName(profileData.full_name);
+        } else {
+          // Fallback to metadata if profile is empty
+          setDisplayName(user.user_metadata?.full_name || user.email?.split("@")[0] || "User");
+        }
+      } catch (e) {
+        console.log("Error loading profile:", e);
+        // Fallback on error
+        setDisplayName(user.user_metadata?.full_name || user.email?.split("@")[0] || "User");
+      }
+    };
+
+    fetchProfile();
+  }, [user]);
 
   // Load all products
   const loadProducts = async () => {
@@ -215,11 +248,7 @@ const Home = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <HomeHeader
-        userName={
-          user?.user_metadata?.full_name || 
-          user?.email?.split("@")[0] || 
-          "User"
-        }
+        userName={displayName}
         userAvatar="https://via.placeholder.com/150"
         wishlistCount={wishlistCount}
         isScrolled={isScrolled}
@@ -435,7 +464,6 @@ const Home = () => {
   );
 };
 
-// ... keep your existing styles the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,

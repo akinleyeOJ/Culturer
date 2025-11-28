@@ -2,27 +2,28 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs, Redirect } from "expo-router";
 import { useAuth } from "../../contexts/AuthContext";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { Colors } from "../../constants/color";
 
 export default function TabLayout() {
   const { user, loading } = useAuth();
 
-  // // Show loading spinner while checking auth
-  // if (loading) {
-  //   return (
-  //     <View style={styles.container}>
-  //       <ActivityIndicator size="large" color="#FF8F66" />
-  //     </View>
-  //   );
-  // }
+  // Show loading spinner while checking auth
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={Colors.primary[500]} />
+      </View>
+    );
+  }
 
-  // // Redirect to auth if not logged in
-  // if (!user) {
-  //   return <Redirect href="/(auth)/auth" />;
-  // }
+  // Redirect to auth if not logged in
+  if (!user) {
+    return <Redirect href="/(auth)/auth" />;
+  }
 
   // User is authenticated, show tabs
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: "blue" }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: Colors.primary[500] }}>
       <Tabs.Screen
         name="Home"
         options={{

@@ -10,8 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
-import { router } from "expo-router";
 import { Colors } from "../../constants/color";
+// router import removed as it is no longer needed for sign out
 
 const Profile = () => {
   const { user, signOut } = useAuth();
@@ -26,8 +26,9 @@ const Profile = () => {
         text: "Sign Out",
         style: "destructive",
         onPress: async () => {
+          // Just call signOut. The AuthContext state change will trigger
+          // the _layout.tsx to automatically redirect to /(auth)/auth
           await signOut();
-          router.replace("/(auth)/auth");
         },
       },
     ]);
