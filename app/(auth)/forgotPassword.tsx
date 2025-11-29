@@ -236,10 +236,10 @@ const styles = StyleSheet.create({
   backToSignInIcon: {
     fontSize: 16,
     color: Colors.primary[500],
-  },
+  }, 
   backToSignInText: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: Colors.primary[500],
   },
 });
