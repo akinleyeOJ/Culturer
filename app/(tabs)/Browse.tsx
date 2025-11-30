@@ -45,31 +45,39 @@ const Browse = () => {
   const { user } = useAuth();
   const params = useLocalSearchParams<{ search?: string; category?: string; subcategory?: string }>();
 
+  // Helper to get initial category from params
+  const getInitialCategory = () => {
+    if (params.category) {
+      return CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id || "all";
+    }
+    return "all";
+  };
+
   const [refreshing, setRefreshing] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  // Initialize state directly from params to avoid empty initial fetch
+  const [selectedCategory, setSelectedCategory] = useState(getInitialCategory());
+  const [searchQuery, setSearchQuery] = useState(params.search || "");
 
-  // Handle incoming params
+  // Track the latest request to prevent race conditions
+  const lastRequestId = useRef(0);
+
+  // Handle incoming params updates (for when already on screen)
   useEffect(() => {
-    if (params.search) {
+    if (params.search !== undefined && params.search !== searchQuery) {
       setSearchQuery(params.search);
-      // Reset category if searching
       setSelectedCategory("all");
     }
 
     if (params.category) {
-      // Map category name to ID if needed, or use name directly
-      // For now assuming names match or we use ID
-      // You might need a helper to find ID by name if params sends name
       const categoryId = CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id || "all";
-      setSelectedCategory(categoryId);
-      setSearchQuery(""); // Clear search if selecting category
+      if (categoryId !== selectedCategory) {
+        setSelectedCategory(categoryId);
+        setSearchQuery(""); 
+      }
     }
   }, [params.search, params.category]);
-
-  // ... (rest of state)
 
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(0);
@@ -92,8 +100,12 @@ const Browse = () => {
 
   // Fetch products
   const loadProducts = async (reset = false) => {
-    if (isLoading || (reset ? false : !hasMore)) return;
+    // FIX: Allow reset (new search) even if currently loading. 
+    // Only block if we are NOT resetting AND (already loading or no more items)
+    if (!reset && (isLoading || !hasMore)) return;
 
+    const currentRequestId = ++lastRequestId.current;
+    
     const currentPage = reset ? 0 : page;
     if (reset) {
       setIsLoading(true);
@@ -111,6 +123,9 @@ const Browse = () => {
         user?.id
       );
 
+      // FIX: If a newer request started while we were waiting, ignore this result
+      if (currentRequestId !== lastRequestId.current) return;
+
       if (reset) {
         setProducts(newProducts);
       } else {
@@ -123,10 +138,13 @@ const Browse = () => {
     } catch (error) {
       console.error("Failed to load products", error);
     } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
-      setRefreshing(false);
-      setHasLoadedOnce(true);
+      // Only turn off loading if we are still the latest request
+      if (currentRequestId === lastRequestId.current) {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+        setRefreshing(false);
+        setHasLoadedOnce(true);
+      }
     }
   };
 
@@ -134,6 +152,7 @@ const Browse = () => {
   useFocusEffect(
     React.useCallback(() => {
       loadWishlistCount();
+      // Only reload if we already have products to avoid overriding initial search
       if (products.length > 0) {
         loadProducts(true);
       }
@@ -146,7 +165,6 @@ const Browse = () => {
       return;
     }
 
-    // Optimistic update
     setProducts(currentProducts =>
       currentProducts.map(p =>
         p.id === productId
@@ -158,10 +176,8 @@ const Browse = () => {
     const { success, isFavorited } = await toggleFavorite(user.id, productId);
 
     if (success) {
-      // Update wishlist count
       loadWishlistCount();
     } else {
-      // Revert if failed
       setProducts(currentProducts =>
         currentProducts.map(p =>
           p.id === productId
@@ -175,10 +191,7 @@ const Browse = () => {
 
   // Initial load and filter changes
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadProducts(true);
-    }, 500);
-    return () => clearTimeout(timer);
+    loadProducts(true);
   }, [selectedCategory, searchQuery, user]);
 
   const handleLoadMore = () => {
