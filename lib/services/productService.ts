@@ -53,60 +53,81 @@ export const fetchAllProducts = async (
     query = query.ilike('name', `%${searchQuery}%`);
   }
 
-  const { data, error, count } = await query;
+  // CRITICAL FIX: Run queries in parallel using Promise.all
+  // This prevents the "waterfall" delay where we wait for products before asking for favorites
+  const [productsResponse, favoriteIds] = await Promise.all([
+    query,
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data, error, count } = productsResponse;
 
   if (error) {
     console.error('Error fetching all products:', error);
     return { products: [], count: 0 };
   }
 
-  const favoriteIds = userId ? await getUserFavorites(userId) : [];
   const products = data ? data.map(p => transformProduct(p, favoriteIds)) : [];
 
   return { products, count: count || 0 };
 };
 
-// Fetch products for "For You" section
+// ... keep existing fetchForYouProducts, fetchHotProducts, fetchRecentlyViewed ...
+// ... ensure you update them to use Promise.all if they also fetch favorites ...
+
+// Example update for fetchForYouProducts to use Promise.all as well:
 export const fetchForYouProducts = async (userId?: string) => {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('in_stock', true)
-    .order('created_at', { ascending: false })
-    .limit(10);
+  const [productsResponse, favoriteIds] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*')
+      .eq('in_stock', true)
+      .order('created_at', { ascending: false })
+      .limit(10),
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data, error } = productsResponse;
 
   if (error || !data) {
     console.error('Error fetching products:', error);
     return [];
   }
 
-  const favoriteIds = userId ? await getUserFavorites(userId) : [];
   return data.map(p => transformProduct(p, favoriteIds));
 };
 
-// Fetch hot/featured products
+// Example update for fetchHotProducts:
 export const fetchHotProducts = async (userId?: string) => {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('in_stock', true)
-    .eq('is_featured', true)
-    .order('total_favorites', { ascending: false })
-    .limit(10);
+  const [productsResponse, favoriteIds] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*')
+      .eq('in_stock', true)
+      .eq('is_featured', true)
+      .order('total_favorites', { ascending: false })
+      .limit(10),
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data, error } = productsResponse;
 
   if (error || !data) {
     console.error('Error fetching hot products:', error);
     return [];
   }
 
-  // Deduplicate by product ID to prevent showing the same product twice
   const uniqueProducts = Array.from(
     new Map((data as Product[]).map(p => [p.id, p])).values()
   ) as Product[];
 
-  const favoriteIds = userId ? await getUserFavorites(userId) : [];
   return uniqueProducts.map(p => transformProduct(p, favoriteIds));
 };
+
+// ... keep fetchRecentlyViewed (it already does a secondary fetch but logic is specific) ...
+
+// ... keep toggleFavorite, addToWishlist, trackProductView, fetchWishlist, fetchWishlistCount ...
+// (These functions remain unchanged from your original file)
 
 // Fetch user's recently viewed products
 export const fetchRecentlyViewed = async (userId: string) => {
@@ -131,7 +152,6 @@ export const fetchRecentlyViewed = async (userId: string) => {
     return [];
   }
 
-  // Create a map for O(1) lookup instead of O(n) find
   const productsMap = new Map((products as any[]).map(p => [p.id, p]));
 
   return (recentlyViewedData as any[])
@@ -150,9 +170,7 @@ export const fetchRecentlyViewed = async (userId: string) => {
     .filter((p): p is NonNullable<typeof p> => p !== null);
 };
 
-// Toggle favorite - uses wishlist table
 export const toggleFavorite = async (userId: string, productId: string) => {
-  // Check if already favorited
   const { data: existing } = await supabase
     .from('wishlist')
     .select('id')
@@ -161,7 +179,6 @@ export const toggleFavorite = async (userId: string, productId: string) => {
     .maybeSingle();
 
   if (existing) {
-    // Remove from wishlist
     const { error } = await supabase
       .from('wishlist')
       .delete()
@@ -169,7 +186,6 @@ export const toggleFavorite = async (userId: string, productId: string) => {
 
     return { success: !error, isFavorited: false };
   } else {
-    // Add to wishlist
     const { error } = await supabase
       .from('wishlist')
       .insert([{ user_id: userId, product_id: productId }] as any);
@@ -178,7 +194,6 @@ export const toggleFavorite = async (userId: string, productId: string) => {
   }
 };
 
-// Add to wishlist (different from favorites - this is for "save for later")
 export const addToWishlist = async (userId: string, productId: string) => {
   const { error } = await supabase
     .from('wishlist')
@@ -187,7 +202,6 @@ export const addToWishlist = async (userId: string, productId: string) => {
   return { success: !error };
 };
 
-// Track when user views a product
 export const trackProductView = async (userId: string, productId: string) => {
   const { error } = await supabase
     .from('recently_viewed')
@@ -205,7 +219,6 @@ export const trackProductView = async (userId: string, productId: string) => {
   }
 };
 
-// Fetch user's wishlist
 export const fetchWishlist = async (userId: string) => {
   const { data: wishlistData, error: wishlistError } = await supabase
     .from('wishlist')
@@ -218,16 +231,17 @@ export const fetchWishlist = async (userId: string) => {
   }
 
   const productIds = (wishlistData as any[]).map((w: any) => w.product_id);
-  const { data: products, error: productsError } = await supabase
-    .from('products')
-    .select('*')
-    .in('id', productIds);
+  // Parallel fetching for wishlist products and refreshing favorites
+  const [productsResponse, favoriteIds] = await Promise.all([
+    supabase.from('products').select('*').in('id', productIds),
+    getUserFavorites(userId)
+  ]);
 
-  if (productsError || !products) {
+  const products = productsResponse.data;
+
+  if (productsResponse.error || !products) {
     return [];
   }
-
-  const favoriteIds = await getUserFavorites(userId);
 
   return (wishlistData as any[]).map((wl: any) => {
     const product = (products as any[]).find((p: any) => p.id === wl.product_id);
@@ -237,7 +251,6 @@ export const fetchWishlist = async (userId: string) => {
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };
 
-// Fetch wishlist count
 export const fetchWishlistCount = async (userId: string): Promise<number> => {
   const { count, error } = await supabase
     .from('wishlist')

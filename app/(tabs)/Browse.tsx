@@ -10,7 +10,8 @@ import {
   RefreshControl,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  Alert
+  Alert,
+  FlatList
 } from "react-native";
 // Removed SafeAreaView import as we use View now
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -56,14 +57,14 @@ const Browse = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Initialize state directly from params to avoid empty initial fetch
+  // Initialize state directly from params
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory());
   const [searchQuery, setSearchQuery] = useState(params.search || "");
 
-  // Track the latest request to prevent race conditions
+  // Track the latest request
   const lastRequestId = useRef(0);
 
-  // Handle incoming params updates (for when already on screen)
+  // Handle incoming params updates
   useEffect(() => {
     if (params.search !== undefined && params.search !== searchQuery) {
       setSearchQuery(params.search);
@@ -88,7 +89,6 @@ const Browse = () => {
   const [wishlistCount, setWishlistCount] = useState(0);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  // Fetch wishlist count
   const loadWishlistCount = async () => {
     if (!user) {
       setWishlistCount(0);
@@ -98,7 +98,6 @@ const Browse = () => {
     setWishlistCount(count);
   };
 
-  // Fetch products
   const loadProducts = async (reset = false) => {
     if (!reset && (isLoading || !hasMore)) return;
 
@@ -144,7 +143,6 @@ const Browse = () => {
     }
   };
 
-  // Reload products and wishlist count when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       loadWishlistCount();
@@ -168,7 +166,7 @@ const Browse = () => {
       )
     );
 
-    const { success, isFavorited } = await toggleFavorite(user.id, productId);
+    const { success } = await toggleFavorite(user.id, productId);
 
     if (success) {
       loadWishlistCount();
@@ -184,7 +182,6 @@ const Browse = () => {
     }
   };
 
-  // Initial load and filter changes
   useEffect(() => {
     loadProducts(true);
   }, [selectedCategory, searchQuery, user]);
@@ -230,6 +227,113 @@ const Browse = () => {
     await loadProducts(true);
   };
 
+  // --- Components for FlatList ---
+
+  // 1. Header Component (Categories, Clear Search, Filter)
+  const ListHeader = () => (
+    <View>
+      {/* Categories */}
+      <View style={styles.categoriesContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          {CATEGORIES.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={[
+                styles.categoryChip,
+                selectedCategory === category.id && styles.categoryChipActive
+              ]}
+              onPress={() => setSelectedCategory(category.id)}
+            >
+              <Text style={[
+                styles.categoryText,
+                selectedCategory === category.id && styles.categoryTextActive
+              ]}>
+                {category.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Clear Search Button */}
+      {searchQuery && (
+        <View style={styles.clearSearchContainer}>
+          <TouchableOpacity
+            style={styles.clearSearchButton}
+            onPress={() => setSearchQuery("")}
+          >
+            <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
+            <Text style={styles.clearSearchText}>Clear search: "{searchQuery}"</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Results & Filter Row */}
+      <View style={styles.filterRow}>
+        <Text style={styles.resultsText}>
+          {totalCount} results
+        </Text>
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={() => Alert.alert('Filter', 'Filter options coming soon!')}
+        >
+          <FontAwesome name="sliders" size={14} color={Colors.primary[500]} style={styles.filterIcon} />
+          <Text style={styles.filterButtonText}>Filter</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // 2. Footer Component (Load More / Empty State)
+  const ListFooter = () => (
+    <View style={styles.footerContainer}>
+      {hasMore && products.length > 0 && (
+        <TouchableOpacity
+          style={styles.loadMoreButton}
+          onPress={handleLoadMore}
+          disabled={isLoadingMore}
+        >
+          {isLoadingMore ? (
+            <View style={styles.loadMoreContent}>
+              <Text style={styles.loadMoreText}>Loading...</Text>
+            </View>
+          ) : (
+            <Text style={styles.loadMoreText}>Load More</Text>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {!isLoading && hasLoadedOnce && products.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No items found</Text>
+          <Text style={styles.emptyStateSubtext}>Try a different search term or category</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  // 3. Render Item
+  const renderItem = ({ item }: { item: Product }) => (
+    <ProductCard
+      key={item.id}
+      name={item.name}
+      price={item.price}
+      image={item.image}
+      emoji={item.emoji}
+      rating={item.rating}
+      reviews={item.reviews}
+      shipping={item.shipping}
+      isLiked={item.isFavorited}
+      onLike={() => handleToggleFavorite(item.id)}
+      style={{ width: COLUMN_WIDTH, marginBottom: 16 }}
+      onPress={() => { }}
+    />
+  );
+
   return (
     <View style={styles.container}>
       <BrowseHeader
@@ -238,8 +342,18 @@ const Browse = () => {
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
       />
 
-      <Animated.ScrollView
+      <Animated.FlatList
+        data={products}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={styles.columnWrapper}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={ListHeader}
+        ListFooterComponent={ListFooter}
+        
+        // Refresh Control
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -247,8 +361,8 @@ const Browse = () => {
             tintColor={Colors.primary[500]}
           />
         }
-        contentContainerStyle={styles.scrollContent}
-        contentInsetAdjustmentBehavior="never"
+        
+        // Scroll Animation Props
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           {
@@ -257,106 +371,7 @@ const Browse = () => {
           }
         )}
         scrollEventThrottle={16}
-      >
-        {/* Categories */}
-        <View style={styles.categoriesContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesContent}
-          >
-            {CATEGORIES.map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === category.id && styles.categoryChipActive
-                ]}
-                onPress={() => setSelectedCategory(category.id)}
-              >
-                <Text style={[
-                  styles.categoryText,
-                  selectedCategory === category.id && styles.categoryTextActive
-                ]}>
-                  {category.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Clear Search Button - Shows when there's an active search */}
-        {searchQuery && (
-          <View style={styles.clearSearchContainer}>
-            <TouchableOpacity
-              style={styles.clearSearchButton}
-              onPress={() => setSearchQuery("")}
-            >
-              <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
-              <Text style={styles.clearSearchText}>Clear search: "{searchQuery}"</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Results & Filter Row */}
-        <View style={styles.filterRow}>
-          <Text style={styles.resultsText}>
-            {totalCount} results
-          </Text>
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => Alert.alert('Filter', 'Filter options coming soon!')}
-          >
-            <FontAwesome name="sliders" size={14} color={Colors.primary[500]} style={styles.filterIcon} />
-            <Text style={styles.filterButtonText}>Filter</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Product Grid */}
-        <View style={styles.gridContent}>
-          <View style={styles.grid}>
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                name={product.name}
-                price={product.price}
-                image={product.image}
-                emoji={product.emoji}
-                rating={product.rating}
-                reviews={product.reviews}
-                shipping={product.shipping}
-                isLiked={product.isFavorited}
-                onLike={() => handleToggleFavorite(product.id)}
-                style={{ width: COLUMN_WIDTH, marginBottom: 16, marginRight: 0 }}
-                onPress={() => { }}
-              />
-            ))}
-          </View>
-
-          {hasMore && products.length > 0 && (
-            <TouchableOpacity
-              style={styles.loadMoreButton}
-              onPress={handleLoadMore}
-              disabled={isLoadingMore}
-            >
-              {isLoadingMore ? (
-                <View style={styles.loadMoreContent}>
-                  <Text style={styles.loadMoreText}>Loading...</Text>
-                </View>
-              ) : (
-                <Text style={styles.loadMoreText}>Load More</Text>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {!isLoading && hasLoadedOnce && products.length === 0 && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No items found</Text>
-              <Text style={styles.emptyStateSubtext}>Try a different search term or category</Text>
-            </View>
-          )}
-        </View>
-      </Animated.ScrollView>
+      />
     </View>
   );
 };
@@ -367,8 +382,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAFA',
   },
   scrollContent: {
-    paddingBottom: 0,
     paddingTop: 16,
+    paddingBottom: 20,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
   },
   categoriesContainer: {
     marginBottom: 16,
@@ -425,14 +444,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text.secondary,
   },
-  gridContent: {
+  footerContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 0, // Remove double padding
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
   },
   emptyState: {
     alignItems: 'center',
