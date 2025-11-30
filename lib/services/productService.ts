@@ -10,7 +10,7 @@ const getUserFavorites = async (userId: string): Promise<string[]> => {
     .from('wishlist')
     .select('product_id')
     .eq('user_id', userId) as { data: { product_id: string }[] | null };
-  
+
   return data?.map(f => f.product_id) || [];
 };
 
@@ -28,6 +28,43 @@ const transformProduct = (product: Product, favoriteIds: string[] = []) => ({
   isFavorited: favoriteIds.includes(product.id),
   badge: product.is_featured ? 'HOT' as const : null,
 });
+
+// Fetch all products with pagination, category filter, and search
+export const fetchAllProducts = async (
+  page: number = 0,
+  limit: number = 12,
+  category: string = 'all',
+  searchQuery: string = '',
+  userId?: string
+) => {
+  let query = supabase
+    .from('products')
+    .select('*', { count: 'exact' })
+    .eq('in_stock', true)
+    .range(page * limit, (page + 1) * limit - 1);
+
+  // Apply category filter
+  if (category !== 'all') {
+    query = query.eq('category', category);
+  }
+
+  // Apply search filter
+  if (searchQuery) {
+    query = query.ilike('name', `%${searchQuery}%`);
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    console.error('Error fetching all products:', error);
+    return { products: [], count: 0 };
+  }
+
+  const favoriteIds = userId ? await getUserFavorites(userId) : [];
+  const products = data ? data.map(p => transformProduct(p, favoriteIds)) : [];
+
+  return { products, count: count || 0 };
+};
 
 // Fetch products for "For You" section
 export const fetchForYouProducts = async (userId?: string) => {
@@ -101,7 +138,7 @@ export const fetchRecentlyViewed = async (userId: string) => {
     .map((rv: any) => {
       const product = productsMap.get(rv.product_id);
       if (!product) return null;
-      
+
       return {
         id: product.id,
         name: product.name,
@@ -129,14 +166,14 @@ export const toggleFavorite = async (userId: string, productId: string) => {
       .from('wishlist')
       .delete()
       .eq('id', (existing as any).id);
-    
+
     return { success: !error, isFavorited: false };
   } else {
     // Add to wishlist
     const { error } = await supabase
       .from('wishlist')
       .insert([{ user_id: userId, product_id: productId }] as any);
-    
+
     return { success: !error, isFavorited: true };
   }
 };
@@ -146,7 +183,7 @@ export const addToWishlist = async (userId: string, productId: string) => {
   const { error } = await supabase
     .from('wishlist')
     .insert([{ user_id: userId, product_id: productId }] as any);
-  
+
   return { success: !error };
 };
 
@@ -155,10 +192,10 @@ export const trackProductView = async (userId: string, productId: string) => {
   const { error } = await supabase
     .from('recently_viewed')
     .upsert(
-      [{ 
-        user_id: userId, 
-        product_id: productId, 
-        viewed_at: new Date().toISOString() 
+      [{
+        user_id: userId,
+        product_id: productId,
+        viewed_at: new Date().toISOString()
       }] as any,
       { onConflict: 'user_id,product_id' }
     );
