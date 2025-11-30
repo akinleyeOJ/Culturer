@@ -78,6 +78,7 @@ const Browse = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Fetch wishlist count
   const loadWishlistCount = async () => {
@@ -125,6 +126,7 @@ const Browse = () => {
       setIsLoading(false);
       setIsLoadingMore(false);
       setRefreshing(false);
+      setHasLoadedOnce(true);
     }
   };
 
@@ -275,6 +277,19 @@ const Browse = () => {
           </ScrollView>
         </View>
 
+        {/* Clear Search Button - Shows when there's an active search */}
+        {searchQuery && (
+          <View style={styles.clearSearchContainer}>
+            <TouchableOpacity
+              style={styles.clearSearchButton}
+              onPress={() => setSearchQuery("")}
+            >
+              <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
+              <Text style={styles.clearSearchText}>Clear search: "{searchQuery}"</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Results & Filter Row */}
         <View style={styles.filterRow}>
           <Text style={styles.resultsText}>
@@ -326,7 +341,7 @@ const Browse = () => {
             </TouchableOpacity>
           )}
 
-          {!isLoading && products.length === 0 && (
+          {!isLoading && hasLoadedOnce && products.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No items found</Text>
               <Text style={styles.emptyStateSubtext}>Try a different search term or category</Text>
@@ -441,6 +456,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: Colors.primary[500],
+  },
+  clearSearchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  clearSearchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.neutral[100],
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  clearSearchText: {
+    fontSize: 13,
+    color: Colors.neutral[600],
+    fontWeight: '500',
   },
 });
 

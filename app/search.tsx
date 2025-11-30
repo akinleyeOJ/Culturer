@@ -42,6 +42,15 @@ const SearchScreen = () => {
     const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
     const inputRef = useRef<TextInput>(null);
 
+    // Automatically focus the input when the screen mounts
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            inputRef.current?.focus();
+        }, 100); // 100ms delay to allow screen transition to complete
+
+        return () => clearTimeout(timer);
+    }, []);
+
     useEffect(() => {
         // Fetch recently viewed
         const loadRecentlyViewed = async () => {
@@ -101,6 +110,7 @@ const SearchScreen = () => {
                         onChangeText={setSearchQuery}
                         onSubmitEditing={handleSearchSubmit}
                         returnKeyType="search"
+                        autoFocus={true}
                     />
                     {searchQuery.length > 0 && (
                         <TouchableOpacity onPress={() => setSearchQuery('')}>

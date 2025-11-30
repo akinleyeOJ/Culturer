@@ -11,6 +11,11 @@ export default function RootLayout() {
           name="search"
           options={{
             headerShown: false,
+            // 'fade' makes the screen appear without sliding, allowing the keyboard 
+            // to animate up from the bottom independently.
+            animation: "fade", 
+            // Optional: You can also use 'none' for an instant appearance
+            // animation: "none",
           }}
         />
         <Stack.Screen name="+not-found" options={{ headerShown: false }} />
