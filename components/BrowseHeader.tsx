@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "reac
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Colors } from "../constants/color";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface BrowseHeaderProps {
     userName?: string;
@@ -20,10 +21,12 @@ const BrowseHeader = ({
     onWishlistPress
 }: BrowseHeaderProps) => {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
     const handleSearchPress = () => {
         router.push('/search');
     };
+    
     // Single animation progress value for perfect synchronization
     const animationProgress = useRef(new Animated.Value(0)).current;
 
@@ -82,7 +85,7 @@ const BrowseHeader = ({
 
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
             <Animated.View style={[styles.topBar, { marginBottom: topBarMargin }]}>
                 <View style={styles.leftSection}>
                     <View style={styles.headerTextContainer}>
@@ -154,7 +157,6 @@ const styles = StyleSheet.create({
     container: {
         width: "100%",
         paddingHorizontal: 16,
-        paddingTop: 12,
         paddingBottom: 5,
         backgroundColor: "#FFFFFF",
         borderBottomWidth: 1,

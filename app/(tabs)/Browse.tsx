@@ -12,7 +12,7 @@ import {
   NativeScrollEvent,
   Alert
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+// Removed SafeAreaView import as we use View now
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Colors } from "../../constants/color";
 import { ProductCard } from "../../components/Card";
@@ -100,8 +100,6 @@ const Browse = () => {
 
   // Fetch products
   const loadProducts = async (reset = false) => {
-    // FIX: Allow reset (new search) even if currently loading. 
-    // Only block if we are NOT resetting AND (already loading or no more items)
     if (!reset && (isLoading || !hasMore)) return;
 
     const currentRequestId = ++lastRequestId.current;
@@ -123,7 +121,6 @@ const Browse = () => {
         user?.id
       );
 
-      // FIX: If a newer request started while we were waiting, ignore this result
       if (currentRequestId !== lastRequestId.current) return;
 
       if (reset) {
@@ -138,7 +135,6 @@ const Browse = () => {
     } catch (error) {
       console.error("Failed to load products", error);
     } finally {
-      // Only turn off loading if we are still the latest request
       if (currentRequestId === lastRequestId.current) {
         setIsLoading(false);
         setIsLoadingMore(false);
@@ -152,7 +148,6 @@ const Browse = () => {
   useFocusEffect(
     React.useCallback(() => {
       loadWishlistCount();
-      // Only reload if we already have products to avoid overriding initial search
       if (products.length > 0) {
         loadProducts(true);
       }
@@ -236,7 +231,7 @@ const Browse = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <BrowseHeader
         wishlistCount={wishlistCount}
         isScrolled={isScrolled}
@@ -362,7 +357,7 @@ const Browse = () => {
           )}
         </View>
       </Animated.ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
