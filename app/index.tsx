@@ -26,13 +26,16 @@ const Index = () => {
     );
   }
 
-  // If user is logged in, go to Home
-  if (user) {
-    return <Redirect href="/(tabs)/Home" />;
-  }
+  // TEMPORARY: Redirect to Browse for development
+  return <Redirect href="/(tabs)/Browse" />;
 
-  // If not logged in, go to Splash screen (which flows to Onboarding -> Auth)
-  return <Redirect href="/(auth)/splash" />;
+  // // If user is logged in, go to Home
+  // if (user) {
+  //   return <Redirect href="/(tabs)/Home" />;
+  // }
+
+  // // If not logged in, go to Splash screen (which flows to Onboarding -> Auth)
+  // return <Redirect href="/(auth)/splash" />;
 };
 
 const styles = StyleSheet.create({

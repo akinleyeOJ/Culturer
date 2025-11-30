@@ -16,10 +16,10 @@ export default function TabLayout() {
     );
   }
 
-  // Redirect to auth if not logged in
-  if (!user) {
-    return <Redirect href="/(auth)/auth" />;
-  }
+  // // Redirect to auth if not logged in
+  // if (!user) {
+  //   return <Redirect href="/(auth)/auth" />;
+  // }
 
   // User is authenticated, show tabs
   return (

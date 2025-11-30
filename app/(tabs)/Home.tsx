@@ -71,7 +71,10 @@ const ProductCardSkeleton = ({ variant = "default" }: { variant?: "default" | "l
   </View>
 );
 
+import { useRouter } from "expo-router";
+
 const Home = () => {
+  const router = useRouter();
   const { user } = useAuth();
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
   const [forYouProducts, setForYouProducts] = useState<Product[]>([]);
@@ -268,7 +271,7 @@ const Home = () => {
         userAvatar="https://via.placeholder.com/150"
         wishlistCount={wishlistCount}
         isScrolled={isScrolled}
-        onSearchPress={() => Alert.alert('Search', 'Search functionality coming soon!')}
+        onSearchPress={() => router.push('/search')}
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
       />
 

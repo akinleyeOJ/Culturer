@@ -18,8 +18,9 @@ import { Colors } from "../../constants/color";
 import { ProductCard } from "../../components/Card";
 import BrowseHeader from "../../components/BrowseHeader";
 import { useAuth } from "../../contexts/AuthContext";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { fetchAllProducts, toggleFavorite, fetchWishlistCount } from "../../lib/services/productService";
+import { CATEGORIES } from "../../constants/categories";
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 48) / 2; // 2 columns with padding
@@ -40,23 +41,35 @@ interface Product {
   badge?: "NEW" | "HOT" | null;
 }
 
-// Mock Data
-const CATEGORIES = [
-  { id: 'all', name: 'All' },
-  { id: 'art', name: 'Art 🎨' },
-  { id: 'music', name: 'Music 🎵' },
-  { id: 'fashion', name: 'Fashion 👗' },
-  { id: 'tech', name: 'Tech 💻' },
-  { id: 'home', name: 'Home 🏠' },
-];
-
 const Browse = () => {
   const { user } = useAuth();
+  const params = useLocalSearchParams<{ search?: string; category?: string; subcategory?: string }>();
+
   const [refreshing, setRefreshing] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Handle incoming params
+  useEffect(() => {
+    if (params.search) {
+      setSearchQuery(params.search);
+      // Reset category if searching
+      setSelectedCategory("all");
+    }
+
+    if (params.category) {
+      // Map category name to ID if needed, or use name directly
+      // For now assuming names match or we use ID
+      // You might need a helper to find ID by name if params sends name
+      const categoryId = CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id || "all";
+      setSelectedCategory(categoryId);
+      setSearchQuery(""); // Clear search if selecting category
+    }
+  }, [params.search, params.category]);
+
+  // ... (rest of state)
 
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(0);
@@ -212,7 +225,6 @@ const Browse = () => {
       <BrowseHeader
         wishlistCount={wishlistCount}
         isScrolled={isScrolled}
-        onSearchPress={() => Alert.alert('Search', 'Search functionality coming soon!')}
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
       />
 

@@ -2,13 +2,13 @@ import React, { useMemo, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Colors } from "../constants/color";
+import { useRouter } from "expo-router";
 
 interface BrowseHeaderProps {
     userName?: string;
     userAvatar?: string;
     wishlistCount?: number;
     isScrolled?: boolean;
-    onSearchPress?: () => void;
     onWishlistPress?: () => void;
 }
 
@@ -17,9 +17,13 @@ const BrowseHeader = ({
     userAvatar,
     wishlistCount = 0,
     isScrolled = false,
-    onSearchPress,
     onWishlistPress
 }: BrowseHeaderProps) => {
+    const router = useRouter();
+
+    const handleSearchPress = () => {
+        router.push('/search');
+    };
     // Single animation progress value for perfect synchronization
     const animationProgress = useRef(new Animated.Value(0)).current;
 
@@ -96,7 +100,7 @@ const BrowseHeader = ({
                         }}
                     >
                         <TouchableOpacity
-                            onPress={onSearchPress}
+                            onPress={handleSearchPress}
                             style={styles.searchIconButton}
                         >
                             <FontAwesome name="search" size={20} color="#4A4A4A" />
@@ -128,7 +132,7 @@ const BrowseHeader = ({
             >
                 <TouchableOpacity
                     style={styles.searchButton}
-                    onPress={onSearchPress}
+                    onPress={handleSearchPress}
                     activeOpacity={0.7}
                 >
                     <Animated.View style={[
