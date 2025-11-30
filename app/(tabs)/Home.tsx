@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Alert, 
-  RefreshControl, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  RefreshControl,
   ScrollView,
   ActivityIndicator,
   Animated,
@@ -16,15 +16,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ProductCard, RecentlyViewedCard } from "../../components/Card";
 import HomeHeader from "../../components/HomeHeader";
 import { Colors } from "../../constants/color";
-import { 
-  fetchForYouProducts, 
-  fetchHotProducts, 
+import {
+  fetchForYouProducts,
+  fetchHotProducts,
   fetchRecentlyViewed,
   toggleFavorite,
-  trackProductView 
+  trackProductView,
+  fetchWishlistCount
 } from "../../lib/services/productService";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { useFocusEffect } from "expo-router";
 
 interface Product {
   id: string;
@@ -78,16 +80,27 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [isScrolled, setIsScrolled] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  
+  const [wishlistCount, setWishlistCount] = useState(0);
+
   const scrollY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const scrollDirection = useRef<'up' | 'down'>('down');
   const animationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Fetch wishlist count
+  const loadWishlistCount = async () => {
+    if (!user) {
+      setWishlistCount(0);
+      return;
+    }
+    const count = await fetchWishlistCount(user.id);
+    setWishlistCount(count);
+  };
+
   // Improved scroll handler with direction tracking
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    
+
     // Determine scroll direction
     scrollDirection.current = offsetY > lastScrollY.current ? 'down' : 'up';
     lastScrollY.current = offsetY;
@@ -100,7 +113,7 @@ const Home = () => {
     // Use requestAnimationFrame for smoother updates
     animationTimeout.current = setTimeout(() => {
       const scrollThreshold = 60;
-      
+
       // Different behavior based on scroll direction for better UX
       if (scrollDirection.current === 'down') {
         // When scrolling down, hide search bar quickly
@@ -119,89 +132,71 @@ const Home = () => {
     }, 10); // Small delay to batch updates
   };
 
-  // Fetch user profile name
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) return;
+  const loadData = async () => {
+    if (!user) return;
 
-      try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
-          .single();
-
-        // FIX: Explicitly cast data to handle TS 'never' error
-        const profileData = data as { full_name: string | null } | null;
-
-        if (profileData?.full_name) {
-          setDisplayName(profileData.full_name);
-        } else {
-          // Fallback to metadata if profile is empty
-          setDisplayName(user.user_metadata?.full_name || user.email?.split("@")[0] || "User");
-        }
-      } catch (e) {
-        console.log("Error loading profile:", e);
-        // Fallback on error
-        setDisplayName(user.user_metadata?.full_name || user.email?.split("@")[0] || "User");
-      }
-    };
-
-    fetchProfile();
-  }, [user]);
-
-  // Load all products
-  const loadProducts = async () => {
     try {
-      setLoading(true);
-      
       const [recentlyViewedData, forYouData, hotData] = await Promise.all([
-        user ? fetchRecentlyViewed(user.id) : Promise.resolve([]),
-        fetchForYouProducts(user?.id),
-        fetchHotProducts(user?.id),
+        fetchRecentlyViewed(user.id),
+        fetchForYouProducts(user.id),
+        fetchHotProducts(user.id),
       ]);
 
       setRecentlyViewed(recentlyViewedData);
       setForYouProducts(forYouData);
       setHotProducts(hotData);
     } catch (error) {
-      console.error('Error loading products:', error);
-      Alert.alert('Error', 'Failed to load products. Please try again.');
+      console.error("Failed to load data", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  // Handle favorite toggle with optimistic update
-  const handleLike = async (productId: string) => {
+  const handleToggleFavorite = async (productId: string) => {
     if (!user) {
-      Alert.alert("Sign in required", "Please sign in to favorite products");
+      Alert.alert("Sign In Required", "Please sign in to save items to your wishlist");
       return;
     }
 
-    // Optimistically update UI
-    const updateProducts = (products: Product[]) => 
-      products.map(p => 
-        p.id === productId ? { ...p, isFavorited: !p.isFavorited } : p
+    // Optimistic update for both sections
+    setForYouProducts(currentProducts =>
+      currentProducts.map(p =>
+        p.id === productId
+          ? { ...p, isFavorited: !p.isFavorited }
+          : p
+      )
+    );
+    setHotProducts(currentProducts =>
+      currentProducts.map(p =>
+        p.id === productId
+          ? { ...p, isFavorited: !p.isFavorited }
+          : p
+      )
+    );
+
+    const { success, isFavorited } = await toggleFavorite(user.id, productId);
+
+    if (success) {
+      // Update wishlist count
+      loadWishlistCount();
+    } else {
+      // Revert if failed
+      setForYouProducts(currentProducts =>
+        currentProducts.map(p =>
+          p.id === productId
+            ? { ...p, isFavorited: !p.isFavorited }
+            : p
+        )
       );
-
-    setForYouProducts(prev => updateProducts(prev));
-    setHotProducts(prev => updateProducts(prev));
-
-    try {
-      const result = await toggleFavorite(user.id, productId);
-      
-      if (!result.success) {
-        // Revert on error
-        setForYouProducts(prev => updateProducts(prev));
-        setHotProducts(prev => updateProducts(prev));
-        Alert.alert('Error', 'Failed to update favorite. Please try again.');
-      }
-    } catch (error) {
-      // Revert on error
-      setForYouProducts(prev => updateProducts(prev));
-      setHotProducts(prev => updateProducts(prev));
-      console.error('Error toggling favorite:', error);
+      setHotProducts(currentProducts =>
+        currentProducts.map(p =>
+          p.id === productId
+            ? { ...p, isFavorited: !p.isFavorited }
+            : p
+        )
+      );
+      Alert.alert("Error", "Failed to update wishlist");
     }
   };
 
@@ -219,13 +214,42 @@ const Home = () => {
   // Refresh handler
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadProducts();
-    setRefreshing(false);
+    await loadData();
+    await loadWishlistCount();
   };
 
   // Load products on mount
   useEffect(() => {
-    loadProducts();
+    loadData();
+    loadWishlistCount();
+  }, [user]);
+
+  // Reload wishlist count when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadWishlistCount();
+    }, [user])
+  );
+
+  // Fetch display name
+  useEffect(() => {
+    const fetchDisplayName = async () => {
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', user.id)
+        .single();
+
+      if (!error && data) {
+        setDisplayName((data as any).display_name || user.email?.split('@')[0] || 'User');
+      } else {
+        setDisplayName(user.email?.split('@')[0] || 'User');
+      }
+    };
+
+    fetchDisplayName();
   }, [user]);
 
   // Cleanup timeout on unmount
@@ -236,14 +260,6 @@ const Home = () => {
       }
     };
   }, []);
-
-  // Calculate wishlist count from favorited products
-  const wishlistCount = useMemo(() => {
-    const allProducts = [...forYouProducts, ...hotProducts];
-    const favoritedProducts = allProducts.filter(p => p.isFavorited);
-    const uniqueFavoritedIds = new Set(favoritedProducts.map(p => p.id));
-    return uniqueFavoritedIds.size;
-  }, [forYouProducts, hotProducts]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -256,11 +272,11 @@ const Home = () => {
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
       />
 
-      <Animated.ScrollView 
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={Colors.primary[500]}
           />
@@ -282,7 +298,7 @@ const Home = () => {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recently Viewed</Text>
               {!loading && recentlyViewed.length > 0 && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => Alert.alert('Recently Viewed', 'View all recently viewed products')}
                   activeOpacity={0.7}
                 >
@@ -326,7 +342,7 @@ const Home = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>For You 👀</Text>
             {!loading && forYouProducts.length > 0 && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => Alert.alert('For You', 'View all personalized products')}
                 activeOpacity={0.7}
               >
@@ -372,14 +388,14 @@ const Home = () => {
                       outOfStock={product.outOfStock}
                       badge={product.badge}
                       onPress={() => handleProductPress(product.id)}
-                      onLike={() => handleLike(product.id)}
+                      onLike={() => handleToggleFavorite(product.id)}
                       isLiked={product.isFavorited || false}
                       variant="default"
                       style={{ width: 140 }}
                     />
                   ))}
                 </View>
-                
+
                 <View style={styles.gridRow}>
                   {forYouProducts.filter((_, index) => index % 2 === 1).map((product) => (
                     <ProductCard
@@ -394,7 +410,7 @@ const Home = () => {
                       outOfStock={product.outOfStock}
                       badge={product.badge}
                       onPress={() => handleProductPress(product.id)}
-                      onLike={() => handleLike(product.id)}
+                      onLike={() => handleToggleFavorite(product.id)}
                       isLiked={product.isFavorited || false}
                       variant="default"
                       style={{ width: 140 }}
@@ -415,7 +431,7 @@ const Home = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Hot at Culturar 🔥</Text>
             {!loading && hotProducts.length > 0 && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => Alert.alert('Hot Products', 'View all trending products')}
                 activeOpacity={0.7}
               >
@@ -447,7 +463,7 @@ const Home = () => {
                   outOfStock={product.outOfStock}
                   badge="HOT"
                   onPress={() => handleProductPress(product.id)}
-                  onLike={() => handleLike(product.id)}
+                  onLike={() => handleToggleFavorite(product.id)}
                   isLiked={product.isFavorited || false}
                   variant="large"
                 />
@@ -507,7 +523,7 @@ const styles = StyleSheet.create({
   },
   horizontalScroll: {
     paddingHorizontal: 16,
-    paddingRight: 6, 
+    paddingRight: 6,
   },
   gridRow: {
     flexDirection: 'row',

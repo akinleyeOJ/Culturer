@@ -236,3 +236,18 @@ export const fetchWishlist = async (userId: string) => {
     return transformProduct(product, favoriteIds);
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };
+
+// Fetch wishlist count
+export const fetchWishlistCount = async (userId: string): Promise<number> => {
+  const { count, error } = await supabase
+    .from('wishlist')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error fetching wishlist count:', error);
+    return 0;
+  }
+
+  return count || 0;
+};
