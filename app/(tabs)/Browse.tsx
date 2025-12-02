@@ -19,8 +19,8 @@ import { Colors } from "../../constants/color";
 import { ProductCard } from "../../components/Card";
 import BrowseHeader from "../../components/BrowseHeader";
 import { useAuth } from "../../contexts/AuthContext";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { fetchAllProducts, toggleFavorite, fetchWishlistCount } from "../../lib/services/productService";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { fetchProducts, toggleFavorite, fetchWishlistCount } from "../../lib/services/productService";
 import { CATEGORIES } from "../../constants/categories";
 
 const { width } = Dimensions.get('window');
@@ -43,8 +43,20 @@ interface Product {
 }
 
 const Browse = () => {
+  const router = useRouter();
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ search?: string; category?: string; subcategory?: string }>();
+  const params = useLocalSearchParams<{
+    search?: string;
+    category?: string;
+    subcategory?: string;
+    sortBy?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    condition?: string;
+    shipping?: string;
+    culture?: string;
+    resetFilters?: string;
+  }>();
 
   // Helper to get initial category from params
   const getInitialCategory = () => {
@@ -60,6 +72,12 @@ const Browse = () => {
   // Initialize state directly from params
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory());
   const [searchQuery, setSearchQuery] = useState(params.search || "");
+  const [sortBy, setSortBy] = useState<any>(params.sortBy || "newest");
+  const [minPrice, setMinPrice] = useState(params.minPrice ? Number(params.minPrice) : undefined);
+  const [maxPrice, setMaxPrice] = useState(params.maxPrice ? Number(params.maxPrice) : undefined);
+  const [condition, setCondition] = useState(params.condition as string || undefined);
+  const [shipping, setShipping] = useState(params.shipping as string || undefined);
+  const [culture, setCulture] = useState(params.culture as string || undefined);
 
   // Track the latest request
   const lastRequestId = useRef(0);
@@ -75,10 +93,34 @@ const Browse = () => {
       const categoryId = CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id || "all";
       if (categoryId !== selectedCategory) {
         setSelectedCategory(categoryId);
-        setSearchQuery(""); 
+        setSearchQuery("");
       }
     }
-  }, [params.search, params.category]);
+
+    if (params.sortBy) {
+      setSortBy(params.sortBy);
+      // If we are explicitly sorting (like from Hot products), we might want to clear search?
+      // But only if it's a "navigation" action, which we can infer if search isn't in params
+      if (!params.search) {
+        setSearchQuery("");
+      }
+    }
+    if (params.minPrice) setMinPrice(Number(params.minPrice));
+    if (params.maxPrice) setMaxPrice(Number(params.maxPrice));
+    if (params.condition) setCondition(params.condition as string);
+    if (params.shipping) setShipping(params.shipping as string);
+    if (params.culture) setCulture(params.culture as string);
+
+    // Reset filters if explicitly requested (e.g. from clear button)
+    if (params.resetFilters) {
+      setSortBy("newest");
+      setMinPrice(undefined);
+      setMaxPrice(undefined);
+      setCondition(undefined);
+      setShipping(undefined);
+      setCulture(undefined);
+    }
+  }, [params]);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(0);
@@ -102,7 +144,7 @@ const Browse = () => {
     if (!reset && (isLoading || !hasMore)) return;
 
     const currentRequestId = ++lastRequestId.current;
-    
+
     const currentPage = reset ? 0 : page;
     if (reset) {
       setIsLoading(true);
@@ -112,11 +154,19 @@ const Browse = () => {
     }
 
     try {
-      const { products: newProducts, count } = await fetchAllProducts(
+      const { products: newProducts, count } = await fetchProducts(
         currentPage,
         12,
-        selectedCategory,
-        searchQuery,
+        {
+          category: selectedCategory,
+          searchQuery,
+          sortBy,
+          minPrice,
+          maxPrice,
+          condition,
+          shipping,
+          culture
+        },
         user?.id
       );
 
@@ -184,7 +234,7 @@ const Browse = () => {
 
   useEffect(() => {
     loadProducts(true);
-  }, [selectedCategory, searchQuery, user]);
+  }, [selectedCategory, searchQuery, user, sortBy, minPrice, maxPrice, condition, shipping, culture]);
 
   const handleLoadMore = () => {
     loadProducts(false);
@@ -259,16 +309,51 @@ const Browse = () => {
         </ScrollView>
       </View>
 
-      {/* Clear Search Button */}
-      {searchQuery && (
-        <View style={styles.clearSearchContainer}>
-          <TouchableOpacity
-            style={styles.clearSearchButton}
-            onPress={() => setSearchQuery("")}
-          >
-            <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
-            <Text style={styles.clearSearchText}>Clear search: "{searchQuery}"</Text>
-          </TouchableOpacity>
+      {/* Active Filters / Search */}
+      {(searchQuery || sortBy !== 'newest' || minPrice !== undefined || maxPrice !== undefined || condition !== undefined || shipping !== undefined || culture !== undefined) && (
+        <View style={styles.activeFiltersContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeFiltersContent}>
+            {/* Clear Search */}
+            {searchQuery ? (
+              <TouchableOpacity
+                style={styles.clearSearchButton}
+                onPress={() => {
+                  setSearchQuery("");
+                  router.setParams({ search: undefined });
+                }}
+              >
+                <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
+                <Text style={styles.clearSearchText}>Search: "{searchQuery}"</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {/* Reset Filters */}
+            {(sortBy !== 'newest' || minPrice !== undefined || maxPrice !== undefined || condition !== undefined || shipping !== undefined || culture !== undefined) && (
+              <TouchableOpacity
+                style={styles.clearSearchButton}
+                onPress={() => {
+                  setSortBy('newest');
+                  setMinPrice(undefined);
+                  setMaxPrice(undefined);
+                  setCondition(undefined);
+                  setShipping(undefined);
+                  setCulture(undefined);
+                  // Also clear params?
+                  router.setParams({
+                    sortBy: undefined,
+                    minPrice: undefined,
+                    maxPrice: undefined,
+                    condition: undefined,
+                    shipping: undefined,
+                    culture: undefined
+                  });
+                }}
+              >
+                <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
+                <Text style={styles.clearSearchText}>Filters Active</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
         </View>
       )}
 
@@ -279,10 +364,36 @@ const Browse = () => {
         </Text>
         <TouchableOpacity
           style={styles.filterButton}
-          onPress={() => Alert.alert('Filter', 'Filter options coming soon!')}
+          onPress={() => router.push({
+            pathname: '/filter',
+            params: {
+              search: searchQuery,
+              category: selectedCategory,
+              minPrice: minPrice?.toString(),
+              maxPrice: maxPrice?.toString(),
+              condition,
+              shipping,
+              culture,
+              sortBy
+            }
+          })}
         >
           <FontAwesome name="sliders" size={14} color={Colors.primary[500]} style={styles.filterIcon} />
           <Text style={styles.filterButtonText}>Filter</Text>
+          {(sortBy !== 'newest' || minPrice !== undefined || maxPrice !== undefined || condition !== undefined || shipping !== undefined || culture !== undefined) && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>
+                {[
+                  sortBy !== 'newest',
+                  minPrice !== undefined,
+                  maxPrice !== undefined,
+                  condition !== undefined,
+                  shipping !== undefined,
+                  culture !== undefined
+                ].filter(Boolean).length}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -352,7 +463,7 @@ const Browse = () => {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={ListHeader}
         ListFooterComponent={ListFooter}
-        
+
         // Refresh Control
         refreshControl={
           <RefreshControl
@@ -361,7 +472,7 @@ const Browse = () => {
             tintColor={Colors.primary[500]}
           />
         }
-        
+
         // Scroll Animation Props
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -478,22 +589,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.primary[500],
   },
-  clearSearchContainer: {
-    paddingHorizontal: 16,
+  activeFiltersContainer: {
     paddingVertical: 8,
+    marginBottom: 8,
+  },
+  activeFiltersContent: {
+    paddingHorizontal: 16,
+    gap: 8,
   },
   clearSearchButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.neutral[100],
     paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 20,
-    alignSelf: 'flex-start',
   },
   clearSearchText: {
     fontSize: 13,
     color: Colors.neutral[600],
     fontWeight: '500',
+  },
+  filterBadge: {
+    backgroundColor: Colors.primary[500],
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  filterBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });
 
