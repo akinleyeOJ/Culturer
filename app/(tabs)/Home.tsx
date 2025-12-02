@@ -27,6 +27,7 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { useFocusEffect } from "expo-router";
+import { useRouter } from "expo-router";
 
 interface Product {
   id: string;
@@ -70,8 +71,6 @@ const ProductCardSkeleton = ({ variant = "default" }: { variant?: "default" | "l
     </View>
   </View>
 );
-
-import { useRouter } from "expo-router";
 
 const Home = () => {
   const router = useRouter();
@@ -435,7 +434,13 @@ const Home = () => {
             <Text style={styles.sectionTitle}>Hot at Culturar 🔥</Text>
             {!loading && hotProducts.length > 0 && (
               <TouchableOpacity
-                onPress={() => Alert.alert('Hot Products', 'View all trending products')}
+                onPress={() => router.navigate({
+                  pathname: '/(tabs)/Browse',
+                  params: {
+                    sortBy: 'popularity',
+                    timestamp: Date.now()
+                  }
+                })}
                 activeOpacity={0.7}
               >
                 <Text style={styles.viewMore}>View More ›</Text>
