@@ -20,6 +20,7 @@ import {
   fetchForYouProducts,
   fetchHotProducts,
   fetchRecentlyViewed,
+  clearRecentlyViewed,
   toggleFavorite,
   trackProductView,
   fetchWishlistCount
@@ -97,6 +98,27 @@ const Home = () => {
     }
     const count = await fetchWishlistCount(user.id);
     setWishlistCount(count);
+  };
+
+  const handleClearHistory = async () => {
+    if (!user) return;
+    Alert.alert(
+      "Clear History",
+      "Are you sure you want to clear your recently viewed items?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: async () => {
+            const success = await clearRecentlyViewed(user.id);
+            if (success) {
+              setRecentlyViewed([]);
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Improved scroll handler with direction tracking
@@ -295,10 +317,15 @@ const Home = () => {
         scrollEventThrottle={500}
       >
         {/* Recently Viewed section */}
-        {user && (
+        {user && (loading || recentlyViewed.length > 0) && (
           <View style={styles.recentlyViewedSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recently Viewed</Text>
+              {!loading && recentlyViewed.length > 0 && (
+                <TouchableOpacity onPress={handleClearHistory}>
+                  <Text style={{ color: Colors.neutral[500], fontSize: 14 }}>Clear</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <ScrollView

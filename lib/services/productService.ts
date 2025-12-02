@@ -146,6 +146,14 @@ export const fetchRecentlyViewed = async (userId: string) => {
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };
 
+export const clearRecentlyViewed = async (userId: string) => {
+  const { error } = await supabase
+    .from('recently_viewed')
+    .delete()
+    .eq('user_id', userId);
+  return !error;
+};
+
 export const toggleFavorite = async (userId: string, productId: string) => {
   const { data: existing } = await supabase
     .from('wishlist')
