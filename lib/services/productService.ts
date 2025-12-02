@@ -30,7 +30,7 @@ const transformProduct = (product: Product, favoriteIds: string[] = []) => ({
 
 // Filter Options Interface
 export interface FilterOptions {
-  category?: string;
+  categories?: string[];
   searchQuery?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -52,9 +52,9 @@ export const fetchProducts = async (
     .select('*', { count: 'exact' })
     .eq('in_stock', true);
 
-  // 1. Category
-  if (filters.category && filters.category !== 'all') {
-    query = query.eq('category', filters.category);
+  // 1. Categories (multiple)
+  if (filters.categories && filters.categories.length > 0) {
+    query = query.in('category', filters.categories);
   }
 
   // 2. Search

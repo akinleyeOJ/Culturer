@@ -13,7 +13,6 @@ import {
   Alert,
   FlatList
 } from "react-native";
-// Removed SafeAreaView import as we use View now
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Colors } from "../../constants/color";
 import { ProductCard } from "../../components/Card";
@@ -58,19 +57,20 @@ const Browse = () => {
     resetFilters?: string;
   }>();
 
-  // Helper to get initial category from params
-  const getInitialCategory = () => {
+  // Helper to get initial categories from params
+  const getInitialCategories = () => {
     if (params.category) {
-      return CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id || "all";
+      const categoryId = CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id;
+      return categoryId ? [categoryId] : [];
     }
-    return "all";
+    return [];
   };
 
   const [refreshing, setRefreshing] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Initialize state directly from params
-  const [selectedCategory, setSelectedCategory] = useState(getInitialCategory());
+  // Initialize state directly from params - now an array
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(getInitialCategories());
   const [searchQuery, setSearchQuery] = useState(params.search || "");
   const [sortBy, setSortBy] = useState<any>(params.sortBy || "newest");
   const [minPrice, setMinPrice] = useState(params.minPrice ? Number(params.minPrice) : undefined);
@@ -86,21 +86,25 @@ const Browse = () => {
   useEffect(() => {
     if (params.search !== undefined && params.search !== searchQuery) {
       setSearchQuery(params.search);
-      setSelectedCategory("all");
+      setSelectedCategories([]);
     }
+  }, [params.search]);
 
+  useEffect(() => {
+    // Only apply category from params if it's actually changing (from navigation)
     if (params.category) {
-      const categoryId = CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id || "all";
-      if (categoryId !== selectedCategory) {
-        setSelectedCategory(categoryId);
+      const categoryId = CATEGORIES.find(c => c.name === params.category || c.id === params.category)?.id;
+      if (categoryId && !selectedCategories.includes(categoryId)) {
+        console.log('useEffect setting category from params:', params.category);
+        setSelectedCategories([categoryId]);
         setSearchQuery("");
       }
     }
+  }, [params.category]);
 
+  useEffect(() => {
     if (params.sortBy) {
       setSortBy(params.sortBy);
-      // If we are explicitly sorting (like from Hot products), we might want to clear search?
-      // But only if it's a "navigation" action, which we can infer if search isn't in params
       if (!params.search) {
         setSearchQuery("");
       }
@@ -111,7 +115,7 @@ const Browse = () => {
     if (params.shipping) setShipping(params.shipping as string);
     if (params.culture) setCulture(params.culture as string);
 
-    // Reset filters if explicitly requested (e.g. from clear button)
+    // Reset filters if explicitly requested
     if (params.resetFilters) {
       setSortBy("newest");
       setMinPrice(undefined);
@@ -120,7 +124,7 @@ const Browse = () => {
       setShipping(undefined);
       setCulture(undefined);
     }
-  }, [params]);
+  }, [params.sortBy, params.minPrice, params.maxPrice, params.condition, params.shipping, params.culture, params.resetFilters]);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(0);
@@ -158,7 +162,7 @@ const Browse = () => {
         currentPage,
         12,
         {
-          category: selectedCategory,
+          categories: selectedCategories,
           searchQuery,
           sortBy,
           minPrice,
@@ -234,7 +238,7 @@ const Browse = () => {
 
   useEffect(() => {
     loadProducts(true);
-  }, [selectedCategory, searchQuery, user, sortBy, minPrice, maxPrice, condition, shipping, culture]);
+  }, [selectedCategories, searchQuery, user, sortBy, minPrice, maxPrice, condition, shipping, culture]);
 
   const handleLoadMore = () => {
     loadProducts(false);
@@ -280,7 +284,7 @@ const Browse = () => {
   // --- Components for FlatList ---
 
   // 1. Header Component (Categories, Clear Search, Filter)
-  const ListHeader = () => (
+  const ListHeader = React.useMemo(() => (
     <View>
       {/* Categories */}
       <View style={styles.categoriesContainer}>
@@ -294,21 +298,24 @@ const Browse = () => {
               key={category.id}
               style={[
                 styles.categoryChip,
-                selectedCategory === category.id && styles.categoryChipActive
+                selectedCategories.includes(category.id) && styles.categoryChipActive
               ]}
               onPress={() => {
-                if (selectedCategory === category.id) {
-                  setSelectedCategory("all");
-                  router.setParams({ category: undefined });
+                console.log('Category clicked:', category.id, 'Current:', selectedCategories);
+                if (selectedCategories.includes(category.id)) {
+                  // Remove this category
+                  console.log('Removing category:', category.id);
+                  setSelectedCategories(selectedCategories.filter(c => c !== category.id));
                 } else {
-                  setSelectedCategory(category.id);
-                  router.setParams({ category: undefined });
+                  // Add this category
+                  console.log('Adding category:', category.id);
+                  setSelectedCategories([...selectedCategories, category.id]);
                 }
               }}
             >
               <Text style={[
                 styles.categoryText,
-                selectedCategory === category.id && styles.categoryTextActive
+                selectedCategories.includes(category.id) && styles.categoryTextActive
               ]}>
                 {category.name}
               </Text>
@@ -346,7 +353,6 @@ const Browse = () => {
                   setCondition(undefined);
                   setShipping(undefined);
                   setCulture(undefined);
-                  // Also clear params?
                   router.setParams({
                     sortBy: undefined,
                     minPrice: undefined,
@@ -376,7 +382,7 @@ const Browse = () => {
             pathname: '/filter',
             params: {
               search: searchQuery,
-              category: selectedCategory,
+              categories: selectedCategories.join(','),
               minPrice: minPrice?.toString(),
               maxPrice: maxPrice?.toString(),
               condition,
@@ -405,7 +411,7 @@ const Browse = () => {
         </TouchableOpacity>
       </View>
     </View>
-  );
+  ), [selectedCategories, searchQuery, sortBy, minPrice, maxPrice, condition, shipping, culture, totalCount]);
 
   // 2. Footer Component (Load More / Empty State)
   const ListFooter = () => (
