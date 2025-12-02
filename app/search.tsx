@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../constants/color';
 import { CATEGORIES } from '../constants/categories';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchRecentlyViewed } from '../lib/services/productService';
+import { fetchRecentlyViewed, trackProductView } from '../lib/services/productService';
 import { RecentlyViewedCard } from '../components/Card';
 
 // Enable LayoutAnimation for Android
@@ -59,7 +59,7 @@ const SearchScreen = () => {
     // Load recent searches and recently viewed products
     useEffect(() => {
         loadSearchHistory();
-        
+
         const loadRecentlyViewed = async () => {
             if (user) {
                 const data = await fetchRecentlyViewed(user.id);
@@ -90,7 +90,7 @@ const SearchScreen = () => {
             const newHistory = [
                 cleanedTerm,
                 ...recentSearches.filter(t => t.toLowerCase() !== cleanedTerm.toLowerCase())
-            ].slice(0, 5); 
+            ].slice(0, 5);
 
             setRecentSearches(newHistory);
             await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(newHistory));
@@ -144,8 +144,13 @@ const SearchScreen = () => {
         });
     };
 
-    const handleProductPress = (productId: string) => {
-        router.push('/(tabs)/Browse');
+    const handleProductPress = async (productId: string) => {
+        if (user) {
+            await trackProductView(user.id, productId);
+            const data = await fetchRecentlyViewed(user.id);
+            setRecentlyViewed(data);
+        }
+        Alert.alert('Product', `Opening product: ${productId}`);
     };
 
     return (
@@ -193,7 +198,7 @@ const SearchScreen = () => {
                         <View style={styles.recentSearchesContainer}>
                             {recentSearches.map((term, index) => (
                                 <View key={index} style={styles.recentSearchItemWrapper}>
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.recentSearchItem}
                                         onPress={() => {
                                             setSearchQuery(term);
@@ -203,7 +208,7 @@ const SearchScreen = () => {
                                         <FontAwesome name="clock-o" size={14} color={Colors.neutral[400]} style={styles.recentIcon} />
                                         <Text style={styles.recentSearchText} numberOfLines={1}>{term}</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.removeButton}
                                         onPress={() => removeSearchTerm(term)}
                                     >

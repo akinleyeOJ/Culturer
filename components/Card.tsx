@@ -37,22 +37,22 @@ interface ProductCardProps extends CardProps {
   badge?: "NEW" | "HOT" | null;
 }
 
-export const ProductCard = ({ 
-  name, 
+export const ProductCard = ({
+  name,
   price,
-  image, 
-  emoji, 
-  rating, 
-  reviews, 
-  shipping, 
-  outOfStock = false, 
-  onPress, 
-  onLike, 
+  image,
+  emoji,
+  rating,
+  reviews,
+  shipping,
+  outOfStock = false,
+  onPress,
+  onLike,
   isLiked = false,
   style,
   variant = "default",
   badge = null,
-}: ProductCardProps) => { 
+}: ProductCardProps) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
   const prevLikedRef = useRef(isLiked);
@@ -117,14 +117,14 @@ export const ProductCard = ({
         ) : (
           <Text style={emojiStyle}>{emoji}</Text>
         )}
-        
+
         {/* Badge (NEW/HOT) */}
         {badge && (
           <View style={styles.badgeContainer}>
             <Text style={styles.badgeText}>{badge}</Text>
           </View>
         )}
-        
+
         {/* Out of Stock Overlay */}
         {outOfStock && (
           <View style={styles.outOfStockOverlay}>
@@ -132,19 +132,19 @@ export const ProductCard = ({
           </View>
         )}
       </View>
-      
+
       <View style={styles.cardContent}>
         <Text style={styles.cardPrice}>{price}</Text>
         <Text style={styles.cardName} numberOfLines={2}>{name}</Text>
-        
+
         <View style={styles.ratingRow}>
           <Text style={styles.stars}>{renderStars(rating)}</Text>
           <Text style={styles.reviewText}>({reviews})</Text>
         </View>
-        
+
         {/* Favorite Button - Bottom Right */}
-        <TouchableOpacity 
-          style={styles.favoriteButton} 
+        <TouchableOpacity
+          style={styles.favoriteButton}
           onPress={(e) => {
             e.stopPropagation();
             onLike?.();
@@ -152,10 +152,10 @@ export const ProductCard = ({
           activeOpacity={0.7}
         >
           <Animated.View style={animatedIconStyle}>
-            <FontAwesome 
-              name={isLiked ? "heart" : "heart-o"} 
-              size={14} 
-              color={isLiked ? "#EF4444" : "#4A4A4A"} 
+            <FontAwesome
+              name={isLiked ? "heart" : "heart-o"}
+              size={14}
+              color={isLiked ? "#EF4444" : "#4A4A4A"}
             />
           </Animated.View>
         </TouchableOpacity>
@@ -173,12 +173,12 @@ interface RecentlyViewedCardProps extends CardProps {
   onPress: () => void;
 }
 
-export const RecentlyViewedCard = ({ 
-  name, 
-  price, 
-  image, 
-  emoji, 
-  onPress 
+export const RecentlyViewedCard = ({
+  name,
+  price,
+  image,
+  emoji,
+  onPress
 }: RecentlyViewedCardProps) => {
   return (
     <TouchableOpacity style={styles.recentlyViewedCard} onPress={onPress} activeOpacity={0.7}>
@@ -195,6 +195,50 @@ export const RecentlyViewedCard = ({
   );
 };
 
+// Skeleton Loading Component
+export const ProductCardSkeleton = ({ style }: { style?: StyleProp<ViewStyle> }) => {
+  const opacity = useSharedValue(0.3);
+
+  useEffect(() => {
+    opacity.value = withSequence(
+      withTiming(0.7, { duration: 1000 }),
+      withTiming(0.3, { duration: 1000 })
+    );
+    // Loop animation
+    const interval = setInterval(() => {
+      opacity.value = withSequence(
+        withTiming(0.7, { duration: 1000 }),
+        withTiming(0.3, { duration: 1000 })
+      );
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value
+  }));
+
+  return (
+    <Animated.View style={[styles.card, styles.productCard, style, animatedStyle]}>
+      {/* Image Placeholder */}
+      <View style={[styles.productCardImage, { backgroundColor: '#E0E0E0' }]} />
+
+      {/* Content Placeholder */}
+      <View style={styles.cardContent}>
+        {/* Price */}
+        <View style={{ width: '40%', height: 20, backgroundColor: '#E0E0E0', marginBottom: 8, borderRadius: 4 }} />
+        {/* Name */}
+        <View style={{ width: '80%', height: 16, backgroundColor: '#E0E0E0', marginBottom: 4, borderRadius: 4 }} />
+        <View style={{ width: '60%', height: 16, backgroundColor: '#E0E0E0', marginBottom: 8, borderRadius: 4 }} />
+
+        {/* Rating */}
+        <View style={{ width: '50%', height: 12, backgroundColor: '#E0E0E0', borderRadius: 4 }} />
+      </View>
+    </Animated.View>
+  );
+};
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
@@ -206,7 +250,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  
+
   // Product Card - Default Size
   productCard: {
     width: 160,
@@ -223,7 +267,7 @@ const styles = StyleSheet.create({
   productCardEmoji: {
     fontSize: 48,
   },
-  
+
   // Product Card - Large Size (Hot Products)
   productCardLarge: {
     width: 200,
@@ -240,13 +284,13 @@ const styles = StyleSheet.create({
   productCardEmojiLarge: {
     fontSize: 64,
   },
-  
+
   productImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  
+
   // Badge (NEW/HOT)
   badgeContainer: {
     position: 'absolute',
@@ -263,7 +307,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  
+
   // Out of Stock
   outOfStockOverlay: {
     position: 'absolute',
@@ -280,7 +324,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  
+
   // Card Content
   cardContent: {
     padding: 12,
@@ -313,7 +357,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#6c757d',
   },
-  
+
   // Favorite Button - Bottom Right
   favoriteButton: {
     position: 'absolute',
@@ -334,7 +378,7 @@ const styles = StyleSheet.create({
   favoriteIcon: {
     fontSize: 10,
   },
-  
+
   // Recently Viewed Card
   recentlyViewedCard: {
     width: 100,

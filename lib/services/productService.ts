@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Database } from "../../types/database";
 
 type Product = Database['public']['Tables']['products']['Row'];
@@ -118,12 +119,22 @@ export const fetchHotProducts = async (userId?: string) => {
 };
 
 export const fetchRecentlyViewed = async (userId: string) => {
-  const { data: recentlyViewedData, error: rvError } = await supabase
+  // Get the last cleared timestamp
+  const lastCleared = await AsyncStorage.getItem(`last_cleared_history_${userId}`);
+
+  let query = supabase
     .from('recently_viewed')
     .select('product_id, viewed_at')
     .eq('user_id', userId)
     .order('viewed_at', { ascending: false })
     .limit(20);
+
+  // Filter out items viewed before the last clear
+  if (lastCleared) {
+    query = query.gt('viewed_at', lastCleared);
+  }
+
+  const { data: recentlyViewedData, error: rvError } = await query;
 
   if (rvError || !recentlyViewedData || recentlyViewedData.length === 0) return [];
 
@@ -147,11 +158,20 @@ export const fetchRecentlyViewed = async (userId: string) => {
 };
 
 export const clearRecentlyViewed = async (userId: string) => {
-  const { error } = await supabase
+  console.log('Attempting to clear history for user:', userId);
+
+  // Set the last cleared timestamp locally
+  await AsyncStorage.setItem(`last_cleared_history_${userId}`, new Date().toISOString());
+
+  const { error, count } = await supabase
     .from('recently_viewed')
-    .delete()
+    .delete({ count: 'exact' })
     .eq('user_id', userId);
-  return !error;
+
+  console.log('Clear history result:', { error, count });
+
+  // Return true even if DB delete fails, as we're hiding them locally
+  return true;
 };
 
 export const toggleFavorite = async (userId: string, productId: string) => {

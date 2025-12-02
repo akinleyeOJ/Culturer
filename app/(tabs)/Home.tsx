@@ -248,10 +248,13 @@ const Home = () => {
     loadWishlistCount();
   }, [user]);
 
-  // Reload wishlist count when screen comes into focus
+  // Reload wishlist count and recently viewed when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       loadWishlistCount();
+      if (user) {
+        fetchRecentlyViewed(user.id).then(setRecentlyViewed);
+      }
     }, [user])
   );
 

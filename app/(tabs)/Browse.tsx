@@ -15,11 +15,11 @@ import {
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Colors } from "../../constants/color";
-import { ProductCard } from "../../components/Card";
+import { ProductCard, ProductCardSkeleton } from "../../components/Card";
 import BrowseHeader from "../../components/BrowseHeader";
 import { useAuth } from "../../contexts/AuthContext";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { fetchProducts, toggleFavorite, fetchWishlistCount } from "../../lib/services/productService";
+import { fetchProducts, toggleFavorite, fetchWishlistCount, trackProductView } from "../../lib/services/productService";
 import { CATEGORIES } from "../../constants/categories";
 
 const { width } = Dimensions.get('window');
@@ -234,6 +234,13 @@ const Browse = () => {
       );
       Alert.alert("Error", "Failed to update wishlist");
     }
+  };
+
+  const handleProductPress = async (productId: string) => {
+    if (user) {
+      await trackProductView(user.id, productId);
+    }
+    Alert.alert('Product', `Opening product: ${productId}`);
   };
 
   useEffect(() => {
@@ -455,7 +462,7 @@ const Browse = () => {
       isLiked={item.isFavorited}
       onLike={() => handleToggleFavorite(item.id)}
       style={{ width: COLUMN_WIDTH, marginBottom: 16 }}
-      onPress={() => { }}
+      onPress={() => handleProductPress(item.id)}
     />
   );
 
@@ -468,8 +475,13 @@ const Browse = () => {
       />
 
       <Animated.FlatList
-        data={products}
-        renderItem={renderItem}
+        data={isLoading && products.length === 0 ? Array.from({ length: 6 }).map((_, i) => ({ id: `skeleton-${i}`, skeleton: true } as any)) : products}
+        renderItem={({ item }) => {
+          if (item.skeleton) {
+            return <ProductCardSkeleton style={{ width: COLUMN_WIDTH, marginBottom: 16 }} />;
+          }
+          return renderItem({ item });
+        }}
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}

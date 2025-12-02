@@ -1,5 +1,6 @@
 import { ButtonProps } from "../types/type";
 import { StyleSheet, TouchableOpacity, Text, ViewStyle } from "react-native";
+import { Colors } from "../constants/color";
 
 const CustomButton = ({
   title,
@@ -68,7 +69,7 @@ const styles = StyleSheet.create({
   // Add other specific styles based on your background variant and className
   // Example for different background variants:
   bgPrimary: {
-    backgroundColor: "#0286ff", // Blue variant as default
+    backgroundColor: Colors.primary[500], // Coral/orange - app's primary color
   },
   bgSecondary: {
     backgroundColor: "#6B7280", // gray-500
