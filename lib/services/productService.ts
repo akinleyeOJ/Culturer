@@ -129,6 +129,94 @@ export const fetchHotProducts = async (userId?: string) => {
 // ... keep toggleFavorite, addToWishlist, trackProductView, fetchWishlist, fetchWishlistCount ...
 // (These functions remain unchanged from your original file)
 
+export interface FilterOptions {
+  category?: string;
+  searchQuery?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  condition?: string;
+  location?: string; // Maps to cultural_origin
+  sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'popularity';
+}
+
+// Unified fetch function for Browse, Search, and Trending
+export const fetchProducts = async (
+  page: number = 0,
+  limit: number = 12,
+  filters: FilterOptions = {},
+  userId?: string
+) => {
+  let query = supabase
+    .from('products')
+    .select('*', { count: 'exact' })
+    .eq('in_stock', true);
+
+  // 1. Category Filter
+  if (filters.category && filters.category !== 'all') {
+    query = query.eq('category', filters.category);
+  }
+
+  // 2. Search Filter
+  if (filters.searchQuery) {
+    query = query.ilike('name', `%${filters.searchQuery}%`);
+  }
+
+  // 3. Price Range Filter
+  if (filters.minPrice !== undefined) {
+    query = query.gte('price', filters.minPrice);
+  }
+  if (filters.maxPrice !== undefined) {
+    query = query.lte('price', filters.maxPrice);
+  }
+
+  // 4. Condition Filter
+  if (filters.condition) {
+    query = query.eq('condition', filters.condition);
+  }
+
+  // 5. Location (Cultural Origin) Filter
+  if (filters.location) {
+    query = query.ilike('cultural_origin', `%${filters.location}%`);
+  }
+
+  // 6. Sorting Logic
+  switch (filters.sortBy) {
+    case 'price_asc':
+      query = query.order('price', { ascending: true });
+      break;
+    case 'price_desc':
+      query = query.order('price', { ascending: false });
+      break;
+    case 'popularity':
+      query = query.order('total_favorites', { ascending: false });
+      break;
+    case 'newest':
+    default:
+      query = query.order('created_at', { ascending: false });
+      break;
+  }
+
+  // Pagination
+  query = query.range(page * limit, (page + 1) * limit - 1);
+
+  // Parallel Fetching
+  const [productsResponse, favoriteIds] = await Promise.all([
+    query,
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data, error, count } = productsResponse;
+
+  if (error) {
+    console.error('Error fetching products:', error);
+    return { products: [], count: 0 };
+  }
+
+  const products = data ? data.map(p => transformProduct(p, favoriteIds)) : [];
+
+  return { products, count: count || 0 };
+};
+
 // Fetch user's recently viewed products
 export const fetchRecentlyViewed = async (userId: string) => {
   const { data: recentlyViewedData, error: rvError } = await supabase
