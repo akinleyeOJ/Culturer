@@ -299,14 +299,6 @@ const Home = () => {
           <View style={styles.recentlyViewedSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recently Viewed</Text>
-              {!loading && recentlyViewed.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => Alert.alert('Recently Viewed', 'View all recently viewed products')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.viewMore}>View More ›</Text>
-                </TouchableOpacity>
-              )}
             </View>
 
             <ScrollView

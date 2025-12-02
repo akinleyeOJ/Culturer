@@ -296,7 +296,15 @@ const Browse = () => {
                 styles.categoryChip,
                 selectedCategory === category.id && styles.categoryChipActive
               ]}
-              onPress={() => setSelectedCategory(category.id)}
+              onPress={() => {
+                if (selectedCategory === category.id) {
+                  setSelectedCategory("all");
+                  router.setParams({ category: undefined });
+                } else {
+                  setSelectedCategory(category.id);
+                  router.setParams({ category: undefined });
+                }
+              }}
             >
               <Text style={[
                 styles.categoryText,

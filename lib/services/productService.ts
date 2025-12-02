@@ -123,7 +123,7 @@ export const fetchRecentlyViewed = async (userId: string) => {
     .select('product_id, viewed_at')
     .eq('user_id', userId)
     .order('viewed_at', { ascending: false })
-    .limit(10);
+    .limit(20);
 
   if (rvError || !recentlyViewedData || recentlyViewedData.length === 0) return [];
 
