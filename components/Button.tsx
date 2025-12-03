@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#6B7280", // gray-500
   },
   bgDanger: {
-    backgroundColor: "#EF4444", // red-500
+    backgroundColor: "#ee2424ff", // red-500
   },
   bgOutline: {
     backgroundColor: "transparent",
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     color: "#6B7280", // gray-500
   },
   textDanger: {
-    color: "#EF4444", // red-500
+    color: "#ee2424ff", // red-500
   },
   textSuccess: {
     color: "#10B981", // green-500
