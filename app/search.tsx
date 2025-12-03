@@ -150,7 +150,7 @@ const SearchScreen = () => {
             const data = await fetchRecentlyViewed(user.id);
             setRecentlyViewed(data);
         }
-        Alert.alert('Product', `Opening product: ${productId}`);
+        router.push(`/item/${productId}`);
     };
 
     return (

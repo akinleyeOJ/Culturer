@@ -232,7 +232,7 @@ const Home = () => {
       const recentData = await fetchRecentlyViewed(user.id);
       setRecentlyViewed(recentData);
     }
-    Alert.alert('Product', `Opening product: ${productId}`);
+    router.push(`/item/${productId}`);
   };
 
   // Refresh handler

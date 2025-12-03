@@ -240,7 +240,7 @@ const Browse = () => {
     if (user) {
       await trackProductView(user.id, productId);
     }
-    Alert.alert('Product', `Opening product: ${productId}`);
+    router.push(`/item/${productId}`);
   };
 
   useEffect(() => {

@@ -234,3 +234,100 @@ export const fetchWishlist = async (userId: string) => {
     return transformProduct(product, favoriteIds);
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };
+
+// Fetch single product by ID with full details
+export const fetchProductById = async (productId: string, userId?: string) => {
+  const [productResponse, favoriteIds] = await Promise.all([
+    supabase.from('products').select('*').eq('id', productId).single(),
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data: product, error } = productResponse;
+
+  if (error || !product) {
+    console.error('Error fetching product:', error);
+    return null;
+  }
+
+  return {
+    ...transformProduct(product, favoriteIds),
+    description: (product as any).description || '',
+    images: (product as any).images || [],
+    category: (product as any).category || 'all',
+    condition: (product as any).condition || 'New',
+    cultural_origin: (product as any).cultural_origin || '',
+    dimensions: (product as any).dimensions || '',
+    returns_policy: (product as any).returns_policy || '7 days',
+    seller_name: (product as any).seller_name || 'Unknown Seller',
+    seller_avatar: (product as any).seller_avatar,
+    seller_rating: (product as any).seller_rating || 4.5,
+    seller_reviews_count: (product as any).seller_reviews_count || 0,
+    seller_location: (product as any).seller_location || 'Berlin',
+    pickup_available: (product as any).pickup_available || false,
+    free_shipping: (product as any).free_shipping || false,
+    express_shipping: (product as any).express_shipping || false,
+    shipping_days_min: (product as any).shipping_days_min || 3,
+    shipping_days_max: (product as any).shipping_days_max || 5,
+    stock_quantity: (product as any).stock_quantity || 10,
+  };
+};
+
+// Fetch other products by the same seller
+export const fetchSellerProducts = async (
+  sellerId: string,
+  excludeProductId: string,
+  limit: number = 6,
+  userId?: string
+) => {
+  const [productsResponse, favoriteIds] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*')
+      .eq('seller_id', sellerId)
+      .neq('id', excludeProductId)
+      .eq('in_stock', true)
+      .limit(limit),
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data: products, error } = productsResponse;
+
+  if (error || !products) {
+    return [];
+  }
+
+  return products.map(p => transformProduct(p, favoriteIds));
+};
+
+// Fetch similar products based on category and price
+export const fetchSimilarProducts = async (
+  productId: string,
+  category: string,
+  price: number,
+  limit: number = 8,
+  userId?: string
+) => {
+  const priceMin = price * 0.7; // 30% lower
+  const priceMax = price * 1.3; // 30% higher
+
+  const [productsResponse, favoriteIds] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*')
+      .eq('category', category)
+      .neq('id', productId)
+      .eq('in_stock', true)
+      .gte('price', priceMin)
+      .lte('price', priceMax)
+      .limit(limit),
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data: products, error } = productsResponse;
+
+  if (error || !products) {
+    return [];
+  }
+
+  return products.map(p => transformProduct(p, favoriteIds));
+};
