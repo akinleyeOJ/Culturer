@@ -252,7 +252,11 @@ export const fetchProductById = async (productId: string, userId?: string) => {
   return {
     ...transformProduct(product, favoriteIds),
     description: (product as any).description || '',
-    images: (product as any).images || [],
+    images: (product as any).images && (product as any).images.length > 0
+      ? (product as any).images
+      : (product as any).image_url
+        ? [(product as any).image_url]
+        : [],
     category: (product as any).category || 'all',
     condition: (product as any).condition || 'New',
     cultural_origin: (product as any).cultural_origin || '',

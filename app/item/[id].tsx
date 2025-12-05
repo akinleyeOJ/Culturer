@@ -97,6 +97,29 @@ const ItemDetail = () => {
         }
     };
 
+    const handleToggleRecommendationFavorite = async (productId: string) => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in to add items to your wishlist');
+            return;
+        }
+
+        const { success, isFavorited } = await toggleFavorite(user.id, productId);
+        if (success) {
+            // Update seller products
+            setSellerProducts(currentProducts =>
+                currentProducts.map(p =>
+                    p.id === productId ? { ...p, isFavorited } : p
+                )
+            );
+            // Update similar products
+            setSimilarProducts(currentProducts =>
+                currentProducts.map(p =>
+                    p.id === productId ? { ...p, isFavorited } : p
+                )
+            );
+        }
+    };
+
     const handleShare = async () => {
         try {
             await Share.share({
@@ -276,7 +299,7 @@ const ItemDetail = () => {
                                         reviews={item.reviews}
                                         shipping={item.shipping}
                                         isLiked={item.isFavorited}
-                                        onLike={() => { }}
+                                        onLike={() => handleToggleRecommendationFavorite(item.id)}
                                         onPress={() => router.push(`/item/${item.id}`)}
                                         style={{ width: 160, marginRight: 12 }}
                                     />
@@ -301,7 +324,7 @@ const ItemDetail = () => {
                                         reviews={item.reviews}
                                         shipping={item.shipping}
                                         isLiked={item.isFavorited}
-                                        onLike={() => { }}
+                                        onLike={() => handleToggleRecommendationFavorite(item.id)}
                                         onPress={() => router.push(`/item/${item.id}`)}
                                         style={{ width: 160, marginRight: 12 }}
                                     />

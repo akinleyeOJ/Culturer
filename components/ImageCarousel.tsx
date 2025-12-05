@@ -193,10 +193,9 @@ const ZoomableImage = ({ imageUri }: { imageUri: string }) => {
             }
         });
 
-    const composedGesture = Gesture.Simultaneous(
-        pinchGesture,
-        panGesture,
-        doubleTapGesture
+    const composedGesture = Gesture.Race(
+        doubleTapGesture,
+        Gesture.Simultaneous(pinchGesture, panGesture)
     );
 
     const animatedStyle = useAnimatedStyle(() => ({
