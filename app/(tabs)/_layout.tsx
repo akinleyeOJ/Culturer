@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { HomeIcon, MagnifyingGlassIcon, HeartIcon, EnvelopeIcon, UserIcon } from 'react-native-heroicons/outline';
 import { Tabs, Redirect } from "expo-router";
 import { useAuth } from "../../contexts/AuthContext";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
@@ -30,7 +30,7 @@ export default function TabLayout() {
           title: "Home",
           headerShown: false,
           tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="home" color={color} />
+            <HomeIcon size={28} color={color} />
           ),
         }}
       />
@@ -40,7 +40,7 @@ export default function TabLayout() {
           title: "Browse",
           headerShown: false,
           tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="search" color={color} />
+            <MagnifyingGlassIcon size={28} color={color} />
           ),
         }}
       />
@@ -49,7 +49,7 @@ export default function TabLayout() {
         options={{
           title: "Wishlist",
           tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="heart" color={color} />
+            <HeartIcon size={28} color={color} />
           ),
         }}
       />
@@ -58,7 +58,7 @@ export default function TabLayout() {
         options={{
           title: "Message",
           tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="envelope" color={color} />
+            <EnvelopeIcon size={28} color={color} />
           ),
         }}
       />
@@ -67,7 +67,7 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="user" color={color} />
+            <UserIcon size={28} color={color} />
           ),
         }}
       />

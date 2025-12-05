@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon } from 'react-native-heroicons/outline';
+import { HeartIcon as HeartOutline } from 'react-native-heroicons/outline';
+import { HeartIcon as HeartSolid } from 'react-native-heroicons/solid';
 import { Colors } from '../../constants/color';
 import { ImageCarousel } from '../../components/ImageCarousel';
 import { SellerCard } from '../../components/SellerCard';
@@ -150,11 +152,11 @@ const ItemDetail = () => {
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <FontAwesome name="chevron-left" size={20} color={Colors.text.primary} />
+                    <ChevronLeftIcon size={20} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
                     <TouchableOpacity onPress={handleShare} style={styles.iconButton}>
-                        <FontAwesome name="share-alt" size={20} color={Colors.text.primary} />
+                        <ShareIcon size={20} color={Colors.text.primary} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -177,11 +179,11 @@ const ItemDetail = () => {
                         <View style={styles.titleRow}>
                             <Text style={styles.productName}>{product.name}</Text>
                             <TouchableOpacity onPress={handleToggleFavorite}>
-                                <FontAwesome
-                                    name={product.isFavorited ? 'heart' : 'heart-o'}
-                                    size={24}
-                                    color={product.isFavorited ? '#EF4444' : Colors.text.secondary}
-                                />
+                                {product.isFavorited ? (
+                                    <HeartSolid size={24} color="#EF4444" />
+                                ) : (
+                                    <HeartOutline size={24} color={Colors.text.secondary} />
+                                )}
                             </TouchableOpacity>
                         </View>
 
@@ -318,11 +320,11 @@ const ItemDetail = () => {
                     <>
                         <View style={styles.quantitySelector}>
                             <TouchableOpacity onPress={decrementQuantity} style={styles.quantityButton}>
-                                <FontAwesome name="minus" size={16} color={Colors.text.primary} />
+                                <MinusIcon size={16} color={Colors.text.primary} />
                             </TouchableOpacity>
                             <Text style={styles.quantityText}>{quantity}</Text>
                             <TouchableOpacity onPress={incrementQuantity} style={styles.quantityButton}>
-                                <FontAwesome name="plus" size={16} color={Colors.text.primary} />
+                                <PlusIcon size={16} color={Colors.text.primary} />
                             </TouchableOpacity>
                         </View>
                         <CustomButton

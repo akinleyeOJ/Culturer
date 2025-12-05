@@ -17,12 +17,13 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
+import { ShoppingBagIcon, ArrowRightOnRectangleIcon, UserPlusIcon, UserIcon, EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon } from "react-native-heroicons/outline";
+import FontAwesome from "@expo/vector-icons/FontAwesome"; // Keep for Apple icon
 import { Colors } from "../../constants/color";
 import { supabase } from "../../lib/supabase";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === "android") {
@@ -31,7 +32,8 @@ if (Platform.OS === "android") {
   }
 }
 
-const SignIn = () => {
+const AuthScreen = () => {
+  const router = useRouter();
   // Toggle between sign-in and sign-up mode
   const [isSignUp, setIsSignUp] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -645,7 +647,7 @@ const SignIn = () => {
         >
           {/* App Logo */}
           <View style={styles.logoContainer}>
-            <FontAwesome name="shopping-bag" size={40} color={Colors.primary[500]} />
+            <ShoppingBagIcon size={40} color={Colors.primary[500]} />
             <Text style={styles.appName}>Culturar</Text>
           </View>
 
@@ -684,10 +686,9 @@ const SignIn = () => {
                   { transform: [{ scale: !isSignUp ? scaleAnim : 1 }] },
                 ]}
               >
-                <FontAwesome 
-                  name="sign-in" 
-                  size={16} 
-                  color={!isSignUp ? "#fff" : "#666"} 
+                <ArrowRightOnRectangleIcon
+                  size={16}
+                  color={!isSignUp ? "#fff" : "#666"}
                 />
                 <Text
                   style={[
@@ -711,10 +712,9 @@ const SignIn = () => {
                   { transform: [{ scale: isSignUp ? scaleAnim : 1 }] },
                 ]}
               >
-                <FontAwesome 
-                  name="user-plus" 
-                  size={16} 
-                  color={isSignUp ? "#fff" : "#666"} 
+                <UserPlusIcon
+                  size={16}
+                  color={isSignUp ? "#fff" : "#666"}
                 />
                 <Text
                   style={[
@@ -744,7 +744,7 @@ const SignIn = () => {
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Full Name</Text>
                 <View style={styles.inputWrapper}>
-                  <FontAwesome name="user" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
+                  <UserIcon size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     placeholder="Enter your name"
@@ -762,7 +762,7 @@ const SignIn = () => {
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Email</Text>
               <View style={styles.inputWrapper}>
-                <FontAwesome name="envelope" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
+                <EnvelopeIcon size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="you@example.com"
@@ -780,7 +780,7 @@ const SignIn = () => {
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Password</Text>
               <View style={styles.inputWrapper}>
-                <FontAwesome name="lock" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
+                <LockClosedIcon size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="***********"
@@ -795,11 +795,11 @@ const SignIn = () => {
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeIcon}
                 >
-                  <FontAwesome 
-                    name={showPassword ? "eye" : "eye-slash"} 
-                    size={18} 
-                    color={Colors.neutral[500]} 
-                  />
+                  {showPassword ? (
+                    <EyeIcon size={18} color={Colors.neutral[500]} />
+                  ) : (
+                    <EyeSlashIcon size={18} color={Colors.neutral[500]} />
+                  )}
                 </TouchableOpacity>
               </View>
               {isSignUp && password.length > 0 && (
@@ -860,7 +860,7 @@ const SignIn = () => {
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Confirm Password</Text>
                 <View style={styles.inputWrapper}>
-                  <FontAwesome name="lock" size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
+                  <LockClosedIcon size={18} color={Colors.neutral[500]} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     placeholder="***********"
@@ -875,11 +875,11 @@ const SignIn = () => {
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeIcon}
                   >
-                    <FontAwesome 
-                      name={showPassword ? "eye" : "eye-slash"} 
-                      size={18} 
-                      color={Colors.neutral[500]} 
-                    />
+                    {showPassword ? (
+                      <EyeIcon size={18} color={Colors.neutral[500]} />
+                    ) : (
+                      <EyeSlashIcon size={18} color={Colors.neutral[500]} />
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -902,7 +902,7 @@ const SignIn = () => {
                   </View>
                   <Text style={styles.rememberMeText}>Remember Me</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity onPress={() => router.push("/(auth)/forgotPassword")}>
                   <Text style={styles.forgotPasswordText}>
                     Forgot Password?
@@ -938,7 +938,7 @@ const SignIn = () => {
               style={[
                 styles.continueButton,
                 (loading || (isSignUp && !agreeToTerms)) &&
-                  styles.continueButtonDisabled,
+                styles.continueButtonDisabled,
               ]}
               onPress={handleContinue}
               disabled={loading || (isSignUp && !agreeToTerms)}
@@ -947,7 +947,7 @@ const SignIn = () => {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <>
-                  <FontAwesome name="envelope" size={18} color="#fff" />
+                  <EnvelopeIcon size={18} color="#fff" />
                   <Text style={styles.continueButtonText}>
                     {isSignUp ? "Create Account" : "Continue with Email"}
                   </Text>
@@ -1266,4 +1266,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SignIn;
+export default AuthScreen;

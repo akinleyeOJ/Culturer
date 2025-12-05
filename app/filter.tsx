@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/color';
 import CustomButton from '../components/Button';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { XMarkIcon } from 'react-native-heroicons/outline';
 
 const FilterScreen = () => {
     const router = useRouter();
@@ -55,7 +55,7 @@ const FilterScreen = () => {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-                    <FontAwesome name="times" size={24} color={Colors.text.primary} />
+                    <XMarkIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Filters & Sort</Text>
                 <TouchableOpacity onPress={handleReset}>

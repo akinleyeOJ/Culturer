@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Colors } from '../constants/color';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { UserIcon, MapPinIcon } from 'react-native-heroicons/outline';
 
 interface SellerCardProps {
     sellerName: string;
@@ -31,7 +31,7 @@ export const SellerCard = ({
                     <Image source={{ uri: sellerAvatar }} style={styles.avatar} />
                 ) : (
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <FontAwesome name="user" size={20} color={Colors.neutral[500]} />
+                        <UserIcon size={20} color={Colors.neutral[500]} />
                     </View>
                 )}
 
@@ -45,7 +45,7 @@ export const SellerCard = ({
                     </View>
                     {sellerLocation && (
                         <View style={styles.locationRow}>
-                            <FontAwesome name="map-marker" size={12} color={Colors.neutral[500]} />
+                            <MapPinIcon size={12} color={Colors.neutral[500]} />
                             <Text style={styles.location}>{sellerLocation}</Text>
                         </View>
                     )}

@@ -10,7 +10,14 @@ import {
     Text,
 } from 'react-native';
 import { Colors } from '../constants/color';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { XMarkIcon } from 'react-native-heroicons/outline';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withTiming,
+    withSpring,
+} from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CAROUSEL_HEIGHT = SCREEN_WIDTH * 0.9;
@@ -88,7 +95,7 @@ export const ImageCarousel = ({ images, emoji }: ImageCarouselProps) => {
                 )}
             </View>
 
-            {/* Full Screen Modal */}
+            {/* Full Screen Modal with Pinch-to-Zoom */}
             <Modal
                 visible={fullScreenVisible}
                 transparent={true}
@@ -100,7 +107,7 @@ export const ImageCarousel = ({ images, emoji }: ImageCarouselProps) => {
                         style={styles.closeButton}
                         onPress={closeFullScreen}
                     >
-                        <FontAwesome name="times" size={24} color="#fff" />
+                        <XMarkIcon size={24} color="#fff" />
                     </TouchableOpacity>
 
                     <ScrollView
@@ -110,13 +117,7 @@ export const ImageCarousel = ({ images, emoji }: ImageCarouselProps) => {
                         contentOffset={{ x: activeIndex * SCREEN_WIDTH, y: 0 }}
                     >
                         {images.map((image, index) => (
-                            <View key={index} style={styles.fullScreenImageContainer}>
-                                <Image
-                                    source={{ uri: image }}
-                                    style={styles.fullScreenImage}
-                                    resizeMode="contain"
-                                />
-                            </View>
+                            <ZoomableImage key={index} imageUri={image} />
                         ))}
                     </ScrollView>
 
@@ -129,6 +130,93 @@ export const ImageCarousel = ({ images, emoji }: ImageCarouselProps) => {
                 </View>
             </Modal>
         </>
+    );
+};
+
+// Zoomable Image Component with Pinch-to-Zoom
+const ZoomableImage = ({ imageUri }: { imageUri: string }) => {
+    const scale = useSharedValue(1);
+    const savedScale = useSharedValue(1);
+    const translateX = useSharedValue(0);
+    const translateY = useSharedValue(0);
+    const savedTranslateX = useSharedValue(0);
+    const savedTranslateY = useSharedValue(0);
+
+    const pinchGesture = Gesture.Pinch()
+        .onUpdate((event) => {
+            scale.value = savedScale.value * event.scale;
+        })
+        .onEnd(() => {
+            // Limit zoom range
+            if (scale.value < 1) {
+                scale.value = withSpring(1);
+                savedScale.value = 1;
+                translateX.value = withSpring(0);
+                translateY.value = withSpring(0);
+                savedTranslateX.value = 0;
+                savedTranslateY.value = 0;
+            } else if (scale.value > 4) {
+                scale.value = withSpring(4);
+                savedScale.value = 4;
+            } else {
+                savedScale.value = scale.value;
+            }
+        });
+
+    const panGesture = Gesture.Pan()
+        .onUpdate((event) => {
+            if (scale.value > 1) {
+                translateX.value = savedTranslateX.value + event.translationX;
+                translateY.value = savedTranslateY.value + event.translationY;
+            }
+        })
+        .onEnd(() => {
+            savedTranslateX.value = translateX.value;
+            savedTranslateY.value = translateY.value;
+        });
+
+    const doubleTapGesture = Gesture.Tap()
+        .numberOfTaps(2)
+        .onEnd(() => {
+            if (scale.value > 1) {
+                // Zoom out
+                scale.value = withSpring(1);
+                savedScale.value = 1;
+                translateX.value = withSpring(0);
+                translateY.value = withSpring(0);
+                savedTranslateX.value = 0;
+                savedTranslateY.value = 0;
+            } else {
+                // Zoom in
+                scale.value = withSpring(2);
+                savedScale.value = 2;
+            }
+        });
+
+    const composedGesture = Gesture.Simultaneous(
+        pinchGesture,
+        panGesture,
+        doubleTapGesture
+    );
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateX: translateX.value },
+            { translateY: translateY.value },
+            { scale: scale.value },
+        ],
+    }));
+
+    return (
+        <View style={styles.fullScreenImageContainer}>
+            <GestureDetector gesture={composedGesture}>
+                <Animated.Image
+                    source={{ uri: imageUri }}
+                    style={[styles.fullScreenImage, animatedStyle]}
+                    resizeMode="contain"
+                />
+            </GestureDetector>
+        </View>
     );
 };
 

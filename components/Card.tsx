@@ -1,7 +1,8 @@
 import React, { ReactNode, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, StyleProp, Image } from "react-native";
 import { Colors } from "../constants/color";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { HeartIcon as HeartOutline } from "react-native-heroicons/outline";
+import { HeartIcon as HeartSolid } from "react-native-heroicons/solid";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withTiming } from "react-native-reanimated";
 
 interface CardProps {
@@ -152,11 +153,11 @@ export const ProductCard = ({
           activeOpacity={0.7}
         >
           <Animated.View style={animatedIconStyle}>
-            <FontAwesome
-              name={isLiked ? "heart" : "heart-o"}
-              size={14}
-              color={isLiked ? "#EF4444" : "#4A4A4A"}
-            />
+            {isLiked ? (
+              <HeartSolid size={14} color="#EF4444" />
+            ) : (
+              <HeartOutline size={14} color="#4A4A4A" />
+            )}
           </Animated.View>
         </TouchableOpacity>
       </View>

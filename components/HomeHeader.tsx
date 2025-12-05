@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { MagnifyingGlassIcon, HeartIcon } from "react-native-heroicons/outline";
 
 interface HomeHeaderProps {
     userName?: string;
@@ -11,13 +11,13 @@ interface HomeHeaderProps {
     onWishlistPress?: () => void;
 }
 
-const HomeHeader = ({ 
-    userName = "User", 
+const HomeHeader = ({
+    userName = "User",
     userAvatar,
     wishlistCount = 0,
     isScrolled = false,
     onSearchPress,
-    onWishlistPress 
+    onWishlistPress
 }: HomeHeaderProps) => {
     // Single animation progress value for perfect synchronization
     const animationProgress = useRef(new Animated.Value(0)).current;
@@ -80,7 +80,7 @@ const HomeHeader = ({
         const date = new Date();
         const hours = date.getHours();
         const seed = date.getDate() + date.getMonth() + hours;
-        
+
         if (hours >= 0 && hours < 4) {
             const greetings = ["Burning the midnight oil I see", "Hey there, night owl", "Still awake"];
             return greetings[seed % greetings.length];
@@ -108,7 +108,7 @@ const HomeHeader = ({
         const greetings = ["Good night", "Late night browsing", "Cozy evening?", "Moonlight shopping?"];
         return greetings[seed % greetings.length];
     }, []);
-    
+
     const getUserInitials = () => {
         return userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
     }
@@ -125,24 +125,24 @@ const HomeHeader = ({
                         <Text style={styles.userName}>{userName}</Text>
                     </View>
                 </View>
-                
+
                 <View style={styles.rightSection}>
                     {/* Search icon when scrolled - with pop animation */}
-                    <Animated.View 
-                        style={{ 
+                    <Animated.View
+                        style={{
                             opacity: searchIconOpacity,
                             transform: [{ scale: searchIconScale }],
                         }}
                     >
-                        <TouchableOpacity 
-                            onPress={onSearchPress} 
+                        <TouchableOpacity
+                            onPress={onSearchPress}
                             style={styles.searchIconButton}
                         >
-                            <FontAwesome name="search" size={20} color="#4A4A4A" />
+                            <MagnifyingGlassIcon size={20} color="#4A4A4A" />
                         </TouchableOpacity>
                     </Animated.View>
                     <TouchableOpacity onPress={onWishlistPress} style={styles.heartButton}>
-                        <FontAwesome name="heart-o" size={22} color="#4A4A4A" />
+                        <HeartIcon size={22} color="#4A4A4A" />
                         {wishlistCount > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{wishlistCount}</Text>
@@ -153,10 +153,10 @@ const HomeHeader = ({
             </Animated.View>
 
             {/* Search bar with smooth collapse and expand */}
-            <Animated.View 
+            <Animated.View
                 style={[
                     styles.searchContainerWrapper,
-                    { 
+                    {
                         height: searchBarHeight,
                         marginBottom: searchContainerMargin,
                         paddingVertical: searchContainerPadding,
@@ -165,7 +165,7 @@ const HomeHeader = ({
                 ]}
                 pointerEvents={searchBarPointerEvents}
             >
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.searchButton}
                     onPress={onSearchPress}
                     activeOpacity={0.7}
@@ -176,7 +176,7 @@ const HomeHeader = ({
                             transform: [{ scale: searchBarScale }],
                         }
                     ]}>
-                        <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
+                        <MagnifyingGlassIcon size={16} color="#4A4A4A" style={styles.searchIcon} />
                         <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
                     </Animated.View>
                 </TouchableOpacity>

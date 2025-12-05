@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { MagnifyingGlassIcon, HeartIcon } from "react-native-heroicons/outline";
 import { Colors } from "../constants/color";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,7 +26,7 @@ const BrowseHeader = ({
     const handleSearchPress = () => {
         router.push('/search');
     };
-    
+
     // Single animation progress value for perfect synchronization
     const animationProgress = useRef(new Animated.Value(0)).current;
 
@@ -106,11 +106,11 @@ const BrowseHeader = ({
                             onPress={handleSearchPress}
                             style={styles.searchIconButton}
                         >
-                            <FontAwesome name="search" size={20} color="#4A4A4A" />
+                            <MagnifyingGlassIcon size={20} color="#4A4A4A" />
                         </TouchableOpacity>
                     </Animated.View>
                     <TouchableOpacity onPress={onWishlistPress} style={styles.heartButton}>
-                        <FontAwesome name="heart-o" size={22} color="#4A4A4A" />
+                        <HeartIcon size={22} color="#4A4A4A" />
                         {wishlistCount > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{wishlistCount}</Text>
@@ -144,7 +144,7 @@ const BrowseHeader = ({
                             transform: [{ scale: searchBarScale }],
                         }
                     ]}>
-                        <FontAwesome name="search" size={16} color="#4A4A4A" style={styles.searchIcon} />
+                        <MagnifyingGlassIcon size={16} color="#4A4A4A" style={styles.searchIcon} />
                         <Text style={styles.searchPlaceholder}>What are you looking for today?</Text>
                     </Animated.View>
                 </TouchableOpacity>

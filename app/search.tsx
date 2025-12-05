@@ -13,7 +13,7 @@ import {
     Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { MagnifyingGlassIcon, ChevronLeftIcon, XCircleIcon, ClockIcon, XMarkIcon, ChevronRightIcon, ChevronUpIcon } from 'react-native-heroicons/outline';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../constants/color';
 import { CATEGORIES } from '../constants/categories';
@@ -158,10 +158,10 @@ const SearchScreen = () => {
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <FontAwesome name="chevron-left" size={20} color={Colors.text.primary} />
+                    <ChevronLeftIcon size={20} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <View style={styles.searchContainer}>
-                    <FontAwesome name="search" size={16} color={Colors.neutral[400]} style={styles.searchIcon} />
+                    <MagnifyingGlassIcon size={16} color={Colors.neutral[400]} style={styles.searchIcon} />
                     <TextInput
                         ref={inputRef}
                         style={styles.searchInput}
@@ -174,7 +174,7 @@ const SearchScreen = () => {
                     />
                     {searchQuery.length > 0 && (
                         <TouchableOpacity onPress={() => setSearchQuery('')}>
-                            <FontAwesome name="times-circle" size={16} color={Colors.neutral[400]} />
+                            <XCircleIcon size={16} color={Colors.neutral[400]} />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -205,14 +205,14 @@ const SearchScreen = () => {
                                             handleSearchSubmit(term);
                                         }}
                                     >
-                                        <FontAwesome name="clock-o" size={14} color={Colors.neutral[400]} style={styles.recentIcon} />
+                                        <ClockIcon size={14} color={Colors.neutral[400]} style={styles.recentIcon} />
                                         <Text style={styles.recentSearchText} numberOfLines={1}>{term}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         style={styles.removeButton}
                                         onPress={() => removeSearchTerm(term)}
                                     >
-                                        <FontAwesome name="times" size={12} color={Colors.neutral[400]} />
+                                        <XMarkIcon size={12} color={Colors.neutral[400]} />
                                     </TouchableOpacity>
                                 </View>
                             ))}
@@ -235,11 +235,11 @@ const SearchScreen = () => {
                                         <Text style={styles.categoryIcon}>{category.icon}</Text>
                                         <Text style={styles.categoryName}>{category.name}</Text>
                                     </View>
-                                    <FontAwesome
-                                        name={expandedCategory === category.id ? "chevron-up" : "chevron-right"}
-                                        size={12}
-                                        color={Colors.neutral[400]}
-                                    />
+                                    {expandedCategory === category.id ? (
+                                        <ChevronUpIcon size={12} color={Colors.neutral[400]} />
+                                    ) : (
+                                        <ChevronRightIcon size={12} color={Colors.neutral[400]} />
+                                    )}
                                 </TouchableOpacity>
 
                                 {/* Subcategories */}
@@ -252,7 +252,7 @@ const SearchScreen = () => {
                                                 onPress={() => handleSubcategoryPress(category.id, sub)}
                                             >
                                                 <Text style={styles.subcategoryText}>{sub}</Text>
-                                                <FontAwesome name="angle-right" size={12} color={Colors.neutral[300]} />
+                                                <ChevronRightIcon size={12} color={Colors.neutral[300]} />
                                             </TouchableOpacity>
                                         ))}
                                     </View>

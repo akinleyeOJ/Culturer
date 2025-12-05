@@ -13,7 +13,7 @@ import {
   Alert,
   FlatList
 } from "react-native";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { XCircleIcon, AdjustmentsHorizontalIcon } from 'react-native-heroicons/outline';
 import { Colors } from "../../constants/color";
 import { ProductCard, ProductCardSkeleton } from "../../components/Card";
 import BrowseHeader from "../../components/BrowseHeader";
@@ -344,7 +344,7 @@ const Browse = () => {
                   router.setParams({ search: undefined });
                 }}
               >
-                <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
+                <XCircleIcon size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
                 <Text style={styles.clearSearchText}>Search: "{searchQuery}"</Text>
               </TouchableOpacity>
             ) : null}
@@ -370,7 +370,7 @@ const Browse = () => {
                   });
                 }}
               >
-                <FontAwesome name="times-circle" size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
+                <XCircleIcon size={14} color={Colors.neutral[500]} style={{ marginRight: 6 }} />
                 <Text style={styles.clearSearchText}>Filters Active</Text>
               </TouchableOpacity>
             )}
@@ -399,7 +399,7 @@ const Browse = () => {
             }
           })}
         >
-          <FontAwesome name="sliders" size={14} color={Colors.primary[500]} style={styles.filterIcon} />
+          <AdjustmentsHorizontalIcon size={14} color={Colors.primary[500]} style={styles.filterIcon} />
           <Text style={styles.filterButtonText}>Filter</Text>
           {(sortBy !== 'newest' || minPrice !== undefined || maxPrice !== undefined || condition !== undefined || shipping !== undefined || culture !== undefined) && (
             <View style={styles.filterBadge}>
