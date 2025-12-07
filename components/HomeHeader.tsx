@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
 import { MagnifyingGlassIcon, HeartIcon, ShoppingBagIcon } from "react-native-heroicons/outline";
+import { Colors } from "../constants/color";
 
 interface HomeHeaderProps {
     userName?: string;
@@ -266,9 +267,9 @@ const styles = StyleSheet.create({
         position: "absolute",
         top: -4,
         right: -4,
-        backgroundColor: "#EF4444",
+        backgroundColor: Colors.primary[500],
         borderRadius: 10,
-        minWidth: 20,
+        minWidth: 25,
         height: 20,
         justifyContent: "center",
         alignItems: "center",
@@ -277,7 +278,7 @@ const styles = StyleSheet.create({
         borderColor: "#FFFFFF",
     },
     badgeText: {
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: "700",
         color: "#FFFFFF",
     },

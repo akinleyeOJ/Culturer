@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Colors } from '../constants/color';
 import { UserIcon, MapPinIcon } from 'react-native-heroicons/outline';
+import { StarRating } from './StarRating';
 
 interface SellerCardProps {
     sellerName: string;
@@ -38,7 +39,7 @@ export const SellerCard = ({
                 <View style={styles.details}>
                     <Text style={styles.name}>{sellerName}</Text>
                     <View style={styles.ratingRow}>
-                        <Text style={styles.stars}>{renderStars(sellerRating)}</Text>
+                        <StarRating rating={sellerRating} size={12} color="#F59E0B" />
                         <Text style={styles.reviewCount}>
                             {sellerRating.toFixed(1)} · {sellerReviewsCount} reviews
                         </Text>

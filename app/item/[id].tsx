@@ -206,21 +206,8 @@ const ItemDetail = () => {
                     <TouchableOpacity onPress={() => router.push('/cart')} style={[styles.iconButton, { marginLeft: 8 }]}>
                         <ShoppingBagIcon size={20} color={Colors.text.primary} />
                         {cartCount > 0 && (
-                            <View style={{
-                                position: 'absolute',
-                                top: -4,
-                                right: -4,
-                                backgroundColor: Colors.primary[500],
-                                borderRadius: 10,
-                                minWidth: 20,
-                                height: 20,
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                paddingHorizontal: 4,
-                                borderWidth: 1.5,
-                                borderColor: "#FFFFFF",
-                            }}>
-                                <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{cartCount}</Text>
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{cartCount}</Text>
                             </View>
                         )}
                     </TouchableOpacity>
@@ -572,6 +559,25 @@ const styles = StyleSheet.create({
     },
     soldOutButton: {
         flex: 1,
+    },
+    badge: {
+        position: "absolute",
+        top: -4,
+        right: -4,
+        backgroundColor: Colors.primary[500],
+        borderRadius: 10,
+        minWidth: 25,
+        height: 20,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 4,
+        borderWidth: 1.5,
+        borderColor: "#FFFFFF",
+    },
+    badgeText: {
+        fontSize: 10,
+        fontWeight: "700",
+        color: "#FFFFFF",
     },
 });
 

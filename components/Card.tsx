@@ -4,6 +4,7 @@ import { Colors } from "../constants/color";
 import { HeartIcon as HeartOutline } from "react-native-heroicons/outline";
 import { HeartIcon as HeartSolid } from "react-native-heroicons/solid";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withTiming } from "react-native-reanimated";
+import { StarRating } from "./StarRating";
 
 interface CardProps {
   children?: ReactNode;
@@ -138,28 +139,30 @@ export const ProductCard = ({
         <Text style={styles.cardPrice}>{price}</Text>
         <Text style={styles.cardName} numberOfLines={2}>{name}</Text>
 
-        <View style={styles.ratingRow}>
-          <Text style={styles.stars}>{renderStars(rating)}</Text>
-          <Text style={styles.reviewText}>({reviews})</Text>
-        </View>
+        <View style={styles.cardFooter}>
+          <View style={styles.ratingRow}>
+            <StarRating rating={rating} size={12} color="#F59E0B" />
+            <Text style={styles.reviewText}>({reviews})</Text>
+          </View>
 
-        {/* Favorite Button - Bottom Right */}
-        <TouchableOpacity
-          style={styles.favoriteButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            onLike?.();
-          }}
-          activeOpacity={0.7}
-        >
-          <Animated.View style={animatedIconStyle}>
-            {isLiked ? (
-              <HeartSolid size={14} color="#EF4444" />
-            ) : (
-              <HeartOutline size={14} color="#4A4A4A" />
-            )}
-          </Animated.View>
-        </TouchableOpacity>
+          {/* Favorite Button */}
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onLike?.();
+            }}
+            activeOpacity={0.7}
+          >
+            <Animated.View style={animatedIconStyle}>
+              {isLiked ? (
+                <HeartSolid size={18} color="#EF4444" />
+              ) : (
+                <HeartOutline size={18} color="#4A4A4A" />
+              )}
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
       </View>
     </Card>
   );
@@ -345,10 +348,15 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     minHeight: 36,
   },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 'auto',
+  },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
   },
   stars: {
     fontSize: 7.5,
@@ -359,22 +367,19 @@ const styles = StyleSheet.create({
     color: '#6c757d',
   },
 
-  // Favorite Button - Bottom Right
+  // Favorite Button
   favoriteButton: {
-    position: 'absolute',
-    bottom: 25,
-    right: 2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#fff',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff', // Removed shadowColor matching background
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#fff',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   favoriteIcon: {
     fontSize: 10,

@@ -383,9 +383,9 @@ const Home = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalScroll}
-            snapToInterval={300}
+            snapToInterval={167} // 155 (width) + 12 (gap)
             decelerationRate="fast"
-            snapToAlignment="start"
+            snapToAlignment="start" // Changed to start for better predictability with padding
           >
             {loading ? (
               <View>
@@ -419,7 +419,7 @@ const Home = () => {
                       onLike={() => handleToggleFavorite(product.id)}
                       isLiked={product.isFavorited || false}
                       variant="default"
-                      style={{ width: 140 }}
+                      style={{ width: 155, marginRight: 0 }}
                     />
                   ))}
                 </View>
@@ -441,7 +441,7 @@ const Home = () => {
                       onLike={() => handleToggleFavorite(product.id)}
                       isLiked={product.isFavorited || false}
                       variant="default"
-                      style={{ width: 140 }}
+                      style={{ width: 155, marginRight: 0 }}
                     />
                   ))}
                 </View>
@@ -557,7 +557,6 @@ const styles = StyleSheet.create({
   },
   horizontalScroll: {
     paddingHorizontal: 16,
-    paddingRight: 6,
   },
   gridRow: {
     flexDirection: 'row',
