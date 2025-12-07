@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
         color: Colors.neutral[500],
     },
     visitButton: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 8,
         borderWidth: 1,

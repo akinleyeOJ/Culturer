@@ -50,10 +50,10 @@ const Cart = () => {
         }
     }, [user]);
 
-    const loadCart = async () => {
+    const loadCart = async (backgroundInteraction = false) => {
         if (!user) return;
 
-        setLoading(true);
+        if (!backgroundInteraction) setLoading(true);
         const items = await fetchCart(user.id);
         setCartItems(items);
         setGroupedCart(groupCartBySeller(items));
@@ -63,7 +63,7 @@ const Cart = () => {
         const suggestions = await fetchComplementaryProducts(excludeIds);
         setComplementaryProducts(suggestions);
 
-        setLoading(false);
+        if (!backgroundInteraction) setLoading(false);
     };
 
     const handleUpdateQuantity = async (cartItemId: string, newQuantity: number, stockQuantity: number) => {
@@ -77,7 +77,7 @@ const Cart = () => {
         if (success) {
             await Promise.all([
                 refreshCartCount(),
-                loadCart()
+                loadCart(true)
             ]);
         }
         setUpdating(false);
@@ -98,7 +98,7 @@ const Cart = () => {
                         if (success) {
                             await Promise.all([
                                 refreshCartCount(),
-                                loadCart()
+                                loadCart(true)
                             ]);
                         }
                         setUpdating(false);
@@ -119,7 +119,7 @@ const Cart = () => {
         const { success } = await addToCart(user.id, product.id, 1);
         if (success) {
             await refreshCartCount(); // Update global badge
-            await loadCart(); // Refresh cart list
+            await loadCart(true); // Refresh cart list
         } else {
             Alert.alert('Error', 'Failed to add item');
         }

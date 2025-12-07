@@ -284,7 +284,7 @@ export const fetchComplementaryProducts = async (excludeProductIds: string[]): P
     try {
         let query = supabase
             .from('products')
-            .select('id, name, price, image_url, images, emoji, seller_id, seller_name, user_id')
+            .select('id, name, price, image_url, images, emoji, user_id')
             .limit(10); // Get 10 suggestions
 
         if (excludeProductIds.length > 0) {
