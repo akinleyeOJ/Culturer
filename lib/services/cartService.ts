@@ -39,34 +39,56 @@ export const addToCart = async (
     quantity: number = 1
 ) => {
     try {
+        console.log(`Adding to cart: User ${userId}, Product ${productId}, Qty ${quantity}`);
+
         // Check if item already exists in cart
-        const { data: existing } = await supabase
+        const { data: existing, error: fetchError } = await supabase
             .from('cart')
             .select('*')
             .eq('user_id', userId)
             .eq('product_id', productId)
             .maybeSingle();
 
+        if (fetchError) {
+            console.error('Error fetching existing cart item:', fetchError);
+            return { success: false, error: fetchError };
+        }
+
         if (existing) {
             // Update quantity
-            // @ts-ignore - Supabase type inference issue
-            const { error } = await supabase
-                .from('cart')
-                .update({ quantity: (existing as any).quantity + quantity } as any)
-                .eq('id', (existing as any).id);
+            const existingItem = existing as any;
+            const newQuantity = (existingItem.quantity || 0) + quantity;
+            console.log(`Updating existing item ${existingItem.id} to quantity ${newQuantity}`);
 
-            return { success: !error, error };
+            const { error: updateError } = await (supabase
+                .from('cart') as any)
+                .update({ quantity: newQuantity })
+                .eq('id', existingItem.id);
+
+            if (updateError) {
+                console.error('Error updating cart quantity:', updateError);
+                return { success: false, error: updateError };
+            }
+            return { success: true, error: null };
         } else {
             // Insert new item
-            // @ts-ignore - Supabase type inference issue
-            const { error } = await supabase
-                .from('cart')
-                .insert([{ user_id: userId, product_id: productId, quantity }] as any);
+            console.log('Inserting new cart item');
+            const { error: insertError } = await (supabase
+                .from('cart') as any)
+                .insert([{
+                    user_id: userId,
+                    product_id: productId,
+                    quantity: quantity
+                }]);
 
-            return { success: !error, error };
+            if (insertError) {
+                console.error('Error inserting cart item:', insertError);
+                return { success: false, error: insertError };
+            }
+            return { success: true, error: null };
         }
     } catch (error) {
-        console.error('Error adding to cart:', error);
+        console.error('Exception adding to cart:', error);
         return { success: false, error };
     }
 };
@@ -74,24 +96,24 @@ export const addToCart = async (
 // Fetch cart items
 export const fetchCart = async (userId: string): Promise<CartItem[]> => {
     try {
+        console.log(`Fetching cart for user ${userId}`);
         const { data, error } = await supabase
             .from('cart')
             .select(`
-        *,
-        product:products (
-          id,
-          name,
-          price,
-          image_url,
-          images,
-          emoji,
-          seller_id,
-          seller_name,
-          shipping,
-          out_of_stock,
-          stock_quantity
-        )
-      `)
+                *,
+                product:products (
+                    id,
+                    name,
+                    price,
+                    image_url,
+                    images,
+                    emoji,
+                    user_id,
+                    shipping,
+                    out_of_stock,
+                    stock_quantity
+                )
+            `)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
@@ -100,9 +122,13 @@ export const fetchCart = async (userId: string): Promise<CartItem[]> => {
             return [];
         }
 
-        return (data || []) as any;
+        // Filter out items where product might be null (if product was deleted)
+        const validItems = (data || []).filter((item: any) => item.product != null);
+        console.log(`Fetched ${validItems.length} valid cart items`);
+
+        return validItems as CartItem[];
     } catch (error) {
-        console.error('Error fetching cart:', error);
+        console.error('Exception fetching cart:', error);
         return [];
     }
 };
@@ -112,8 +138,12 @@ export const groupCartBySeller = (cartItems: CartItem[]): GroupedCart => {
     const grouped: GroupedCart = {};
 
     cartItems.forEach(item => {
-        const sellerId = item.product.seller_id;
-        const sellerName = item.product.seller_name;
+        if (!item.product) return; // Safety check
+
+        // Use user_id as seller_id if seller_id is missing
+        const product = item.product as any;
+        const sellerId = product.seller_id || product.user_id || 'unknown';
+        const sellerName = product.seller_name || 'Seller ' + sellerId.substr(0, 8);
 
         if (!grouped[sellerId]) {
             grouped[sellerId] = {
@@ -125,12 +155,13 @@ export const groupCartBySeller = (cartItems: CartItem[]): GroupedCart => {
         }
 
         grouped[sellerId].items.push(item);
-        grouped[sellerId].subtotal += item.product.price * item.quantity;
+        grouped[sellerId].subtotal += (item.product.price || 0) * item.quantity;
 
         // Parse shipping cost (e.g., "Free" or "$5.00")
-        const shippingCost = item.product.shipping === 'Free'
-            ? 0
-            : parseFloat(item.product.shipping.replace('$', '')) || 0;
+        let shippingCost = 0;
+        if (item.product.shipping && item.product.shipping !== 'Free') {
+            shippingCost = parseFloat(item.product.shipping.replace('$', '')) || 0;
+        }
         grouped[sellerId].shipping = Math.max(grouped[sellerId].shipping, shippingCost);
     });
 
@@ -148,16 +179,18 @@ export const updateCartQuantity = async (
             return await removeFromCart(cartItemId);
         }
 
-
-        // @ts-ignore - Supabase type inference issue
-        const { error } = await supabase
-            .from('cart')
-            .update({ quantity } as any)
+        const { error } = await (supabase
+            .from('cart') as any)
+            .update({ quantity })
             .eq('id', cartItemId);
 
-        return { success: !error, error };
+        if (error) {
+            console.error('Error updating quantity:', error);
+            return { success: false, error };
+        }
+        return { success: true, error: null };
     } catch (error) {
-        console.error('Error updating cart quantity:', error);
+        console.error('Exception updating cart quantity:', error);
         return { success: false, error };
     }
 };
@@ -170,9 +203,13 @@ export const removeFromCart = async (cartItemId: string) => {
             .delete()
             .eq('id', cartItemId);
 
-        return { success: !error, error };
+        if (error) {
+            console.error('Error removing item:', error);
+            return { success: false, error };
+        }
+        return { success: true, error: null };
     } catch (error) {
-        console.error('Error removing from cart:', error);
+        console.error('Exception removing from cart:', error);
         return { success: false, error };
     }
 };
@@ -185,25 +222,35 @@ export const clearCart = async (userId: string) => {
             .delete()
             .eq('user_id', userId);
 
-        return { success: !error, error };
+        if (error) {
+            console.error('Error clearing cart:', error);
+            return { success: false, error };
+        }
+        return { success: true, error: null };
     } catch (error) {
-        console.error('Error clearing cart:', error);
+        console.error('Exception clearing cart:', error);
         return { success: false, error };
     }
 };
 
-// Get cart count
+// Fetch cart count (total quantity of items)
 export const fetchCartCount = async (userId: string): Promise<number> => {
     try {
-        const { count, error } = await supabase
+        const { data, error } = await supabase
             .from('cart')
-            .select('*', { count: 'exact', head: true })
+            .select('quantity')
             .eq('user_id', userId);
 
-        if (error) return 0;
-        return count || 0;
+        if (error) {
+            console.error('Error fetching cart count:', error);
+            return 0;
+        }
+
+        // Sum up the quantity of all items
+        const totalCount = (data as any[])?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        return totalCount;
     } catch (error) {
-        console.error('Error fetching cart count:', error);
+        console.error('Exception fetching cart count:', error);
         return 0;
     }
 };
@@ -230,4 +277,37 @@ export const calculateCartTotals = (groupedCart: GroupedCart) => {
         total,
         itemCount,
     };
+};
+
+// Fetch complementary products (exclude items already in cart)
+export const fetchComplementaryProducts = async (excludeProductIds: string[]): Promise<any[]> => {
+    try {
+        let query = supabase
+            .from('products')
+            .select('id, name, price, image_url, images, emoji, seller_id, seller_name, user_id')
+            .limit(10); // Get 10 suggestions
+
+        if (excludeProductIds.length > 0) {
+            // Supabase 'not' with 'in' expects the value to be the array usually, 
+            // but strictly 'not' might expect a string representation for 'in'.
+            // Simplest is to use .not('id', 'in', `(${excludeProductIds.join(',')})`) 
+            // OR better: use filter.
+            // Actually, Supabase JS client supports .not('id', 'in', array) usually?
+            // Let's stick to the tuple string format to be safe as per my previous attempt, but cleaner.
+            query = query.filter('id', 'not.in', `(${excludeProductIds.join(',')})`);
+        }
+
+        const { data, error } = await query;
+
+
+        if (error) {
+            console.error('Error fetching suggestions:', error);
+            return [];
+        }
+
+        return data || [];
+    } catch (error) {
+        console.error('Exception fetching suggestions:', error);
+        return [];
+    }
 };

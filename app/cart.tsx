@@ -20,21 +20,30 @@ import {
     updateCartQuantity,
     removeFromCart,
     calculateCartTotals,
+    fetchComplementaryProducts,
+    addToCart,
     type CartItem,
     type GroupedCart,
 } from '../lib/services/cartService';
+import { useCart } from '../contexts/CartContext';
 import CustomButton from '../components/Button';
+import { checkCartSystem } from '../lib/services/cartDebug';
 
 const Cart = () => {
     const router = useRouter();
     const { user } = useAuth();
+    const { refreshCartCount } = useCart();
     const [cartItems, setCartItems] = useState<CartItem[]>([]);
     const [groupedCart, setGroupedCart] = useState<GroupedCart>({});
+    const [complementaryProducts, setComplementaryProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
 
+    // ... (inside Cart component)
+
     useEffect(() => {
         if (user) {
+            checkCartSystem(user.id); // Run debug check
             loadCart();
         } else {
             setLoading(false);
@@ -48,6 +57,12 @@ const Cart = () => {
         const items = await fetchCart(user.id);
         setCartItems(items);
         setGroupedCart(groupCartBySeller(items));
+
+        // Fetch complementary products excluding current cart items
+        const excludeIds = items.map(item => item.product_id);
+        const suggestions = await fetchComplementaryProducts(excludeIds);
+        setComplementaryProducts(suggestions);
+
         setLoading(false);
     };
 
@@ -60,7 +75,10 @@ const Cart = () => {
         setUpdating(true);
         const { success } = await updateCartQuantity(cartItemId, newQuantity);
         if (success) {
-            await loadCart();
+            await Promise.all([
+                refreshCartCount(),
+                loadCart()
+            ]);
         }
         setUpdating(false);
     };
@@ -78,7 +96,10 @@ const Cart = () => {
                         setUpdating(true);
                         const { success } = await removeFromCart(cartItemId);
                         if (success) {
-                            await loadCart();
+                            await Promise.all([
+                                refreshCartCount(),
+                                loadCart()
+                            ]);
                         }
                         setUpdating(false);
                     },
@@ -90,6 +111,19 @@ const Cart = () => {
     const handleCheckout = () => {
         // TODO: Navigate to checkout screen
         Alert.alert('Checkout', 'Checkout functionality coming soon!');
+    };
+
+    const handleQuickAdd = async (product: any) => {
+        if (!user) return;
+        setUpdating(true);
+        const { success } = await addToCart(user.id, product.id, 1);
+        if (success) {
+            await refreshCartCount(); // Update global badge
+            await loadCart(); // Refresh cart list
+        } else {
+            Alert.alert('Error', 'Failed to add item');
+        }
+        setUpdating(false);
     };
 
     if (!user) {
@@ -250,7 +284,47 @@ const Cart = () => {
                 ))}
 
                 {/* Spacer for bottom bar */}
-                <View style={{ height: 200 }} />
+                <View style={{ height: 24 }} />
+
+                {/* Complement Your Cart Section */}
+                {complementaryProducts.length > 0 && (
+                    <View style={styles.complementSection}>
+                        <Text style={styles.complementTitle}>Complement Your Cart</Text>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.complementList}
+                        >
+                            {complementaryProducts.map((product) => (
+                                <View key={product.id} style={styles.complementCard}>
+                                    <View style={styles.complementImageContainer}>
+                                        {product.image_url || product.images?.[0] ? (
+                                            <Image
+                                                source={{ uri: product.image_url || product.images?.[0] }}
+                                                style={styles.complementImage}
+                                            />
+                                        ) : (
+                                            <View style={[styles.complementImage, { backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' }]}>
+                                                <Text style={{ fontSize: 24 }}>{product.emoji || '🎁'}</Text>
+                                            </View>
+                                        )}
+                                        <TouchableOpacity
+                                            style={styles.quickAddButton}
+                                            onPress={() => handleQuickAdd(product)}
+                                            disabled={updating}
+                                        >
+                                            <PlusIcon size={16} color={Colors.primary[700]} strokeWidth={3} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <Text style={styles.complementName} numberOfLines={2}>{product.name}</Text>
+                                    <Text style={styles.complementPrice}>${product.price}</Text>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
+
+                <View style={{ height: 100 }} />
             </ScrollView>
 
             {/* Bottom Summary */}
@@ -481,6 +555,67 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: Colors.text.secondary,
         textAlign: 'center',
+    },
+    complementSection: {
+        marginTop: 24,
+        paddingLeft: 16,
+    },
+    complementTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        marginBottom: 12,
+    },
+    complementList: {
+        paddingRight: 16,
+        paddingBottom: 16,
+    },
+    complementCard: {
+        width: 120,
+        marginRight: 12,
+    },
+    complementImageContainer: {
+        position: 'relative',
+        width: 120,
+        height: 120,
+        marginBottom: 8,
+    },
+    complementImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 12,
+        backgroundColor: '#F3F4F6',
+    },
+    quickAddButton: {
+        position: 'absolute',
+        bottom: -6,
+        right: -6,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    complementName: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.text.primary,
+        marginBottom: 2,
+        height: 36, // Force 2 lines height approx
+    },
+    complementPrice: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: Colors.text.secondary,
     },
 });
 

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon, ShoppingBagIcon } from 'react-native-heroicons/outline';
 import { HeartIcon as HeartOutline } from 'react-native-heroicons/outline';
 import { HeartIcon as HeartSolid } from 'react-native-heroicons/solid';
 import { Colors } from '../../constants/color';
@@ -34,7 +34,7 @@ import { CartToast } from '../../components/CartToast';
 const ItemDetail = () => {
     const router = useRouter();
     const { user } = useAuth();
-    const { refreshCartCount } = useCart();
+    const { refreshCartCount, cartCount } = useCart();
     const { id } = useLocalSearchParams<{ id: string }>();
 
     const [product, setProduct] = useState<any>(null);
@@ -202,6 +202,27 @@ const ItemDetail = () => {
                 <View style={styles.headerActions}>
                     <TouchableOpacity onPress={handleShare} style={styles.iconButton}>
                         <ShareIcon size={20} color={Colors.text.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => router.push('/cart')} style={[styles.iconButton, { marginLeft: 8 }]}>
+                        <ShoppingBagIcon size={20} color={Colors.text.primary} />
+                        {cartCount > 0 && (
+                            <View style={{
+                                position: 'absolute',
+                                top: -4,
+                                right: -4,
+                                backgroundColor: Colors.primary[500],
+                                borderRadius: 10,
+                                minWidth: 20,
+                                height: 20,
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                paddingHorizontal: 4,
+                                borderWidth: 1.5,
+                                borderColor: "#FFFFFF",
+                            }}>
+                                <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{cartCount}</Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 </View>
             </View>

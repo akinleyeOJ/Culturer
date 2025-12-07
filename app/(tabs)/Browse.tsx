@@ -474,8 +474,10 @@ const Browse = () => {
     <View style={styles.container}>
       <BrowseHeader
         wishlistCount={wishlistCount}
+        cartCount={cartCount}
         isScrolled={isScrolled}
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
+        onCartPress={() => router.push('/cart')}
       />
 
       <Animated.FlatList
