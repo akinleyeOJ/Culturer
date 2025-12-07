@@ -26,6 +26,7 @@ import {
   fetchWishlistCount
 } from "../../lib/services/productService";
 import { useAuth } from "../../contexts/AuthContext";
+import { useCart } from "../../contexts/CartContext";
 import { supabase } from "../../lib/supabase";
 import { useFocusEffect } from "expo-router";
 import { useRouter } from "expo-router";
@@ -76,6 +77,7 @@ const ProductCardSkeleton = ({ variant = "default" }: { variant?: "default" | "l
 const Home = () => {
   const router = useRouter();
   const { user } = useAuth();
+  const { cartCount, refreshCartCount } = useCart();
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
   const [forYouProducts, setForYouProducts] = useState<Product[]>([]);
   const [hotProducts, setHotProducts] = useState<Product[]>([]);
@@ -294,9 +296,11 @@ const Home = () => {
         userName={displayName}
         userAvatar="https://via.placeholder.com/150"
         wishlistCount={wishlistCount}
+        cartCount={cartCount}
         isScrolled={isScrolled}
         onSearchPress={() => router.push('/search')}
         onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
+        onCartPress={() => router.push('/cart')}
       />
 
       <Animated.ScrollView
@@ -338,7 +342,7 @@ const Home = () => {
             >
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
-                  <RecentlyViewedSkeleton key={`rv-skeleton-${i}`} />
+                  <RecentlyViewedSkeleton key={`rv - skeleton - ${i} `} />
                 ))
               ) : recentlyViewed.length > 0 ? (
                 recentlyViewed.map((product) => (
@@ -387,12 +391,12 @@ const Home = () => {
               <View>
                 <View style={styles.gridRow}>
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <ProductCardSkeleton key={`foryou-skeleton-1-${i}`} />
+                    <ProductCardSkeleton key={`foryou - skeleton - 1 - ${i} `} />
                   ))}
                 </View>
                 <View style={styles.gridRow}>
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <ProductCardSkeleton key={`foryou-skeleton-2-${i}`} />
+                    <ProductCardSkeleton key={`foryou - skeleton - 2 - ${i} `} />
                   ))}
                 </View>
               </View>
@@ -477,7 +481,7 @@ const Home = () => {
           >
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <ProductCardSkeleton key={`hot-skeleton-${i}`} variant="large" />
+                <ProductCardSkeleton key={`hot - skeleton - ${i} `} variant="large" />
               ))
             ) : hotProducts.length > 0 ? (
               hotProducts.map((product) => (

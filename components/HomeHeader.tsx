@@ -1,23 +1,27 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
-import { MagnifyingGlassIcon, HeartIcon } from "react-native-heroicons/outline";
+import { MagnifyingGlassIcon, HeartIcon, ShoppingBagIcon } from "react-native-heroicons/outline";
 
 interface HomeHeaderProps {
     userName?: string;
     userAvatar?: string;
     wishlistCount?: number;
+    cartCount?: number;
     isScrolled?: boolean;
     onSearchPress?: () => void;
     onWishlistPress?: () => void;
+    onCartPress?: () => void;
 }
 
 const HomeHeader = ({
     userName = "User",
     userAvatar,
     wishlistCount = 0,
+    cartCount = 0,
     isScrolled = false,
     onSearchPress,
-    onWishlistPress
+    onWishlistPress,
+    onCartPress
 }: HomeHeaderProps) => {
     // Single animation progress value for perfect synchronization
     const animationProgress = useRef(new Animated.Value(0)).current;
@@ -149,6 +153,14 @@ const HomeHeader = ({
                             </View>
                         )}
                     </TouchableOpacity>
+                    <TouchableOpacity onPress={onCartPress} style={styles.cartButton}>
+                        <ShoppingBagIcon size={22} color="#4A4A4A" />
+                        {cartCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{cartCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
                 </View>
             </Animated.View>
 
@@ -244,6 +256,11 @@ const styles = StyleSheet.create({
     heartButton: {
         padding: 8,
         position: "relative",
+    },
+    cartButton: {
+        padding: 8,
+        position: "relative",
+        marginLeft: 4,
     },
     badge: {
         position: "absolute",

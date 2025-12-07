@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
-import { MagnifyingGlassIcon, HeartIcon } from "react-native-heroicons/outline";
+import { MagnifyingGlassIcon, HeartIcon, ShoppingBagIcon } from "react-native-heroicons/outline";
 import { Colors } from "../constants/color";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,16 +9,20 @@ interface BrowseHeaderProps {
     userName?: string;
     userAvatar?: string;
     wishlistCount?: number;
+    cartCount?: number;
     isScrolled?: boolean;
     onWishlistPress?: () => void;
+    onCartPress?: () => void;
 }
 
 const BrowseHeader = ({
     userName = "User",
     userAvatar,
     wishlistCount = 0,
+    cartCount = 0,
     isScrolled = false,
-    onWishlistPress
+    onWishlistPress,
+    onCartPress
 }: BrowseHeaderProps) => {
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -114,6 +118,14 @@ const BrowseHeader = ({
                         {wishlistCount > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{wishlistCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={onCartPress} style={styles.cartButton}>
+                        <ShoppingBagIcon size={22} color="#4A4A4A" />
+                        {cartCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{cartCount}</Text>
                             </View>
                         )}
                     </TouchableOpacity>
@@ -219,6 +231,11 @@ const styles = StyleSheet.create({
     heartButton: {
         padding: 8,
         position: "relative",
+    },
+    cartButton: {
+        padding: 8,
+        position: "relative",
+        marginLeft: 4,
     },
     badge: {
         position: "absolute",

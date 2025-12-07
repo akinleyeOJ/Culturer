@@ -18,6 +18,7 @@ import { Colors } from "../../constants/color";
 import { ProductCard, ProductCardSkeleton } from "../../components/Card";
 import BrowseHeader from "../../components/BrowseHeader";
 import { useAuth } from "../../contexts/AuthContext";
+import { useCart } from "../../contexts/CartContext";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { fetchProducts, toggleFavorite, fetchWishlistCount, trackProductView } from "../../lib/services/productService";
 import { CATEGORIES } from "../../constants/categories";
@@ -44,6 +45,7 @@ interface Product {
 const Browse = () => {
   const router = useRouter();
   const { user } = useAuth();
+  const { cartCount, refreshCartCount } = useCart();
   const params = useLocalSearchParams<{
     search?: string;
     category?: string;
@@ -200,10 +202,11 @@ const Browse = () => {
   useFocusEffect(
     React.useCallback(() => {
       loadWishlistCount();
+      refreshCartCount(); // Refresh cart count on focus
       if (products.length > 0) {
         loadProducts(true);
       }
-    }, [user])
+    }, [user, refreshCartCount])
   );
 
   const handleToggleFavorite = async (productId: string) => {
@@ -459,6 +462,7 @@ const Browse = () => {
       rating={item.rating}
       reviews={item.reviews}
       shipping={item.shipping}
+      outOfStock={item.outOfStock}
       isLiked={item.isFavorited}
       onLike={() => handleToggleFavorite(item.id)}
       style={{ width: COLUMN_WIDTH, marginBottom: 16 }}

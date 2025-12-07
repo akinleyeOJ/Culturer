@@ -50,8 +50,7 @@ export const fetchProducts = async (
 ) => {
   let query = supabase
     .from('products')
-    .select('*', { count: 'exact' })
-    .eq('in_stock', true);
+    .select('*', { count: 'exact' });
 
   // 1. Categories (multiple)
   if (filters.categories && filters.categories.length > 0) {
@@ -289,7 +288,6 @@ export const fetchSellerProducts = async (
       .select('*')
       .eq('seller_id', sellerId)
       .neq('id', excludeProductId)
-      .eq('in_stock', true)
       .limit(limit),
     userId ? getUserFavorites(userId) : Promise.resolve([])
   ]);
@@ -320,7 +318,6 @@ export const fetchSimilarProducts = async (
       .select('*')
       .eq('category', category)
       .neq('id', productId)
-      .eq('in_stock', true)
       .gte('price', priceMin)
       .lte('price', priceMax)
       .limit(limit),

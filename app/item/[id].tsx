@@ -27,10 +27,14 @@ import {
     toggleFavorite,
     trackProductView,
 } from '../../lib/services/productService';
+import { addToCart } from '../../lib/services/cartService';
+import { useCart } from '../../contexts/CartContext';
+import { CartToast } from '../../components/CartToast';
 
 const ItemDetail = () => {
     const router = useRouter();
     const { user } = useAuth();
+    const { refreshCartCount } = useCart();
     const { id } = useLocalSearchParams<{ id: string }>();
 
     const [product, setProduct] = useState<any>(null);
@@ -131,12 +135,21 @@ const ItemDetail = () => {
         }
     };
 
-    const handleAddToCart = () => {
+    const [toastVisible, setToastVisible] = useState(false);
+
+    const handleAddToCart = async () => {
         if (!user) {
             Alert.alert('Sign In Required', 'Please sign in to add items to cart');
             return;
         }
-        Alert.alert('Added to Cart', `${quantity} item(s) added to your cart`);
+
+        const { success } = await addToCart(user.id, id, quantity);
+        if (success) {
+            await refreshCartCount(); // Update the cart count immediately
+            setToastVisible(true);
+        } else {
+            Alert.alert('Error', 'Failed to add item to cart. Please try again.');
+        }
     };
 
     const incrementQuantity = () => {
@@ -172,6 +185,15 @@ const ItemDetail = () => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
+            <CartToast
+                visible={toastVisible}
+                message="Product added to cart"
+                onHide={() => setToastVisible(false)}
+                onViewCart={() => {
+                    setToastVisible(false);
+                    router.push('/cart');
+                }}
+            />
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -499,7 +521,8 @@ const styles = StyleSheet.create({
     bottomBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 16,
+        paddingVertical: 27,
+        paddingHorizontal: 16,
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: Colors.neutral[200],
