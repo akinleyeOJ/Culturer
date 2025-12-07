@@ -25,6 +25,7 @@ const transformProduct = (product: Product, favoriteIds: string[] = []) => ({
   reviews: product.reviews_count,
   shipping: product.shipping,
   outOfStock: product.out_of_stock || !product.in_stock,
+  category: product.category,
   isFavorited: favoriteIds.includes(product.id),
   badge: product.is_featured ? 'HOT' as const : null,
 });

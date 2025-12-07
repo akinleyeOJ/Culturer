@@ -37,7 +37,7 @@ interface Product {
   reviews: number;
   shipping: string;
   outOfStock?: boolean;
-  category?: string;
+  category?: string | null;
   isFavorited?: boolean;
   badge?: "NEW" | "HOT" | null;
 }
@@ -303,6 +303,22 @@ const Browse = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoriesContent}
         >
+          {/* All Chip */}
+          <TouchableOpacity
+            style={[
+              styles.categoryChip,
+              selectedCategories.length === 0 && styles.categoryChipActive
+            ]}
+            onPress={() => setSelectedCategories([])}
+          >
+            <Text style={[
+              styles.categoryText,
+              selectedCategories.length === 0 && styles.categoryTextActive
+            ]}>
+              All
+            </Text>
+          </TouchableOpacity>
+
           {CATEGORIES.map((category) => (
             <TouchableOpacity
               key={category.id}

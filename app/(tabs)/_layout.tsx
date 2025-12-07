@@ -48,6 +48,7 @@ export default function TabLayout() {
         name="Wishlist"
         options={{
           title: "Wishlist",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <HeartIcon size={28} color={color} />
           ),
