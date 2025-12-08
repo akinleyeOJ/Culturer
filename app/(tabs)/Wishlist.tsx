@@ -45,10 +45,10 @@ import {
   ArrowLeftIcon
 } from "react-native-heroicons/outline";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import Reanimated, { 
-  useAnimatedStyle, 
-  interpolate, 
-  Extrapolation 
+import Reanimated, {
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation
 } from "react-native-reanimated";
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -89,7 +89,7 @@ const RightAction = ({ progress, dragX, onDelete }: { progress: any, dragX: any,
       [0, 100],
       Extrapolation.CLAMP
     );
-    
+
     return {
       opacity,
       transform: [{ translateX }],
@@ -831,8 +831,7 @@ const Wishlist = () => {
         ) : (
           <View style={styles.topBar}>
             <View style={styles.headerLeft}>
-              <View style={{ width: 24 }} />
-              <Text style={styles.headerTitle}>Wishlists</Text>
+              <Text style={styles.headerTitle}>Wishlist</Text>
             </View>
 
             <View style={styles.headerRight}>
@@ -859,7 +858,7 @@ const Wishlist = () => {
             <MagnifyingGlassIcon size={20} color={Colors.neutral[500]} />
             <TextInput
               style={styles.input}
-              placeholder="Search in Wishlists"
+              placeholder="Search in Wishlist"
               placeholderTextColor={Colors.neutral[400]}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -1276,7 +1275,8 @@ const styles = StyleSheet.create({
   stockWarning: {
     fontSize: 12,
     color: Colors.danger[500],
-    fontWeight: '600',  },
+    fontWeight: '600',
+  },
   deleteActionContainer: {
     width: 100,
     backgroundColor: Colors.danger[500],
