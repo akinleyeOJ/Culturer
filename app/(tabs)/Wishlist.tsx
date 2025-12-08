@@ -45,9 +45,11 @@ import {
   ArrowLeftIcon
 } from "react-native-heroicons/outline";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-// Using solid/outline mixing might require separate imports if from different packages, 
-// usually react-native-heroicons/outline and /solid are different.
-// The user's env has both. Let me fix imports.
+import Reanimated, { 
+  useAnimatedStyle, 
+  interpolate, 
+  Extrapolation 
+} from "react-native-reanimated";
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -66,6 +68,45 @@ interface Product {
   condition?: string;
   culture?: string;
 }
+
+// Separated and Cleaned RightAction Component
+const RightAction = ({ progress, dragX, onDelete }: { progress: any, dragX: any, onDelete: () => void }) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    // 1. Handle Opacity: Ensure it's 0 at start to prevent flash
+    const opacity = interpolate(
+      progress.value,
+      [0, 0.05, 0.1], // Start appearing only after 5% swipe
+      [0, 0, 1],      // Stay invisible initially, then fade in
+      Extrapolation.CLAMP
+    );
+
+    // 2. Handle Translation: Slide in from the right
+    // dragX goes from 0 to -100 (leftwards)
+    // We want translateX to go from 100 (offscreen right) to 0 (visible)
+    const translateX = interpolate(
+      dragX.value,
+      [-100, 0],
+      [0, 100],
+      Extrapolation.CLAMP
+    );
+    
+    return {
+      opacity,
+      transform: [{ translateX }],
+    };
+  });
+
+  return (
+    <Reanimated.View style={[styles.deleteActionContainer, animatedStyle]}>
+      <TouchableOpacity onPress={onDelete} style={styles.deleteAction} activeOpacity={1}>
+        <View style={styles.deleteContent}>
+          <TrashIcon color="white" size={24} />
+          <Text style={styles.deleteText}>Delete</Text>
+        </View>
+      </TouchableOpacity>
+    </Reanimated.View>
+  );
+};
 
 const WishlistItem = ({
   item,
@@ -92,20 +133,11 @@ const WishlistItem = ({
 }) => {
   const swipeableRef = useRef<any>(null);
 
-  const renderRightActions = useCallback((_progress: any, _dragX: any) => {
+  const renderRightActions = useCallback((progress: any, dragX: any) => {
     // Disable swipe actions in selection mode
     if (isSelectionMode) return null;
 
-    return (
-      <View style={styles.deleteActionContainer}>
-        <TouchableOpacity onPress={onDelete} style={styles.deleteAction} activeOpacity={1}>
-          <View style={styles.deleteContent}>
-            <TrashIcon color="white" size={24} />
-            <Text style={styles.deleteText}>Delete</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
+    return <RightAction progress={progress} dragX={dragX} onDelete={onDelete} />;
   }, [isSelectionMode, onDelete]);
 
   // Calculate price drop percentage if applicable
@@ -233,8 +265,6 @@ const WishlistItem = ({
     </Swipeable>
   );
 };
-
-// ... [ActionSheet and FilterDrawer/Modal can remain mostly as is, just duplicated below for completeness] ...
 
 // Custom Bottom Sheet for Actions
 const ActionSheet = ({ visible, onClose, item, onEnableNotifications, onRemove }: any) => {
@@ -405,8 +435,6 @@ const FilterDrawer = ({ visible, onClose, onApply, initialFilters }: any) => {
               </View>
             </View>
 
-            {/* To save space in tool output I will keep content minimalistic but fully functional */}
-            {/* ... Condition, Culture, Shipping ... */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Condition</Text>
               <View style={styles.chipContainer}>
@@ -582,8 +610,6 @@ const Wishlist = () => {
             setSelectedItems(new Set());
 
             // Perform deletes
-            // Note: toggleFavorite toggles, so if they are favorited this will remove them.
-            // Ideally we want a removeFavorite batch ID, but loop works for now.
             const results = await Promise.all(itemIds.map(id => toggleFavorite(user.id, id)));
             const failures = results.filter(r => !r.success);
 
@@ -827,9 +853,7 @@ const Wishlist = () => {
           </View>
         )}
 
-        {/* Standard Header Components (Search, Category, Filter) - hide in selection mode? 
-            Usually kept, but maybe disabled. Let's keep them usable.
-        */}
+        {/* Standard Header Components (Search, Category, Filter) */}
         <View style={[styles.searchRow, isSelectionMode && { opacity: 0.5 }]} pointerEvents={isSelectionMode ? 'none' : 'auto'}>
           <View style={styles.searchBar}>
             <MagnifyingGlassIcon size={20} color={Colors.neutral[500]} />
@@ -1252,15 +1276,18 @@ const styles = StyleSheet.create({
   stockWarning: {
     fontSize: 12,
     color: Colors.danger[500],
-    fontWeight: '600',
-  },
+    fontWeight: '600',  },
   deleteActionContainer: {
     width: 100,
     backgroundColor: Colors.danger[500],
+    // Removed duplicate width/bg as it's controlled by animated style mainly, 
+    // but good to keep base style. 
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteAction: {
     flex: 1,
-    backgroundColor: Colors.danger[500],
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
