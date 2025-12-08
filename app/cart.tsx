@@ -109,8 +109,8 @@ const Cart = () => {
     };
 
     const handleCheckout = () => {
-        // TODO: Navigate to checkout screen
-        Alert.alert('Checkout', 'Checkout functionality coming soon!');
+        //Navigate to checkout screen
+        router.push('/checkout');
     };
 
     const handleQuickAdd = async (product: any) => {
@@ -177,7 +177,7 @@ const Cart = () => {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Cart ({totals.itemCount})</Text>
