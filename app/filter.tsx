@@ -9,6 +9,7 @@ import { XMarkIcon } from 'react-native-heroicons/outline';
 const FilterScreen = () => {
     const router = useRouter();
     const params = useLocalSearchParams();
+    const returnPath = (params.returnPath as string) || '/(tabs)/Browse';
 
     const [minPrice, setMinPrice] = useState(params.minPrice as string || '');
     const [maxPrice, setMaxPrice] = useState(params.maxPrice as string || '');
@@ -26,11 +27,11 @@ const FilterScreen = () => {
     ];
 
     const handleApply = () => {
-        // Navigate back to Browse with all params
+        // Navigate back to the source screen with all params
         router.push({
-            pathname: '/(tabs)/Browse',
+            pathname: returnPath as any,
             params: {
-                ...params, // Keep existing search/category
+                ...params, // Keep existing search/category/etc passed in
                 minPrice,
                 maxPrice,
                 condition,
