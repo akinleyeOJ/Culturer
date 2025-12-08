@@ -7,6 +7,7 @@
 //............................
 
 type ColorShades = {
+  50: string;
   100: string;
   200: string;
   300: string;
@@ -40,6 +41,7 @@ export type ColorsType = {
 export const Colors: ColorsType = {
   // Coral/Orange - Primary brand color (from buttons and accents)
   primary: {
+    50: "#FFF9F6",
     100: "#FFF5F0",
     200: "#FFE5D9",
     300: "#FFC9B3",
@@ -52,6 +54,7 @@ export const Colors: ColorsType = {
   },
   // Pink/Rose - Secondary accent color
   secondary: {
+    50: "#FFFAFC",
     100: "#FFF0F5",
     200: "#FFE0EC",
     300: "#FFC2D9",
@@ -64,6 +67,7 @@ export const Colors: ColorsType = {
   },
   // Green - For success states and positive indicators
   success: {
+    50: "#F2FCF7",
     100: "#E8FAF0",
     200: "#C6F2DC",
     300: "#8FE6BA",
@@ -76,6 +80,7 @@ export const Colors: ColorsType = {
   },
   // Red - For errors and "out of stock" indicators
   danger: {
+    50: "#FFFAFA",
     100: "#FFF0F0",
     200: "#FFE0E0",
     300: "#FFB8B8",
@@ -88,6 +93,7 @@ export const Colors: ColorsType = {
   },
   // Orange/Amber - For warnings and time badges
   warning: {
+    50: "#FFFCF0",
     100: "#FFF8E6",
     200: "#FFEEB3",
     300: "#FFE180",
@@ -100,6 +106,7 @@ export const Colors: ColorsType = {
   },
   // Neutral/Gray - For text and borders
   neutral: {
+    50: "#FAFAFA",
     100: "#F9F9F9",
     200: "#F0F0F0",
     300: "#E0E0E0",

@@ -8,7 +8,8 @@ interface ToastProps {
     visible: boolean;
     message: string;
     onHide: () => void;
-    onViewCart: () => void;
+    onViewCart?: () => void;
+    actionLabel?: string;
     duration?: number;
 }
 
@@ -17,6 +18,7 @@ export const CartToast = ({
     message,
     onHide,
     onViewCart,
+    actionLabel = "View Cart",
     duration = 3000
 }: ToastProps) => {
     const insets = useSafeAreaInsets();
@@ -72,14 +74,16 @@ export const CartToast = ({
                     <Text style={styles.message}>{message}</Text>
                 </View>
 
-                <TouchableOpacity
-                    style={styles.button}
-                    onPress={onViewCart}
-                    activeOpacity={0.8}
-                >
-                    <Text style={styles.buttonText}>View Cart</Text>
-                    <ShoppingBagIcon size={16} color={Colors.primary[700]} />
-                </TouchableOpacity>
+                {onViewCart && (
+                    <TouchableOpacity
+                        style={styles.button}
+                        onPress={onViewCart}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.buttonText}>{actionLabel}</Text>
+                        <ShoppingBagIcon size={16} color={Colors.primary[700]} />
+                    </TouchableOpacity>
+                )}
             </View>
         </Animated.View>
     );

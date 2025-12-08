@@ -361,7 +361,7 @@ const Cart = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#fff',
     },
     loadingContainer: {
         flex: 1,
@@ -385,6 +385,7 @@ const styles = StyleSheet.create({
     },
     scrollView: {
         flex: 1,
+        backgroundColor: '#F8F9FA',
     },
     sellerSection: {
         backgroundColor: '#fff',
