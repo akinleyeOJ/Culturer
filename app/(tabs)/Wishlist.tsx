@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -44,7 +44,7 @@ import {
   CheckCircleIcon as CheckCircleIconOutline,
   ArrowLeftIcon
 } from "react-native-heroicons/outline";
-import { Swipeable } from "react-native-gesture-handler";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 // Using solid/outline mixing might require separate imports if from different packages, 
 // usually react-native-heroicons/outline and /solid are different.
 // The user's env has both. Let me fix imports.
@@ -83,22 +83,22 @@ const WishlistItem = ({
   onPress: () => void,
   onDelete: () => void,
   onMenuPress: () => void,
-  onSwipeStart: (ref: Swipeable) => void,
+  onSwipeStart: (ref: any) => void,
   onAddToCart: () => void,
   isSelectionMode: boolean,
   isSelected: boolean,
   onLongPress: () => void,
   onToggleSelection: () => void,
 }) => {
-  const swipeableRef = useRef<Swipeable>(null);
+  const swipeableRef = useRef<any>(null);
 
-  const renderRightActions = (_progress: any, _dragX: any) => {
+  const renderRightActions = useCallback((_progress: any, _dragX: any) => {
     // Disable swipe actions in selection mode
     if (isSelectionMode) return null;
 
     return (
       <View style={styles.deleteActionContainer}>
-        <TouchableOpacity onPress={onDelete} style={styles.deleteAction}>
+        <TouchableOpacity onPress={onDelete} style={styles.deleteAction} activeOpacity={1}>
           <View style={styles.deleteContent}>
             <TrashIcon color="white" size={24} />
             <Text style={styles.deleteText}>Delete</Text>
@@ -106,7 +106,7 @@ const WishlistItem = ({
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [isSelectionMode, onDelete]);
 
   // Calculate price drop percentage if applicable
   const priceDropPercent = useMemo(() => {
@@ -478,7 +478,7 @@ const Wishlist = () => {
   const [selectedActionItem, setSelectedActionItem] = useState<Product | null>(null);
 
   // Track open swipeable
-  const openSwipeableRef = useRef<Swipeable | null>(null);
+  const openSwipeableRef = useRef<any | null>(null);
 
   const loadData = async () => {
     if (!user) {
@@ -675,7 +675,7 @@ const Wishlist = () => {
     setActionSheetVisible(true);
   };
 
-  const handleSwipeStart = (ref: Swipeable) => {
+  const handleSwipeStart = (ref: any) => {
     if (openSwipeableRef.current && openSwipeableRef.current !== ref) {
       openSwipeableRef.current.close();
     }
@@ -1234,8 +1234,8 @@ const styles = StyleSheet.create({
   },
   addToCartButton: {
     backgroundColor: Colors.primary[500],
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
     borderRadius: 8,
   },
   addToCartButtonDisabled: {
@@ -1403,8 +1403,8 @@ const styles = StyleSheet.create({
   },
   filterPriceRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   priceInput: {
     flex: 1,
