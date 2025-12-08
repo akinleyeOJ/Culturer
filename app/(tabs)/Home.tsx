@@ -299,7 +299,7 @@ const Home = () => {
         cartCount={cartCount}
         isScrolled={isScrolled}
         onSearchPress={() => router.push('/search')}
-        onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
+        onWishlistPress={() => router.push('/(tabs)/Wishlist')}
         onCartPress={() => router.push('/cart')}
       />
 

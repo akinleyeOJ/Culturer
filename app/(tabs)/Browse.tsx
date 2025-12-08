@@ -492,7 +492,7 @@ const Browse = () => {
         wishlistCount={wishlistCount}
         cartCount={cartCount}
         isScrolled={isScrolled}
-        onWishlistPress={() => Alert.alert('Wishlist', 'Navigate to wishlist')}
+        onWishlistPress={() => router.push('/(tabs)/Wishlist')}
         onCartPress={() => router.push('/cart')}
       />
 
