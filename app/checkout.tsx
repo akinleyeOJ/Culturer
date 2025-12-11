@@ -184,7 +184,7 @@ const renderProgressBar = () => (
     </View>
 );
 
-// Delivery Form 
+// Delivery Form - Step 1
 const renderDeliveryStep = () => (
   <View style={styles.stepContainer}>
         {/* Customer Information  */}
@@ -259,12 +259,154 @@ const renderDeliveryStep = () => (
         </View>
 
         {/* Shipping Method */}
-         
-    </View>
-  </View>
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Shipping Method</Text>
+       
+            <TouchableOpacity
+                style={[styles.radioOption, shippingMethod === 'standard' && styles.radioOptionSelected]} 
+                onPress={() => setShippingMethod('standard')}
+            >
+                <View style={styles.radioRow}>
+                    <View style={styles.radioCircle}>
+                        {shippingMethod === 'standard' && <View style={styles.radioDot} />}
+                    </View>
+                    <View>
+                        <Text styles={styles.radioTitle}>Standard Delivery</Text>
+                        <Text styles={styles.radioSubtitle}>Est. 3-5 Business Days</Text>
+                    </View>
+                    {/* Need to setup shipping for free/ using Courier integration. Api maybe */}
+                    <Text style={styles.radioPrice}>Free</Text>
+                </View>
+            </TouchableOpacity>
 
-);
+            <TouchableOpacity
+                style={[styles.radioOption, shippingMethod === 'express' && styles.radioOptionSelected]}
+                onPress={() => setShippingMethod('standard')}
+            >
+                <View style={styles.radioRow}>
+                    <View style={styles.radioCircle}>
+                        {shippingMethod === 'express' && <View style={styles.radioDot} />}
+                    </View>
+                    <View>
+                        <Text styles={styles.radioTitle}>Express Delivery</Text>
+                        <Text styles={styles.radioSubtitle}>Est. 1-2 Business Days</Text>
+                    </View>
+                </View>
+                {/* Need to setup shipping for free/ using Courier integration. Api maybe */}
+                <Text style={styles.radioPrice}>Free</Text>
+            </TouchableOpacity>
 
+            <TouchableOpacity
+                style={[styles.radioOption, shippingMethod === 'express' && styles.radioOptionSelected]}
+                onPress={() => setShippingMethod('express')}
+            >
+                <View style={styles.radioRow}>
+                    <View style={styles.radioRow}>
+                        {shippingMethod === 'express' && <View style={styles.radioDot} />}
+                    </View>
+                    <View>
+                        <Text style={styles.radioTitle}>Express Delivery</Text>
+                        <Text style={styles.radioSubtitle}>Est. 1-2 days</Text>
+                    </View>
+                </View>
+                <Text style={styles.radioPrice}>$15.00</Text>
+            </TouchableOpacity>
+            </View>
+
+            {/* Notes */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Notes</Text>
+                <TextInput
+                    style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                    placeholder="Add any special instructions/notes for delivery"
+                    multiline
+                    numberOfLines={3}
+                    value={orderNotes}
+                    onChangeText={setOrderNotes}
+                />
+            </View>
+        </View>
+    );
+    {/* Payment Form - Step 2 */}
+
+    const renderPaymentStep = () => (
+        <View style={styles.stepContainer}>
+            <View style={styles.section}>
+                <TouchableOpacity
+                    style={styles.checkboxRow}
+                    onPress={() => setBillingSameAsShipping(!billingSameAsShipping)}
+                >
+                    <View style={[styles.checkbox, billingSameAsShipping && StyleSheet.checkboxActive]}>
+                        {billingSameAsShipping && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>Billing address same as shipping</Text>
+                </TouchableOpacity>
+
+                {!billingSameAsShipping && (
+                    <Text style={{ marginTop: 10, color: Colors.text.secondary, fontStyle: 'italic' }}>
+                        (Billing address form would appear here)
+                    </Text>
+                )}
+            </View>
+
+            <View style={styles.section}> 
+                <Text style={styles.sectionTitle}>Payment Details</Text>
+                <View styles={StyleSheet.cardInputContainer}>
+                    <View style={StyleSheet.inputWrapper}>
+                        <CreditCardIcon color={Colors.neutral[500]} size={20} />
+                        <TextInput
+                            style={styles.cardInput}
+                            placeholder="Card Number"
+                            value={cardNumber}
+                            onChangeText={setCardNumber}
+                            keyboardType="numeric"
+                            maxLength={10}
+                        />
+                    </View>
+                    <View style={styles.row}>
+                        <View style={[StyleSheet.inputWrapper, StyleSheet.halfInput]}>
+                            <TextInput
+                                style={styles.cardInput}
+                                placeholder="MM/YY"
+                                value={cardExpiry}
+                                onChangeText={setCardExpiry}
+                                keyboardType="numeric"
+                                maxLength={5}
+                            />
+                        </View>
+                        <View style={[styles.inputWrapper, styles.halfInput]}>
+                            <TextInput
+                                style={styles.cardInput}
+                                placeholder="CVV"
+                                value={cardCvv}
+                                onChangeText={setCardCvv}
+                                keyboardType="numeric"
+                                maxLength={3}
+                                secureTextEntry
+                            />
+                        </View>
+                    </View>
+                </View>
+                <View style={StyleSheet.secureBadge}>
+                    <LockClosedIcon size={12} color={Colors.success[700]} />
+                    <Text style={styles.secureText}>Payments are secure and encrypted</Text>
+                </View>
+            </View>
+        </View>
+    );
+
+    {/* Review Order - Step 3 */}
+    const renderReviewStep = () => (
+        <View style={styles.stepContainer}>
+          <View>
+            
+          </View>
+            <Text style={styles.stepTitle}>Review Order</Text>
+            <Text style={styles.stepDescription}>Please review your order details before proceeding to payment.</Text>
+        </View>
+    );
+
+    
 
 const styles = StyleSheet.create({
     
