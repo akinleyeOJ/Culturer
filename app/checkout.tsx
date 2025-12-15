@@ -398,11 +398,48 @@ const renderDeliveryStep = () => (
     {/* Review Order - Step 3 */}
     const renderReviewStep = () => (
         <View style={styles.stepContainer}>
-          <View>
-            
-          </View>
-            <Text style={styles.stepTitle}>Review Order</Text>
-            <Text style={styles.stepDescription}>Please review your order details before proceeding to payment.</Text>
+            {/* Order Summary */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Order Summary</Text>
+                {cartItems.map((item) => (
+                    <View key={item.id} style={styles.reviewItem}>
+                        <Image 
+                            source={
+                                item.product.image_url 
+                                ? { uri: item.product.image_url } 
+                                : { uri: "https://via.placeholder.com/60" } // Fallback
+                            } 
+                            style={styles.reviewImage} 
+                        />
+                        <View style={styles.reviewItemDetails}>
+                            <Text style={styles.reviewItemName} numberOfLines={1}>{item.product.name}</Text>
+                            <Text style={styles.reviewItemMeta}>Qty: {item.quantity}</Text>
+                        </View>
+                        <Text style={styles.reviewItemPrice}>${(item.product.price * item.quantity).toFixed(2)}</Text>
+                    </View>
+                ))}
+            </View>
+    
+            {/* Order Totals */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Order Totals</Text>
+                <View style={styles.reviewItem}>
+                    <Text style={styles.reviewItemName}>Subtotal</Text>
+                    <Text style={styles.reviewItemPrice}>${totals.subtotal.toFixed(2)}</Text>
+                </View>
+                <View style={styles.reviewItem}>
+                    <Text style={styles.reviewItemName}>Shipping</Text>
+                    <Text style={styles.reviewItemPrice}>${totals.shippingCost.toFixed(2)}</Text>
+                </View>
+                <View style={styles.reviewItem}>
+                    <Text style={styles.reviewItemName}>Tax</Text>
+                    <Text style={styles.reviewItemPrice}>${totals.taxRate.toFixed(2)}</Text>
+                </View>
+                <View style={styles.reviewItem}>
+                    <Text style={styles.reviewItemName}>Total</Text>
+                    <Text style={styles.reviewItemPrice}>${totals.total.toFixed(2)}</Text>
+                </View>
+            </View>
         </View>
     );
 
