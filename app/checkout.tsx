@@ -10,10 +10,14 @@ import {
     Image,
     ActivityIndicator,
     KeyboardAvoidingView,
-    Platform
+    Platform,
+    Modal,
+    FlatList,
+    Pressable
 } from 'react-native';
+import { MagnifyingGlassIcon, XMarkIcon, ChevronDownIcon } from 'react-native-heroicons/outline';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { Colors } from '../constants/color';
 import CustomButton from '../components/Button';
 import { useCart } from '../contexts/CartContext';
@@ -27,12 +31,26 @@ import {
 } from 'react-native-heroicons/outline';
 import { CheckCircleIcon as CheckCircleSolid } from 'react-native-heroicons/solid';
 
+const COUNTRIES = [
+    { name: "Austria", flag: "🇦🇹" }, { name: "Belgium", flag: "🇧🇪" }, { name: "Bulgaria", flag: "🇧🇬" },
+    { name: "Croatia", flag: "🇭🇷" }, { name: "Cyprus", flag: "🇨🇾" }, { name: "Czech Republic", flag: "🇨🇿" },
+    { name: "Denmark", flag: "🇩🇰" }, { name: "Estonia", flag: "🇪🇪" }, { name: "Finland", flag: "🇫🇮" },
+    { name: "France", flag: "🇫🇷" }, { name: "Germany", flag: "🇩🇪" }, { name: "Greece", flag: "🇬🇷" },
+    { name: "Hungary", flag: "🇭🇺" }, { name: "Ireland", flag: "🇮🇪" }, { name: "Italy", flag: "🇮🇹" },
+    { name: "Latvia", flag: "🇱🇻" }, { name: "Lithuania", flag: "🇱🇹" }, { name: "Luxembourg", flag: "🇱🇺" },
+    { name: "Malta", flag: "🇲🇹" }, { name: "Netherlands", flag: "🇳🇱" }, { name: "Poland", flag: "🇵🇱" },
+    { name: "Portugal", flag: "🇵🇹" }, { name: "Romania", flag: "🇷🇴" }, { name: "Slovakia", flag: "🇸🇰" },
+    { name: "Slovenia", flag: "🇸🇮" }, { name: "Spain", flag: "🇪🇸" }, { name: "Sweden", flag: "🇸🇪" },
+    { name: "United Kingdom", flag: "🇬🇧" }
+].sort((a, b) => a.name.localeCompare(b.name));
+
 // Types 
 type CheckoutStep = 1 | 2 | 3;
 type ShippingMethod = 'standard' | 'express';
 
 const Checkout = () => {
     const router = useRouter();
+    const navigation = useNavigation();
     const { user } = useAuth();
     const { refreshCartCount } = useCart();
 
@@ -53,14 +71,47 @@ const Checkout = () => {
     const [address2, setAddress2] = useState('');
     const [city, setCity] = useState('');
     const [zipCode, setZipCode] = useState('');
+    const [country, setCountry] = useState('Ireland');
     const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
     const [orderNote, setOrderNote] = useState('');
+    const [saveAddress, setSaveAddress] = useState(false);
 
     // Payment State
     const [billingSameAsShipping, setBillingSameAsShipping] = useState(true);
+    const [cardHolderName, setCardHolderName] = useState('');
     const [cardNumber, setCardNumber] = useState('');
     const [cardExpiry, setCardExpiry] = useState('');
     const [cardCvv, setCardCvv] = useState('');
+    const [saveCard, setSaveCard] = useState(false);
+
+    // Filter/Modal State
+    const [showCountryPicker, setShowCountryPicker] = useState(false);
+    const [searchCountry, setSearchCountry] = useState('');
+
+    // Handle Back Navigation
+    const stepRef = React.useRef(step);
+    useEffect(() => {
+        stepRef.current = step;
+        // **** i addeded this Disable native swipe gesture on steps > 1 to prevent accidental exit, This forces the user to use the custom UI back button for inter-step navigation
+        navigation.setOptions({
+            gestureEnabled: step === 1
+        });
+    }, [step, navigation]);
+
+    useEffect(() => {
+        const onBeforeRemove = (e: any) => {
+            // Check current step using ref
+            if (stepRef.current > 1) {
+                // Prevent default behavior of leaving the screen
+                e.preventDefault();
+                // Go back one step instead
+                setStep((prev) => (prev - 1) as CheckoutStep);
+            }
+        };
+
+        const unsubscribe = navigation.addListener('beforeRemove', onBeforeRemove);
+        return unsubscribe;
+    }, [navigation]);
 
     // Data Loading 
     useEffect(() => {
@@ -70,7 +121,10 @@ const Checkout = () => {
             setCartItems(items);
 
             // Prefill form data if available 
-            const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+            const { data: profile } = await supabase.from('profiles')
+                .select('full_name, saved_address, payment_methods')
+                .eq('id', user.id)
+                .single();
 
             if (user.email) setEmail(user.email);
 
@@ -79,10 +133,46 @@ const Checkout = () => {
                 setFirstName(names[0]);
                 if (names.length > 1) setLastName(names.slice(1).join(' '));
             }
+
+            // Load saved address if available
+            if (profile?.saved_address) {
+                const addr = profile.saved_address as any;
+                if (addr.line1) setAddress1(addr.line1);
+                if (addr.line2) setAddress2(addr.line2);
+                if (addr.city) setCity(addr.city);
+                if (addr.zipCode) setZipCode(addr.zipCode);
+                if (addr.country) setCountry(addr.country);
+                if (addr.phone) setPhone(addr.phone);
+                if (addr.firstName) setFirstName(addr.firstName);
+                if (addr.lastName) setLastName(addr.lastName);
+            }
+
             setLoading(false);
         };
         loadData();
     }, [user]);
+
+    // Zip Code Change Handling (Mock City Autofill)
+    useEffect(() => {
+        if (!zipCode) return;
+
+        // Mock UK/Ireland logic
+        const cleanZip = zipCode.replace(/\s/g, '').toUpperCase();
+
+        const mockCities: Record<string, string> = {
+            'SW1': 'London', 'M1': 'Manchester', 'B1': 'Birmingham',
+            'D01': 'Dublin', 'D02': 'Dublin', 'T12': 'Cork',
+            'EH1': 'Edinburgh', 'G1': 'Glasgow', 'CF10': 'Cardiff',
+            'BT1': 'Belfast', '75001': 'Paris', '10115': 'Berlin',
+            '00185': 'Rome', '28013': 'Madrid', '1000': 'Brussels'
+        };
+
+        // Check for partial match prefix
+        const mathedPrefix = Object.keys(mockCities).find(prefix => cleanZip.startsWith(prefix));
+        if (mathedPrefix) {
+            setCity(mockCities[mathedPrefix]);
+        }
+    }, [zipCode]);
 
     // Total cost calculations 
     const totals = useMemo(() => {
@@ -94,17 +184,110 @@ const Checkout = () => {
         return { subtotal, shippingCost, tax, total };
     }, [cartItems, shippingMethod]);
 
+    // Formatters
+    const formatCardNumber = (text: string) => {
+        const cleaned = text.replace(/\D/g, '');
+        const truncated = cleaned.slice(0, 16); // Limit to 16 digits
+        const groups = truncated.match(/.{1,4}/g) || [];
+        setCardNumber(groups.join(' '));
+    };
+
+    const formatExpiryDate = (text: string) => {
+        const cleaned = text.replace(/\D/g, '');
+        if (cleaned.length >= 3) {
+            setCardExpiry(`${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`);
+        } else {
+            setCardExpiry(cleaned);
+        }
+    };
+
+    // Filtered Countries
+    const filteredCountries = useMemo(() => {
+        if (!searchCountry) return COUNTRIES;
+        return COUNTRIES.filter(c => c.name.toLowerCase().includes(searchCountry.toLowerCase()));
+    }, [searchCountry]);
+
+    // Render Country Modal
+    const renderCountryModal = () => (
+        <Modal
+            visible={showCountryPicker}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowCountryPicker(false)}
+        >
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                        <ChevronLeftIcon size={24} color={Colors.text.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.modalTitle}>Select country</Text>
+                    <View style={{ width: 24 }} />
+                </View>
+
+                <View style={styles.searchContainer}>
+                    <MagnifyingGlassIcon size={20} color={Colors.neutral[400]} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search"
+                        value={searchCountry}
+                        onChangeText={setSearchCountry}
+                        autoCorrect={false}
+                    />
+                    {searchCountry.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchCountry('')}>
+                            <XMarkIcon size={20} color={Colors.neutral[400]} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                <FlatList
+                    data={filteredCountries}
+                    keyExtractor={(item) => item.name}
+                    renderItem={({ item, index }) => {
+                        const firstLetter = item.name[0];
+                        const prevLetter = index > 0 ? filteredCountries[index - 1].name[0] : null;
+                        const showHeader = firstLetter !== prevLetter;
+
+                        return (
+                            <View>
+                                {showHeader && (
+                                    <Text style={styles.countrySectionHeader}>{firstLetter}</Text>
+                                )}
+                                <TouchableOpacity
+                                    style={styles.countryItem}
+                                    onPress={() => {
+                                        setCountry(item.name);
+                                        setShowCountryPicker(false);
+                                    }}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 24, marginRight: 12 }}>{item.flag}</Text>
+                                        <Text style={styles.countryName}>{item.name}</Text>
+                                    </View>
+                                    {country === item.name && (
+                                        <CheckCircleSolid size={20} color={Colors.primary[500]} />
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    }}
+                    contentContainerStyle={{ paddingBottom: 40 }}
+                />
+            </View>
+        </Modal>
+    );
+
     // Handlers 
     const handleNextStep = () => {
         if (step === 1) {
-            if (!address1 || !city || !zipCode || !firstName || !lastName) {
+            if (!address1 || !city || !zipCode || !firstName || !lastName || !country) {
                 Alert.alert('Missing Information', 'Please fill in all required shipping fields');
                 return;
             }
             setStep(2);
         } else if (step === 2) {
             // Validate payment info 
-            if (cardNumber.length < 12 || !cardExpiry || cardCvv.length < 3) {
+            if (cardNumber.replace(/\s/g, '').length < 16 || cardExpiry.length < 5 || cardCvv.length < 3 || !cardHolderName) {
                 Alert.alert('Missing Information', 'Please fill in all required payment fields');
                 return;
             }
@@ -117,6 +300,33 @@ const Checkout = () => {
         setProcessing(true);
 
         try {
+            const shippingAddressObj = {
+                line1: address1,
+                line2: address2,
+                city,
+                zipCode,
+                country,
+                phone,
+                firstName,
+                lastName,
+            };
+
+            // Save Address if requested
+            if (saveAddress) {
+                await supabase.from('profiles').update({
+                    saved_address: shippingAddressObj
+                }).eq('id', user.id);
+            }
+
+            // Save Payment Method if requested (STORING SENSITIVE DATA IN RAW FORM IS BAD PRACTICE - DEMO ONLY)
+            if (saveCard) {
+                // In production: Tokenize this with Stripe/PayPal and store the token.
+                // Here we just mock saving "preference" or basic non-sensitive info
+                await supabase.from('profiles').update({
+                    payment_methods: { last4: cardNumber.slice(-4), cardHolder: cardHolderName }
+                }).eq('id', user.id);
+            }
+
             // 1. Create order record
             const { data: order, error: orderError } = await supabase.from('orders').insert({
                 user_id: user.id,
@@ -126,15 +336,7 @@ const Checkout = () => {
                 tax: totals.tax, // Changed from tax_rate to tax to match DB schema
                 total_amount: totals.total, // Changed to total_amount to match DB schema
                 status: 'confirmed',
-                shipping_address: {
-                    line1: address1,
-                    line2: address2,
-                    city,
-                    zipCode,
-                    phone,
-                    firstName,
-                    lastName,
-                },
+                shipping_address: shippingAddressObj,
                 payment_method: 'card',
                 notes: orderNote,
             })
@@ -247,6 +449,17 @@ const Checkout = () => {
                     value={address2}
                     onChangeText={setAddress2}
                 />
+
+                {/* Country Selection */}
+                <Text style={styles.formLabel}>Country</Text>
+                <TouchableOpacity
+                    style={styles.countrySelector}
+                    onPress={() => setShowCountryPicker(true)}
+                >
+                    <Text style={styles.countrySelectorText}>{country}</Text>
+                    <ChevronDownIcon size={20} color={Colors.text.secondary} />
+                </TouchableOpacity>
+
                 <View style={styles.row}>
                     <TextInput
                         style={[styles.input, styles.halfInput]}
@@ -268,6 +481,16 @@ const Checkout = () => {
                     onChangeText={setPhone}
                     keyboardType="phone-pad"
                 />
+
+                <TouchableOpacity
+                    style={styles.checkboxRow}
+                    onPress={() => setSaveAddress(!saveAddress)}
+                >
+                    <View style={[styles.checkbox, saveAddress && styles.checkboxActive]}>
+                        {saveAddress && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>Save this address for later</Text>
+                </TouchableOpacity>
             </View>
 
             {/* Shipping Method */}
@@ -345,42 +568,74 @@ const Checkout = () => {
 
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Payment Details</Text>
-                <View style={styles.cardInputContainer}>
-                    <View style={styles.inputWrapper}>
-                        <CreditCardIcon color={Colors.neutral[500]} size={20} />
+
+                {/* Cardholder Name */}
+                <View style={{ marginBottom: 16 }}>
+                    <Text style={styles.formLabel}>Cardholder's Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g. John Doe"
+                        value={cardHolderName}
+                        onChangeText={setCardHolderName}
+                        autoCapitalize="words"
+                    />
+                </View>
+
+                {/* Card Number */}
+                <View style={{ marginBottom: 16 }}>
+                    <Text style={styles.formLabel}>Card Number</Text>
+                    <View style={[styles.inputWrapper, { borderWidth: 1, borderColor: Colors.neutral[300], borderRadius: 8, paddingHorizontal: 12 }]}>
+                        <CreditCardIcon color={Colors.neutral[500]} size={24} />
                         <TextInput
-                            style={styles.cardInput}
-                            placeholder="Card Number"
+                            style={[styles.cardInput, { paddingVertical: 12 }]}
+                            placeholder="0000 0000 0000 0000"
                             value={cardNumber}
-                            onChangeText={setCardNumber}
+                            onChangeText={formatCardNumber} // Use formatter
                             keyboardType="numeric"
-                            maxLength={19}
+                            maxLength={19} // 16 digits + 3 spaces
                         />
                     </View>
-                    <View style={styles.row}>
-                        <View style={[styles.inputWrapper, styles.halfInput]}>
-                            <TextInput
-                                style={styles.cardInput}
-                                placeholder="MM/YY"
-                                value={cardExpiry}
-                                onChangeText={setCardExpiry}
-                                keyboardType="numeric"
-                                maxLength={5}
-                            />
-                        </View>
-                        <View style={[styles.inputWrapper, styles.halfInput]}>
-                            <TextInput
-                                style={styles.cardInput}
-                                placeholder="CVV"
-                                value={cardCvv}
-                                onChangeText={setCardCvv}
-                                keyboardType="numeric"
-                                maxLength={3}
-                                secureTextEntry
-                            />
-                        </View>
+                </View>
+
+                <View style={styles.row}>
+                    <View style={[styles.halfInput]}>
+                        <Text style={styles.formLabel}>Expiry Date</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="MM/YY"
+                            value={cardExpiry}
+                            onChangeText={formatExpiryDate} // Use formatter
+                            keyboardType="numeric"
+                            maxLength={5}
+                        />
+                    </View>
+                    <View style={[styles.halfInput]}>
+                        <Text style={styles.formLabel}>Security Code</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="123"
+                            value={cardCvv}
+                            onChangeText={setCardCvv}
+                            keyboardType="numeric"
+                            maxLength={3}
+                            secureTextEntry
+                        />
                     </View>
                 </View>
+
+                <TouchableOpacity
+                    style={[styles.checkboxRow, { marginTop: 8 }]}
+                    onPress={() => setSaveCard(!saveCard)}
+                >
+                    <View style={[styles.checkbox, saveCard && styles.checkboxActive]}>
+                        {saveCard && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.checkboxLabel}>Agree to save these card details for faster checkout.</Text>
+                        <Text style={{ fontSize: 12, color: Colors.text.secondary, marginTop: 4 }}>You can remove the card anytime in Settings, under Payments.</Text>
+                    </View>
+                </TouchableOpacity>
+
                 <View style={styles.secureBadge}>
                     <LockClosedIcon size={12} color={Colors.success[700]} />
                     <Text style={styles.secureText}>Payments are secure and encrypted</Text>
@@ -525,6 +780,7 @@ const Checkout = () => {
                         />
                     )}
                 </View>
+                {renderCountryModal()}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -859,6 +1115,99 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: Colors.text.secondary,
     },
+    pillContainer: {
+        marginBottom: 16,
+    },
+    pill: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: Colors.neutral[100],
+        borderWidth: 1,
+        borderColor: Colors.neutral[200],
+    },
+    pillSelected: {
+        backgroundColor: Colors.primary[50],
+        borderColor: Colors.primary[500],
+    },
+    pillText: {
+        fontSize: 14,
+        color: Colors.text.primary,
+    },
+    pillTextSelected: {
+        color: Colors.primary[600],
+        fontWeight: '600',
+    },
+    countrySelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: Colors.neutral[300],
+        borderRadius: 8,
+        padding: 12,
+        backgroundColor: Colors.neutral[50],
+        marginBottom: 16,
+    },
+    countrySelectorText: {
+        fontSize: 16,
+        color: Colors.text.primary,
+    },
+    modalContainer: {
+        flex: 1,
+        backgroundColor: '#fff',
+        paddingTop: Platform.OS === 'android' ? 20 : 0,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.neutral[100],
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.text.primary,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.neutral[100],
+        margin: 16,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+    },
+    searchInput: {
+        flex: 1,
+        marginLeft: 8,
+        fontSize: 16,
+        color: Colors.text.primary,
+    },
+    countryItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.neutral[100],
+    },
+    countryName: {
+        fontSize: 16,
+        color: Colors.text.primary,
+    },
+    countrySectionHeader: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.text.secondary,
+        backgroundColor: Colors.neutral[50],
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+    }
 });
 
 export default Checkout;

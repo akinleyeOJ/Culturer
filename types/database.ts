@@ -17,6 +17,8 @@ export interface Database {
           bio: string | null
           created_at: string
           updated_at: string
+          saved_address: Json | null
+          payment_methods: Json | null
         }
         Insert: {
           id: string
@@ -25,6 +27,8 @@ export interface Database {
           bio?: string | null
           created_at?: string
           updated_at?: string
+          saved_address?: Json | null
+          payment_methods?: Json | null
         }
         Update: {
           id?: string
@@ -33,6 +37,8 @@ export interface Database {
           bio?: string | null
           created_at?: string
           updated_at?: string
+          saved_address?: Json | null
+          payment_methods?: Json | null
         }
         Relationships: [
           {
