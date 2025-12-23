@@ -13,8 +13,10 @@ import {
     Platform,
     Modal,
     FlatList,
-    Pressable
+    Pressable,
+    Switch, // Ensure Image is imported for logos if needed
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MagnifyingGlassIcon, XMarkIcon, ChevronDownIcon } from 'react-native-heroicons/outline';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useNavigation } from 'expo-router';
@@ -25,9 +27,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { fetchCart, clearCart, CartItem } from '../lib/services/cartService';
 import {
-    LockClosedIcon,
     ChevronLeftIcon,
-    CreditCardIcon
+    DevicePhoneMobileIcon,
+    CreditCardIcon,
+    LockClosedIcon,
+    BanknotesIcon
 } from 'react-native-heroicons/outline';
 import { CheckCircleIcon as CheckCircleSolid } from 'react-native-heroicons/solid';
 
@@ -48,6 +52,18 @@ const COUNTRIES = [
 type CheckoutStep = 1 | 2 | 3;
 type ShippingMethod = 'standard' | 'express';
 
+interface Address {
+    line1: string;
+    line2: string;
+    city: string;
+    zipCode: string;
+    country: string;
+    phone: string;
+    firstName: string;
+    lastName: string;
+    label?: string; // e.g. "Home", "Office"
+}
+
 const Checkout = () => {
     const router = useRouter();
     const navigation = useNavigation();
@@ -62,6 +78,10 @@ const Checkout = () => {
     // Data 
     const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
+    // Mobile Payments
+    const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+    const [selectedAddressIndex, setSelectedAddressIndex] = useState<number | null>(null);
+
     // Form State
     const [email, setEmail] = useState('');
     const [firstName, setFirstName] = useState('');
@@ -71,13 +91,13 @@ const Checkout = () => {
     const [address2, setAddress2] = useState('');
     const [city, setCity] = useState('');
     const [zipCode, setZipCode] = useState('');
-    const [country, setCountry] = useState('Ireland');
+    const [country, setCountry] = useState('');
     const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
     const [orderNote, setOrderNote] = useState('');
     const [saveAddress, setSaveAddress] = useState(false);
 
     // Payment State
-    const [billingSameAsShipping, setBillingSameAsShipping] = useState(true);
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'apple_pay' | 'blik' | 'paypal'>('card');
     const [cardHolderName, setCardHolderName] = useState('');
     const [cardNumber, setCardNumber] = useState('');
     const [cardExpiry, setCardExpiry] = useState('');
@@ -89,29 +109,14 @@ const Checkout = () => {
     const [searchCountry, setSearchCountry] = useState('');
 
     // Handle Back Navigation
-    const stepRef = React.useRef(step);
+    // Handle Back Navigation
     useEffect(() => {
-        stepRef.current = step;
-        // **** i addeded this Disable native swipe gesture on steps > 1 to prevent accidental exit, This forces the user to use the custom UI back button for inter-step navigation
+        // Disable native swipe gesture on steps > 1 to prevent accidental exit
+        // This forces the user to use the custom UI back button for inter-step navigation
         navigation.setOptions({
             gestureEnabled: step === 1
         });
     }, [step, navigation]);
-
-    useEffect(() => {
-        const onBeforeRemove = (e: any) => {
-            // Check current step using ref
-            if (stepRef.current > 1) {
-                // Prevent default behavior of leaving the screen
-                e.preventDefault();
-                // Go back one step instead
-                setStep((prev) => (prev - 1) as CheckoutStep);
-            }
-        };
-
-        const unsubscribe = navigation.addListener('beforeRemove', onBeforeRemove);
-        return unsubscribe;
-    }, [navigation]);
 
     // Data Loading 
     useEffect(() => {
@@ -121,10 +126,16 @@ const Checkout = () => {
             setCartItems(items);
 
             // Prefill form data if available 
-            const { data: profile } = await supabase.from('profiles')
+            const { data: profile, error: profileError } = await supabase.from('profiles')
                 .select('full_name, saved_address, payment_methods')
                 .eq('id', user.id)
                 .single();
+
+            if (profileError) {
+                console.error('Error loading profile:', profileError);
+            }
+
+            console.log('Profile query result:', { profile, error: profileError });
 
             if (user.email) setEmail(user.email);
 
@@ -136,15 +147,59 @@ const Checkout = () => {
 
             // Load saved address if available
             if (profile?.saved_address) {
-                const addr = profile.saved_address as any;
-                if (addr.line1) setAddress1(addr.line1);
-                if (addr.line2) setAddress2(addr.line2);
-                if (addr.city) setCity(addr.city);
-                if (addr.zipCode) setZipCode(addr.zipCode);
-                if (addr.country) setCountry(addr.country);
-                if (addr.phone) setPhone(addr.phone);
-                if (addr.firstName) setFirstName(addr.firstName);
-                if (addr.lastName) setLastName(addr.lastName);
+                const rawAddr = profile.saved_address as any;
+                console.log('Raw saved_address from DB:', rawAddr);
+                // Handle legacy single object or new array
+                let addrs: Address[] = [];
+                if (Array.isArray(rawAddr)) {
+                    addrs = rawAddr;
+                } else if (rawAddr.line1) {
+                    addrs = [rawAddr];
+                }
+
+                console.log('Parsed addresses:', addrs);
+                setSavedAddresses(addrs);
+
+                // Pre-select the first one if available
+                if (addrs.length > 0) {
+                    fillAddressForm(addrs[0]);
+                    setSelectedAddressIndex(0);
+                }
+            } else {
+                console.log('No saved_address found in profile');
+            }
+
+            // Load saved payment info if available (partial)
+            if (profile?.payment_methods) {
+                const pm = profile.payment_methods as any;
+                if (pm.cardHolder) setCardHolderName(pm.cardHolder);
+            }
+
+            // Log successful load for debugging
+            console.log('Profile loaded:', profile);
+
+            // CHECKOUT DRAFT (Local Persistence) - Overrides profile if exists
+            try {
+                const draftJson = await AsyncStorage.getItem('checkout_draft');
+                if (draftJson) {
+                    const draft = JSON.parse(draftJson);
+                    if (draft.email) setEmail(draft.email);
+                    if (draft.firstName) setFirstName(draft.firstName);
+                    if (draft.lastName) setLastName(draft.lastName);
+                    if (draft.address1) setAddress1(draft.address1);
+                    if (draft.address2) setAddress2(draft.address2);
+                    if (draft.city) setCity(draft.city);
+                    if (draft.zipCode) setZipCode(draft.zipCode);
+                    if (draft.country) setCountry(draft.country);
+                    if (draft.phone) setPhone(draft.phone);
+                    if (draft.shippingMethod) setShippingMethod(draft.shippingMethod);
+                    // Payment - only restore if not empty
+                    if (draft.cardHolderName) setCardHolderName(draft.cardHolderName);
+                    if (draft.cardNumber) setCardNumber(draft.cardNumber);
+                    if (draft.cardExpiry) setCardExpiry(draft.cardExpiry);
+                }
+            } catch (e) {
+                console.log('Failed to load draft', e);
             }
 
             setLoading(false);
@@ -152,27 +207,126 @@ const Checkout = () => {
         loadData();
     }, [user]);
 
-    // Zip Code Change Handling (Mock City Autofill)
+    // Switch Payment Method if Country Changes
     useEffect(() => {
-        if (!zipCode) return;
+        if (country !== 'Poland' && selectedPaymentMethod === 'blik') {
+            setSelectedPaymentMethod('paypal');
+        }
+    }, [country]);
 
-        // Mock UK/Ireland logic
-        const cleanZip = zipCode.replace(/\s/g, '').toUpperCase();
+    // Auto-Save Draft to AsyncStorage
+    useEffect(() => {
+        const timeout = setTimeout(async () => {
+            try {
+                const draft = {
+                    email, firstName, lastName, address1, address2,
+                    city, zipCode, country, phone, shippingMethod,
+                    cardHolderName, cardNumber, cardExpiry
+                };
+                await AsyncStorage.setItem('checkout_draft', JSON.stringify(draft));
+            } catch (e) {
+                // ignore
+            }
+        }, 500); // 500ms debounce
 
-        const mockCities: Record<string, string> = {
-            'SW1': 'London', 'M1': 'Manchester', 'B1': 'Birmingham',
-            'D01': 'Dublin', 'D02': 'Dublin', 'T12': 'Cork',
-            'EH1': 'Edinburgh', 'G1': 'Glasgow', 'CF10': 'Cardiff',
-            'BT1': 'Belfast', '75001': 'Paris', '10115': 'Berlin',
-            '00185': 'Rome', '28013': 'Madrid', '1000': 'Brussels'
+        return () => clearTimeout(timeout);
+    }, [email, firstName, lastName, address1, address2, city, zipCode, country, phone, shippingMethod, cardHolderName, cardNumber, cardExpiry]);
+
+    // Address Management
+    const fillAddressForm = (addr: Address) => {
+        setFirstName(addr.firstName || '');
+        setLastName(addr.lastName || '');
+        setAddress1(addr.line1 || '');
+        setAddress2(addr.line2 || '');
+        setCity(addr.city || '');
+        setZipCode(addr.zipCode || '');
+        setCountry(addr.country || '');
+        setPhone(addr.phone || '');
+    };
+
+    const clearAddressForm = () => {
+        setFirstName('');
+        setLastName('');
+        setAddress1('');
+        setAddress2('');
+        setCity('');
+        setZipCode('');
+        setCountry('');
+        setPhone('');
+        setSelectedAddressIndex(null);
+    };
+
+    const handleSaveAddress = async () => {
+        if (!user) return;
+        if (!address1 || !city || !zipCode || !firstName || !lastName) {
+            Alert.alert('Missing Fields', 'Please fill in all address fields.');
+            return;
+        }
+
+        // Limit to 4 addresses
+        if (selectedAddressIndex === null && savedAddresses.length >= 4) {
+            Alert.alert('Limit Reached', 'You can only save up to 4 addresses. Please delete an old one to add a new address.');
+            return;
+        }
+
+        const newAddr: Address = {
+            firstName, lastName, line1: address1, line2: address2,
+            city, zipCode, country, phone,
+            label: `${firstName} ${lastName}`
         };
 
-        // Check for partial match prefix
-        const mathedPrefix = Object.keys(mockCities).find(prefix => cleanZip.startsWith(prefix));
-        if (mathedPrefix) {
-            setCity(mockCities[mathedPrefix]);
+        let updatedList = [...savedAddresses];
+        if (selectedAddressIndex !== null && selectedAddressIndex >= 0) {
+            // Update existing
+            updatedList[selectedAddressIndex] = newAddr;
+        } else {
+            // Add new
+            updatedList.push(newAddr);
         }
-    }, [zipCode]);
+
+        console.log('Saving addresses:', updatedList);
+
+        const { data, error } = await supabase.from('profiles').update({
+            saved_address: updatedList as any
+        }).eq('id', user.id).select();
+
+        if (error) {
+            console.error('Error saving address:', error);
+            if (error.message && error.message.includes("Could not find the 'saved_address' column")) {
+                Alert.alert('System Error', 'The "saved_address" column is missing in the database. Please contact support or run migrations.');
+            } else {
+                Alert.alert('Error', `Failed to save address: ${error.message}`);
+            }
+        } else {
+            console.log('Address saved successfully:', data);
+            setSavedAddresses(updatedList);
+            if (selectedAddressIndex === null) {
+                // If we just added a new one, select it
+                setSelectedAddressIndex(updatedList.length - 1);
+            }
+            Alert.alert('Success', 'Address saved successfully.');
+        }
+    };
+
+    const handleDeleteAddress = async () => {
+        if (!user || selectedAddressIndex === null) return;
+
+        const updatedList = savedAddresses.filter((_, i) => i !== selectedAddressIndex);
+
+        const { error } = await supabase.from('profiles').update({
+            saved_address: updatedList as any
+        }).eq('id', user.id);
+
+        if (error) {
+            Alert.alert('Error', 'Failed to delete address.');
+        } else {
+            setSavedAddresses(updatedList);
+            clearAddressForm();
+            Alert.alert('Success', 'Address removed.');
+        }
+    };
+
+
 
     // Total cost calculations 
     const totals = useMemo(() => {
@@ -193,12 +347,35 @@ const Checkout = () => {
     };
 
     const formatExpiryDate = (text: string) => {
-        const cleaned = text.replace(/\D/g, '');
-        if (cleaned.length >= 3) {
-            setCardExpiry(`${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`);
-        } else {
-            setCardExpiry(cleaned);
+        // Simple and robust masking for MM/YY
+        let cleaned = text.replace(/\D/g, '');
+
+        // 1. Handle auto-prefixing '0' if user types 2-9 as first char
+        if (cleaned.length === 1 && parseInt(cleaned) > 1) {
+            cleaned = '0' + cleaned;
         }
+
+        // 2. Limit length to 4 digits (MMYY)
+        if (cleaned.length > 4) cleaned = cleaned.slice(0, 4);
+
+        // 3. Format with Slash
+        // Logic: If we have at least 2 digits, we want "MM/..."
+        if (cleaned.length >= 2) {
+            const month = parseInt(cleaned.slice(0, 2));
+            // If invalid month ( > 12 or 00), handle it strategy?
+            // Strategy: Strict blocking. If > 12, just drop the last char (fail to type it)
+            if (month > 12 || month === 0) {
+                // Valid month check failure.
+                // If typing "1[3]", it effectively ignores the 3
+                cleaned = cleaned.slice(0, 1);
+            } else {
+                // Valid month. Add slash.
+                setCardExpiry(`${cleaned.slice(0, 2)}/${cleaned.slice(2)}`);
+                return;
+            }
+        }
+
+        setCardExpiry(cleaned);
     };
 
     // Filtered Countries
@@ -291,6 +468,15 @@ const Checkout = () => {
                 Alert.alert('Missing Information', 'Please fill in all required payment fields');
                 return;
             }
+
+            // Expiry Date Validation (Silent check as masked input prevents most issues, but final check needed)
+            const [expMonth, expYear] = cardExpiry.split('/');
+            const month = parseInt(expMonth, 10);
+            const year = parseInt(expYear, 10);
+
+            if (isNaN(month) || month < 1 || month > 12) return; // Invalid month
+            if (isNaN(year) || year < 25) return; // Invalid year (must be 25+)
+
             setStep(3);
         }
     };
@@ -311,11 +497,20 @@ const Checkout = () => {
                 lastName,
             };
 
-            // Save Address if requested
+            // Save Address if requested (Appends to list)
             if (saveAddress) {
-                await supabase.from('profiles').update({
-                    saved_address: shippingAddressObj
-                }).eq('id', user.id);
+                const updatedAddresses = [...savedAddresses, shippingAddressObj];
+                // Check for duplicates roughly to avoid spam
+                const isDuplicate = savedAddresses.some(a =>
+                    a.line1 === shippingAddressObj.line1 &&
+                    a.zipCode === shippingAddressObj.zipCode
+                );
+
+                if (!isDuplicate) {
+                    await supabase.from('profiles').update({
+                        saved_address: updatedAddresses
+                    }).eq('id', user.id);
+                }
             }
 
             // Save Payment Method if requested (STORING SENSITIVE DATA IN RAW FORM IS BAD PRACTICE - DEMO ONLY)
@@ -360,6 +555,7 @@ const Checkout = () => {
 
             // 3. Clear cart
             await clearCart(user.id);
+            await AsyncStorage.removeItem('checkout_draft');
             await refreshCartCount();
 
             Alert.alert('Order Placed', 'Your order has been placed successfully!', [
@@ -423,6 +619,37 @@ const Checkout = () => {
             {/* Shipping Address */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Shipping Address</Text>
+
+                {/* Saved Addresses Section - Always visible to ensure user knows feature exists */}
+                <View style={{ marginBottom: 16 }}>
+                    <Text style={styles.formLabel}>Saved Addresses</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+                        <TouchableOpacity
+                            style={[styles.savedAddressCard, selectedAddressIndex === null && styles.savedAddressCardSelected]}
+                            onPress={clearAddressForm}
+                        >
+                            <Text style={[styles.savedAddressText, selectedAddressIndex === null && styles.savedAddressTextSelected]}>+ New Address</Text>
+                        </TouchableOpacity>
+                        {savedAddresses.map((addr, index) => (
+                            <TouchableOpacity
+                                key={index}
+                                style={[styles.savedAddressCard, selectedAddressIndex === index && styles.savedAddressCardSelected]}
+                                onPress={() => {
+                                    fillAddressForm(addr);
+                                    setSelectedAddressIndex(index);
+                                }}
+                            >
+                                <Text style={[styles.savedAddressText, selectedAddressIndex === index && styles.savedAddressTextSelected]}>
+                                    {addr.label || `${addr.firstName} (${addr.city})`}
+                                </Text>
+                                <Text style={{ fontSize: 10, color: Colors.text.secondary, marginTop: 2 }} numberOfLines={1}>
+                                    {addr.line1}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+
                 <View style={styles.row}>
                     <TextInput
                         style={[styles.input, styles.halfInput]}
@@ -482,15 +709,25 @@ const Checkout = () => {
                     keyboardType="phone-pad"
                 />
 
-                <TouchableOpacity
-                    style={styles.checkboxRow}
-                    onPress={() => setSaveAddress(!saveAddress)}
-                >
-                    <View style={[styles.checkbox, saveAddress && styles.checkboxActive]}>
-                        {saveAddress && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
-                    </View>
-                    <Text style={styles.checkboxLabel}>Save this address for later</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 8 }}>
+                    <TouchableOpacity
+                        style={[styles.actionButton, { width: '45%', backgroundColor: Colors.primary[500] }]}
+                        onPress={handleSaveAddress}
+                    >
+                        <Text style={[styles.actionButtonText, { color: '#fff' }]}>
+                            {selectedAddressIndex !== null ? 'Update' : 'Save Address'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {selectedAddressIndex !== null && (
+                        <TouchableOpacity
+                            style={[styles.actionButton, { width: '45%', backgroundColor: Colors.danger[50], borderWidth: 1, borderColor: Colors.danger[200] }]}
+                            onPress={handleDeleteAddress}
+                        >
+                            <Text style={[styles.actionButtonText, { color: Colors.danger[500] }]}>Delete</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             {/* Shipping Method */}
@@ -548,99 +785,197 @@ const Checkout = () => {
     // Payment Form - Step 2
     const renderPaymentStep = () => (
         <View style={styles.stepContainer}>
+            {/* Payment Method Selection */}
             <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Select Payment Method</Text>
+
+                {/* Apple Pay */}
                 <TouchableOpacity
-                    style={styles.checkboxRow}
-                    onPress={() => setBillingSameAsShipping(!billingSameAsShipping)}
+                    style={[styles.radioOption, selectedPaymentMethod === 'apple_pay' && styles.radioOptionSelected]}
+                    onPress={() => setSelectedPaymentMethod('apple_pay')}
                 >
-                    <View style={[styles.checkbox, billingSameAsShipping && styles.checkboxActive]}>
-                        {billingSameAsShipping && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
+                    <View style={styles.radioRow}>
+                        <View style={styles.radioCircle}>
+                            {selectedPaymentMethod === 'apple_pay' && <View style={styles.radioDot} />}
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <View style={styles.paymentIconContainer}>
+                                <DevicePhoneMobileIcon size={24} color={'#000'} />
+                            </View>
+                            <View>
+                                <Text style={styles.radioTitle}>Apple Pay</Text>
+                                <Text style={styles.radioSubtitle}>Finalise payment with Apple Pay</Text>
+                            </View>
+                        </View>
                     </View>
-                    <Text style={styles.checkboxLabel}>Billing address same as shipping</Text>
                 </TouchableOpacity>
 
-                {!billingSameAsShipping && (
-                    <Text style={{ marginTop: 10, color: Colors.text.secondary, fontStyle: 'italic' }}>
-                        (Billing address form would appear here)
-                    </Text>
+                {/* PayPal - Show for non-Polish users */}
+                {country !== 'Poland' && (
+                    <TouchableOpacity
+                        style={[styles.radioOption, selectedPaymentMethod === 'paypal' && styles.radioOptionSelected]}
+                        onPress={() => setSelectedPaymentMethod('paypal')}
+                    >
+                        <View style={styles.radioRow}>
+                            <View style={styles.radioCircle}>
+                                {selectedPaymentMethod === 'paypal' && <View style={styles.radioDot} />}
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                <View style={styles.paymentIconContainer}>
+                                    <Text style={{ fontSize: 16, fontWeight: '900', color: '#003087', fontStyle: 'italic' }}>Pay</Text>
+                                    <Text style={{ fontSize: 16, fontWeight: '900', color: '#009cde', fontStyle: 'italic' }}>Pal</Text>
+                                </View>
+                                <View>
+                                    <Text style={styles.radioTitle}>PayPal</Text>
+                                    <Text style={styles.radioSubtitle}>Fast, safe and easy payment</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
                 )}
-            </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Payment Details</Text>
+                {/* Blik - Show ONLY for Poland */}
+                {country === 'Poland' && (
+                    <TouchableOpacity
+                        style={[styles.radioOption, selectedPaymentMethod === 'blik' && styles.radioOptionSelected]}
+                        onPress={() => setSelectedPaymentMethod('blik')}
+                    >
+                        <View style={styles.radioRow}>
+                            <View style={styles.radioCircle}>
+                                {selectedPaymentMethod === 'blik' && <View style={styles.radioDot} />}
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                                <View style={[styles.paymentIconContainer, { backgroundColor: '#000', borderColor: '#000' }]}>
+                                    <Text style={{ fontSize: 13, fontWeight: '900', color: '#fff' }}>blik</Text>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.radioTitle}>Blik</Text>
+                                    <Text style={styles.radioSubtitle} numberOfLines={1} ellipsizeMode="tail">Fast & secure mobile payments</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                )}
 
-                {/* Cardholder Name */}
-                <View style={{ marginBottom: 16 }}>
-                    <Text style={styles.formLabel}>Cardholder's Name</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="e.g. John Doe"
-                        value={cardHolderName}
-                        onChangeText={setCardHolderName}
-                        autoCapitalize="words"
-                    />
-                </View>
-
-                {/* Card Number */}
-                <View style={{ marginBottom: 16 }}>
-                    <Text style={styles.formLabel}>Card Number</Text>
-                    <View style={[styles.inputWrapper, { borderWidth: 1, borderColor: Colors.neutral[300], borderRadius: 8, paddingHorizontal: 12 }]}>
-                        <CreditCardIcon color={Colors.neutral[500]} size={24} />
-                        <TextInput
-                            style={[styles.cardInput, { paddingVertical: 12 }]}
-                            placeholder="0000 0000 0000 0000"
-                            value={cardNumber}
-                            onChangeText={formatCardNumber} // Use formatter
-                            keyboardType="numeric"
-                            maxLength={19} // 16 digits + 3 spaces
-                        />
-                    </View>
-                </View>
-
-                <View style={styles.row}>
-                    <View style={[styles.halfInput]}>
-                        <Text style={styles.formLabel}>Expiry Date</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="MM/YY"
-                            value={cardExpiry}
-                            onChangeText={formatExpiryDate} // Use formatter
-                            keyboardType="numeric"
-                            maxLength={5}
-                        />
-                    </View>
-                    <View style={[styles.halfInput]}>
-                        <Text style={styles.formLabel}>Security Code</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="123"
-                            value={cardCvv}
-                            onChangeText={setCardCvv}
-                            keyboardType="numeric"
-                            maxLength={3}
-                            secureTextEntry
-                        />
-                    </View>
-                </View>
-
+                {/* Bank Card (Credit/Debit) */}
                 <TouchableOpacity
-                    style={[styles.checkboxRow, { marginTop: 8 }]}
-                    onPress={() => setSaveCard(!saveCard)}
+                    style={[styles.radioOption, selectedPaymentMethod === 'card' && styles.radioOptionSelected]}
+                    onPress={() => setSelectedPaymentMethod('card')}
                 >
-                    <View style={[styles.checkbox, saveCard && styles.checkboxActive]}>
-                        {saveCard && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.checkboxLabel}>Agree to save these card details for faster checkout.</Text>
-                        <Text style={{ fontSize: 12, color: Colors.text.secondary, marginTop: 4 }}>You can remove the card anytime in Settings, under Payments.</Text>
+                    <View style={styles.radioRow}>
+                        <View style={styles.radioCircle}>
+                            {selectedPaymentMethod === 'card' && <View style={styles.radioDot} />}
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <View style={styles.paymentIconContainer}>
+                                <CreditCardIcon size={24} color={Colors.neutral[800]} />
+                            </View>
+                            <View>
+                                <Text style={styles.radioTitle}>Bank card</Text>
+                                <Text style={styles.radioSubtitle}>Use a credit or debit card</Text>
+                            </View>
+                        </View>
                     </View>
                 </TouchableOpacity>
-
-                <View style={styles.secureBadge}>
-                    <LockClosedIcon size={12} color={Colors.success[700]} />
-                    <Text style={styles.secureText}>Payments are secure and encrypted</Text>
-                </View>
             </View>
+
+            {/* Card Details Form - ONLY SHOW IF CARD SELECTED */}
+            {selectedPaymentMethod === 'card' && (
+                <View style={[styles.section, { marginTop: -12 }]}>
+                    <View style={styles.cardInputContainer}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <Text style={styles.sectionTitle}>Card Details</Text>
+                            <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                                {/* Visa Logo */}
+                                <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff' }]}>
+                                    <Text style={{ color: '#1A1F71', fontSize: 10, fontWeight: '700', fontStyle: 'italic' }}>VISA</Text>
+                                </View>
+                                {/* Mastercard Logo */}
+                                <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
+                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF5F00', marginRight: -2 }} />
+                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F79E1B' }} />
+                                </View>
+                                {/* Maestro Logo */}
+                                <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
+                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#0099DF', marginRight: -2 }} />
+                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#CC0000' }} />
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Cardholder Name */}
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={styles.formLabel}>Cardholder's Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. John Doe"
+                                value={cardHolderName}
+                                onChangeText={setCardHolderName}
+                                autoCapitalize="words"
+                            />
+                        </View>
+
+                        {/* Card Number */}
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={styles.formLabel}>Card Number</Text>
+                            <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, marginBottom: 0 }]}>
+                                <CreditCardIcon color={Colors.neutral[500]} size={24} />
+                                <TextInput
+                                    style={{ flex: 1, marginLeft: 8, fontSize: 16, color: Colors.text.primary }}
+                                    placeholder="0000 0000 0000 0000"
+                                    value={cardNumber}
+                                    onChangeText={formatCardNumber}
+                                    keyboardType="numeric"
+                                    maxLength={19}
+                                />
+                            </View>
+                        </View>
+
+                        <View style={styles.row}>
+                            <View style={[styles.halfInput]}>
+                                <Text style={styles.formLabel}>Expiry Date</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="MM/YY"
+                                    value={cardExpiry}
+                                    onChangeText={formatExpiryDate} // Use formatter
+                                    keyboardType="numeric"
+                                    maxLength={5}
+                                />
+                            </View>
+                            <View style={[styles.halfInput]}>
+                                <Text style={styles.formLabel}>Security Code</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="123"
+                                    value={cardCvv}
+                                    onChangeText={setCardCvv}
+                                    keyboardType="numeric"
+                                    maxLength={3}
+                                    secureTextEntry
+                                />
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.checkboxRow, { marginTop: 8 }]}
+                            onPress={() => setSaveCard(!saveCard)}
+                        >
+                            <View style={[styles.checkbox, saveCard && styles.checkboxActive]}>
+                                {saveCard && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.checkboxLabel}>Agree to save these details.</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <View style={styles.secureBadge}>
+                            <LockClosedIcon size={12} color={Colors.success[700]} />
+                            <Text style={styles.secureText}>Payments are secure and encrypted</Text>
+                        </View>
+                    </View>
+                </View>
+            )}
         </View>
     );
 
@@ -824,11 +1159,12 @@ const styles = StyleSheet.create({
     },
     progressTextContainer: {
         flexDirection: 'row',
-        justifyContent: 'center',
+        justifyContent: 'space-between', // Distribute evenly
+        paddingHorizontal: 24, // Add some padding
         marginBottom: 8,
     },
     progressText: {
-        fontSize: 13,
+        fontSize: 15, // Bigger font
         color: Colors.neutral[400],
         fontWeight: '600',
     },
@@ -840,10 +1176,10 @@ const styles = StyleSheet.create({
         color: Colors.neutral[300],
     },
     progressBar: {
-        height: 2,
+        height: 4, // Slightly thicker
         backgroundColor: Colors.neutral[200],
-        marginHorizontal: 40,
-        borderRadius: 1,
+        marginHorizontal: 24, // Match text container padding
+        borderRadius: 2,
         overflow: 'hidden',
     },
     progressIndicator: {
@@ -1015,6 +1351,31 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         backgroundColor: Colors.neutral[100],
     },
+    paymentIconContainer: {
+        width: 40,
+        height: 28,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: Colors.neutral[200],
+        borderRadius: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+    },
+    cardBrandBadge: {
+        width: 20,
+        height: 12,
+        borderRadius: 2,
+    },
+    cardBrandLogo: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: 32,
+        height: 20,
+    },
     reviewItemDetails: {
         flex: 1,
         marginLeft: 12,
@@ -1126,6 +1487,27 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: Colors.neutral[200],
     },
+    savedAddressCard: {
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: Colors.neutral[200],
+        backgroundColor: '#fff',
+        minWidth: 100,
+        alignItems: 'flex-start',
+    },
+    savedAddressCardSelected: {
+        borderColor: Colors.primary[500],
+        backgroundColor: Colors.primary[50],
+    },
+    savedAddressText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: Colors.text.primary,
+    },
+    savedAddressTextSelected: {
+        color: Colors.primary[700],
+    },
     pillSelected: {
         backgroundColor: Colors.primary[50],
         borderColor: Colors.primary[500],
@@ -1207,6 +1589,17 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.neutral[50],
         paddingHorizontal: 20,
         paddingVertical: 8,
+    },
+    actionButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    actionButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
     }
 });
 
