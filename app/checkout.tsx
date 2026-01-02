@@ -97,7 +97,7 @@ const Checkout = () => {
     const [saveAddress, setSaveAddress] = useState(false);
 
     // Payment State
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'apple_pay' | 'blik' | 'paypal'>('card');
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'apple_pay' | 'p24'>('card');
     const [cardHolderName, setCardHolderName] = useState('');
     const [cardNumber, setCardNumber] = useState('');
     const [cardExpiry, setCardExpiry] = useState('');
@@ -207,10 +207,10 @@ const Checkout = () => {
         loadData();
     }, [user]);
 
-    // Switch Payment Method if Country Changes
+    // Switch Payment Method if Country Changes (P24 only for Poland)
     useEffect(() => {
-        if (country !== 'Poland' && selectedPaymentMethod === 'blik') {
-            setSelectedPaymentMethod('paypal');
+        if (country !== 'Poland' && selectedPaymentMethod === 'p24') {
+            setSelectedPaymentMethod('card');
         }
     }, [country]);
 
@@ -810,47 +810,25 @@ const Checkout = () => {
                     </View>
                 </TouchableOpacity>
 
-                {/* PayPal - Show for non-Polish users */}
-                {country !== 'Poland' && (
-                    <TouchableOpacity
-                        style={[styles.radioOption, selectedPaymentMethod === 'paypal' && styles.radioOptionSelected]}
-                        onPress={() => setSelectedPaymentMethod('paypal')}
-                    >
-                        <View style={styles.radioRow}>
-                            <View style={styles.radioCircle}>
-                                {selectedPaymentMethod === 'paypal' && <View style={styles.radioDot} />}
-                            </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                <View style={styles.paymentIconContainer}>
-                                    <Text style={{ fontSize: 16, fontWeight: '900', color: '#003087', fontStyle: 'italic' }}>Pay</Text>
-                                    <Text style={{ fontSize: 16, fontWeight: '900', color: '#009cde', fontStyle: 'italic' }}>Pal</Text>
-                                </View>
-                                <View>
-                                    <Text style={styles.radioTitle}>PayPal</Text>
-                                    <Text style={styles.radioSubtitle}>Fast, safe and easy payment</Text>
-                                </View>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                )}
 
-                {/* Blik - Show ONLY for Poland */}
+
+                {/* Przelewy24 (includes Blik) - Show ONLY for Poland */}
                 {country === 'Poland' && (
                     <TouchableOpacity
-                        style={[styles.radioOption, selectedPaymentMethod === 'blik' && styles.radioOptionSelected]}
-                        onPress={() => setSelectedPaymentMethod('blik')}
+                        style={[styles.radioOption, selectedPaymentMethod === 'p24' && styles.radioOptionSelected]}
+                        onPress={() => setSelectedPaymentMethod('p24')}
                     >
                         <View style={styles.radioRow}>
                             <View style={styles.radioCircle}>
-                                {selectedPaymentMethod === 'blik' && <View style={styles.radioDot} />}
+                                {selectedPaymentMethod === 'p24' && <View style={styles.radioDot} />}
                             </View>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                                <View style={[styles.paymentIconContainer, { backgroundColor: '#000', borderColor: '#000' }]}>
-                                    <Text style={{ fontSize: 13, fontWeight: '900', color: '#fff' }}>blik</Text>
+                                <View style={[styles.paymentIconContainer, { backgroundColor: '#d4145a', borderColor: '#d4145a' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>P24</Text>
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.radioTitle}>Blik</Text>
-                                    <Text style={styles.radioSubtitle} numberOfLines={1} ellipsizeMode="tail">Fast & secure mobile payments</Text>
+                                    <Text style={styles.radioTitle}>Przelewy24</Text>
+                                    <Text style={styles.radioSubtitle} numberOfLines={1} ellipsizeMode="tail">Blik, bank transfers & more</Text>
                                 </View>
                             </View>
                         </View>
