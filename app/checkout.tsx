@@ -34,6 +34,7 @@ import {
     BanknotesIcon
 } from 'react-native-heroicons/outline';
 import { CheckCircleIcon as CheckCircleSolid } from 'react-native-heroicons/solid';
+import { CardField, useStripe } from '@stripe/stripe-react-native';
 
 const COUNTRIES = [
     { name: "Austria", flag: "🇦🇹" }, { name: "Belgium", flag: "🇧🇪" }, { name: "Bulgaria", flag: "🇧🇬" },
@@ -103,6 +104,10 @@ const Checkout = () => {
     const [cardExpiry, setCardExpiry] = useState('');
     const [cardCvv, setCardCvv] = useState('');
     const [saveCard, setSaveCard] = useState(false);
+
+    // Stripe hooks
+    const { createPaymentMethod } = useStripe();
+    const [cardDetails, setCardDetails] = useState<any>(null);
 
     // Filter/Modal State
     const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -463,21 +468,50 @@ const Checkout = () => {
             }
             setStep(2);
         } else if (step === 2) {
-            // Validate payment info 
-            if (cardNumber.replace(/\s/g, '').length < 16 || cardExpiry.length < 5 || cardCvv.length < 3 || !cardHolderName) {
-                Alert.alert('Missing Information', 'Please fill in all required payment fields');
-                return;
+            // Validate payment info
+            if (selectedPaymentMethod === 'card') {
+                if (!cardHolderName.trim()) {
+                    Alert.alert('Missing Information', 'Please enter cardholder name');
+                    return;
+                }
+                if (!cardDetails?.complete) {
+                    Alert.alert('Invalid Card', 'Please enter valid card details');
+                    return;
+                }
+            }
+            // For Apple Pay and Przelewy24, validation happens during payment process
+            setStep(3);
+        }
+    };
+
+    const createStripePaymentMethod = async () => {
+        if (selectedPaymentMethod !== 'card') {
+            return null;
+        }
+
+        try {
+            const { paymentMethod, error } = await createPaymentMethod({
+                paymentMethodType: 'Card',
+                paymentMethodData: {
+                    billingDetails: {
+                        name: cardHolderName,
+                        email: user?.email || '',
+                    },
+                },
+            });
+
+            if (error) {
+                console.error('Error creating payment method:', error);
+                Alert.alert('Payment Error', error.message);
+                return null;
             }
 
-            // Expiry Date Validation (Silent check as masked input prevents most issues, but final check needed)
-            const [expMonth, expYear] = cardExpiry.split('/');
-            const month = parseInt(expMonth, 10);
-            const year = parseInt(expYear, 10);
-
-            if (isNaN(month) || month < 1 || month > 12) return; // Invalid month
-            if (isNaN(year) || year < 25) return; // Invalid year (must be 25+)
-
-            setStep(3);
+            console.log('Payment method created:', paymentMethod.id);
+            return paymentMethod.id;
+        } catch (err) {
+            console.error('Exception creating payment method:', err);
+            Alert.alert('Payment Error', 'Failed to process card details');
+            return null;
         }
     };
 
@@ -486,6 +520,16 @@ const Checkout = () => {
         setProcessing(true);
 
         try {
+            // 1. Create Stripe Payment Method (if using card)
+            let paymentMethodId = null;
+            if (selectedPaymentMethod === 'card') {
+                paymentMethodId = await createStripePaymentMethod();
+                if (!paymentMethodId) {
+                    setProcessing(false);
+                    return; // Error already handled in createStripePaymentMethod
+                }
+            }
+
             const shippingAddressObj = {
                 line1: address1,
                 line2: address2,
@@ -513,16 +557,18 @@ const Checkout = () => {
                 }
             }
 
-            // Save Payment Method if requested (STORING SENSITIVE DATA IN RAW FORM IS BAD PRACTICE - DEMO ONLY)
-            if (saveCard) {
-                // In production: Tokenize this with Stripe/PayPal and store the token.
-                // Here we just mock saving "preference" or basic non-sensitive info
+            // Save Payment Method preference (Token only)
+            if (saveCard && paymentMethodId) {
                 await supabase.from('profiles').update({
-                    payment_methods: { last4: cardNumber.slice(-4), cardHolder: cardHolderName }
+                    payment_methods: {
+                        last4: cardDetails?.last4 || 'xxxx',
+                        brand: cardDetails?.brand || 'card',
+                        stripe_payment_method_id: paymentMethodId
+                    }
                 }).eq('id', user.id);
             }
 
-            // 1. Create order record
+            // 2. Create Order (Status: Pending)
             const { data: order, error: orderError } = await supabase.from('orders').insert({
                 user_id: user.id,
                 seller_id: cartItems[0]?.product.seller_id || 'system',
@@ -530,9 +576,9 @@ const Checkout = () => {
                 shipping_cost: totals.shippingCost,
                 tax: totals.tax, // Changed from tax_rate to tax to match DB schema
                 total_amount: totals.total, // Changed to total_amount to match DB schema
-                status: 'confirmed',
+                status: 'pending_payment', // Initial status
                 shipping_address: shippingAddressObj,
-                payment_method: 'card',
+                payment_method: selectedPaymentMethod,
                 notes: orderNote,
             })
                 .select()
@@ -540,7 +586,7 @@ const Checkout = () => {
 
             if (orderError) throw orderError;
 
-            // 2. Create order items 
+            // 3. Create Order Items
             const orderItemsData = cartItems.map(item => ({
                 order_id: order.id,
                 product_id: item.product_id,
@@ -553,16 +599,51 @@ const Checkout = () => {
             const { error: itemsError } = await supabase.from('order_items').insert(orderItemsData);
             if (itemsError) throw itemsError;
 
-            // 3. Clear cart
+            // 4. Process Payment (Wrapper for Edge Function)
+            if (selectedPaymentMethod === 'card' && paymentMethodId) {
+                console.log('Processing payment...');
+                const { data: paymentResult, error: paymentError } = await supabase.functions.invoke('create-payment-intent', {
+                    body: {
+                        amount: totals.total,
+                        currency: 'eur',
+                        paymentMethodId: paymentMethodId,
+                        orderId: order.id,
+                        customerId: user.id, // Ideally get Stripe Customer ID from profile
+                        metadata: {
+                            customerEmail: user.email,
+                            customerName: `${firstName} ${lastName}`,
+                        }
+                    }
+                });
+
+                if (paymentError || !paymentResult?.success) {
+                    console.error('Payment failed:', paymentError || paymentResult);
+                    // Update order to failed
+                    await supabase.from('orders').update({ status: 'payment_failed' }).eq('id', order.id);
+                    Alert.alert('Payment Failed', paymentResult?.error || 'Your payment could not be processed.');
+                    setProcessing(false);
+                    return;
+                }
+
+                console.log('Payment successful:', paymentResult.paymentIntentId);
+            }
+
+            // 5. Payment Success -> Update Order to Confirmed
+            await supabase.from('orders').update({ status: 'confirmed' }).eq('id', order.id);
+
+            // 6. Cleanup
             await clearCart(user.id);
             await AsyncStorage.removeItem('checkout_draft');
             await refreshCartCount();
 
+            setProcessing(false);
             Alert.alert('Order Placed', 'Your order has been placed successfully!', [
                 { text: 'OK', onPress: () => router.replace('/(tabs)/Home') }
             ]);
+
         } catch (error: any) {
             console.error(error);
+            setProcessing(false);
             Alert.alert('Order Failed', error.message || 'Something went wrong.');
         } finally {
             setProcessing(false);
@@ -881,6 +962,37 @@ const Checkout = () => {
                             </View>
                         </View>
 
+
+                        {/* Stripe CardField - Secure PCI-compliant card input */}
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={styles.formLabel}>Card Information</Text>
+                            <CardField
+                                postalCodeEnabled={false}
+                                placeholders={{
+                                    number: '4242 4242 4242 4242',
+                                    expiration: 'MM/YY',
+                                    cvc: 'CVC',
+                                }}
+                                cardStyle={{
+                                    backgroundColor: '#FFFFFF',
+                                    textColor: Colors.text.primary,
+                                    borderColor: Colors.neutral[300],
+                                    borderWidth: 1,
+                                    borderRadius: 8,
+                                    fontSize: 16,
+                                }}
+                                style={{
+                                    width: '100%',
+                                    height: 50,
+                                    marginTop: 8,
+                                }}
+                                onCardChange={(details) => {
+                                    setCardDetails(details);
+                                    console.log('Card complete:', details.complete);
+                                }}
+                            />
+                        </View>
+
                         {/* Cardholder Name */}
                         <View style={{ marginBottom: 16 }}>
                             <Text style={styles.formLabel}>Cardholder's Name</Text>
@@ -891,48 +1003,6 @@ const Checkout = () => {
                                 onChangeText={setCardHolderName}
                                 autoCapitalize="words"
                             />
-                        </View>
-
-                        {/* Card Number */}
-                        <View style={{ marginBottom: 16 }}>
-                            <Text style={styles.formLabel}>Card Number</Text>
-                            <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, marginBottom: 0 }]}>
-                                <CreditCardIcon color={Colors.neutral[500]} size={24} />
-                                <TextInput
-                                    style={{ flex: 1, marginLeft: 8, fontSize: 16, color: Colors.text.primary }}
-                                    placeholder="0000 0000 0000 0000"
-                                    value={cardNumber}
-                                    onChangeText={formatCardNumber}
-                                    keyboardType="numeric"
-                                    maxLength={19}
-                                />
-                            </View>
-                        </View>
-
-                        <View style={styles.row}>
-                            <View style={[styles.halfInput]}>
-                                <Text style={styles.formLabel}>Expiry Date</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="MM/YY"
-                                    value={cardExpiry}
-                                    onChangeText={formatExpiryDate} // Use formatter
-                                    keyboardType="numeric"
-                                    maxLength={5}
-                                />
-                            </View>
-                            <View style={[styles.halfInput]}>
-                                <Text style={styles.formLabel}>Security Code</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="123"
-                                    value={cardCvv}
-                                    onChangeText={setCardCvv}
-                                    keyboardType="numeric"
-                                    maxLength={3}
-                                    secureTextEntry
-                                />
-                            </View>
                         </View>
 
                         <TouchableOpacity

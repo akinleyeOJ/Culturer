@@ -56,7 +56,7 @@ serve(async (req) => {
                 status: 200,
             }
         )
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error creating payment intent:', error)
 
         return new Response(
