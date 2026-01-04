@@ -108,6 +108,7 @@ const Checkout = () => {
     // Stripe hooks
     const { createPaymentMethod } = useStripe();
     const [cardDetails, setCardDetails] = useState<any>(null);
+    const [stripePaymentMethodId, setStripePaymentMethodId] = useState<string | null>(null);
 
     // Filter/Modal State
     const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -460,7 +461,7 @@ const Checkout = () => {
     );
 
     // Handlers 
-    const handleNextStep = () => {
+    const handleNextStep = async () => {
         if (step === 1) {
             if (!address1 || !city || !zipCode || !firstName || !lastName || !country) {
                 Alert.alert('Missing Information', 'Please fill in all required shipping fields');
@@ -478,7 +479,19 @@ const Checkout = () => {
                     Alert.alert('Invalid Card', 'Please enter valid card details');
                     return;
                 }
+
+                // Create Payment Method HERE (Before CardField Unmounts!)
+                setProcessing(true);
+                const pmId = await createStripePaymentMethod();
+                setProcessing(false);
+
+                if (!pmId) {
+                    // Error is shown in createStripePaymentMethod
+                    return;
+                }
+                setStripePaymentMethodId(pmId);
             }
+
             // For Apple Pay and Przelewy24, validation happens during payment process
             setStep(3);
         }
@@ -520,14 +533,14 @@ const Checkout = () => {
         setProcessing(true);
 
         try {
-            // 1. Create Stripe Payment Method (if using card)
-            let paymentMethodId = null;
-            if (selectedPaymentMethod === 'card') {
-                paymentMethodId = await createStripePaymentMethod();
-                if (!paymentMethodId) {
-                    setProcessing(false);
-                    return; // Error already handled in createStripePaymentMethod
-                }
+            // 1. Get Payment Method ID
+            let paymentMethodId = stripePaymentMethodId;
+
+            // Should already have it from step 2, but just in case check flow
+            if (selectedPaymentMethod === 'card' && !paymentMethodId) {
+                Alert.alert('Error', 'Card details lost. Please go back and re-enter card.');
+                setProcessing(false);
+                return;
             }
 
             const shippingAddressObj = {
@@ -636,6 +649,7 @@ const Checkout = () => {
             await AsyncStorage.removeItem('checkout_draft');
             await refreshCartCount();
 
+            setStripePaymentMethodId(null); // Clear stored ID
             setProcessing(false);
             Alert.alert('Order Placed', 'Your order has been placed successfully!', [
                 { text: 'OK', onPress: () => router.replace('/(tabs)/Home') }
@@ -1005,17 +1019,7 @@ const Checkout = () => {
                             />
                         </View>
 
-                        <TouchableOpacity
-                            style={[styles.checkboxRow, { marginTop: 8 }]}
-                            onPress={() => setSaveCard(!saveCard)}
-                        >
-                            <View style={[styles.checkbox, saveCard && styles.checkboxActive]}>
-                                {saveCard && <CheckCircleSolid size={20} color={Colors.primary[500]} />}
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.checkboxLabel}>Agree to save these details.</Text>
-                            </View>
-                        </TouchableOpacity>
+
 
                         <View style={styles.secureBadge}>
                             <LockClosedIcon size={12} color={Colors.success[700]} />
