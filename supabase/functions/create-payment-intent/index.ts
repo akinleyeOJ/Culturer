@@ -33,11 +33,12 @@ serve(async (req) => {
             amount: Math.round(amount * 100), // Convert to cents
             currency: currency.toLowerCase(),
             payment_method: paymentMethodId,
-            customer: customerId,
+            receipt_email: metadata?.customerEmail, // Use email from metadata
             confirm: paymentMethodId ? true : false, // Auto-confirm if payment method provided
             automatic_payment_methods: paymentMethodId ? undefined : {
                 enabled: true,
             },
+            return_url: 'culturar://checkout/complete', // Required for methods that might redirect
             metadata: {
                 orderId: orderId || '',
                 ...metadata,
@@ -66,7 +67,7 @@ serve(async (req) => {
             }),
             {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
+                status: 200,
             }
         )
     }

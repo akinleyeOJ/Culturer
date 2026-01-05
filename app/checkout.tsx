@@ -589,7 +589,7 @@ const Checkout = () => {
                 shipping_cost: totals.shippingCost,
                 tax: totals.tax, // Changed from tax_rate to tax to match DB schema
                 total_amount: totals.total, // Changed to total_amount to match DB schema
-                status: 'pending_payment', // Initial status
+                status: 'pending', // Initial status
                 shipping_address: shippingAddressObj,
                 payment_method: selectedPaymentMethod,
                 notes: orderNote,
@@ -621,7 +621,6 @@ const Checkout = () => {
                         currency: 'eur',
                         paymentMethodId: paymentMethodId,
                         orderId: order.id,
-                        customerId: user.id, // Ideally get Stripe Customer ID from profile
                         metadata: {
                             customerEmail: user.email,
                             customerName: `${firstName} ${lastName}`,
@@ -632,7 +631,7 @@ const Checkout = () => {
                 if (paymentError || !paymentResult?.success) {
                     console.error('Payment failed:', paymentError || paymentResult);
                     // Update order to failed
-                    await supabase.from('orders').update({ status: 'payment_failed' }).eq('id', order.id);
+                    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id);
                     Alert.alert('Payment Failed', paymentResult?.error || 'Your payment could not be processed.');
                     setProcessing(false);
                     return;
