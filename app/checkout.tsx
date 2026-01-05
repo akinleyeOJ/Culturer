@@ -632,8 +632,11 @@ const Checkout = () => {
                     console.error('Payment failed:', paymentError || paymentResult);
                     // Update order to failed
                     await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id);
-                    Alert.alert('Payment Failed', paymentResult?.error || 'Your payment could not be processed.');
                     setProcessing(false);
+                    router.push({
+                        pathname: '/payment-failed',
+                        params: { reason: paymentResult?.error || 'Your payment could not be processed.' }
+                    });
                     return;
                 }
 
@@ -650,9 +653,12 @@ const Checkout = () => {
 
             setStripePaymentMethodId(null); // Clear stored ID
             setProcessing(false);
-            Alert.alert('Order Placed', 'Your order has been placed successfully!', [
-                { text: 'OK', onPress: () => router.replace('/(tabs)/Home') }
-            ]);
+
+            // Navigate to Success Screen
+            router.replace({
+                pathname: '/order-confirmation',
+                params: { orderId: order.id }
+            });
 
         } catch (error: any) {
             console.error(error);
