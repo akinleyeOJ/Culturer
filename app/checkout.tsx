@@ -119,6 +119,37 @@ const Checkout = () => {
     const [appliedDiscount, setAppliedDiscount] = useState<any>(null);
     const [checkingCoupon, setCheckingCoupon] = useState(false);
 
+    // Saved Cards State
+    const [savedCards, setSavedCards] = useState<any[]>([]);
+    const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null);
+    const [loadingCards, setLoadingCards] = useState(false);
+
+    // Fetch Saved Cards
+    const fetchSavedCards = async () => {
+        if (!user) return;
+        setLoadingCards(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('get-payment-methods', {
+                body: { userId: user.id }
+            });
+            if (error) throw error;
+            if (data?.paymentMethods) {
+                setSavedCards(data.paymentMethods);
+                // Optionally auto-select the first card
+                // if (data.paymentMethods.length > 0) setSelectedSavedCardId(data.paymentMethods[0].id);
+            }
+        } catch (e) {
+            console.error('Error fetching cards:', e);
+        }
+        setLoadingCards(false);
+    };
+
+    useEffect(() => {
+        if (step === 2 && selectedPaymentMethod === 'card') {
+            fetchSavedCards();
+        }
+    }, [step, selectedPaymentMethod]);
+
     // Handle Back Navigation
     // Handle Back Navigation
     useEffect(() => {
@@ -486,6 +517,14 @@ const Checkout = () => {
         } else if (step === 2) {
             // Validate payment info
             if (selectedPaymentMethod === 'card') {
+
+                // Use Saved Card if selected
+                if (selectedSavedCardId) {
+                    setStripePaymentMethodId(selectedSavedCardId);
+                    setStep(3);
+                    return;
+                }
+
                 if (!cardHolderName.trim()) {
                     Alert.alert('Missing Information', 'Please enter cardholder name');
                     return;
@@ -648,8 +687,8 @@ const Checkout = () => {
 
                 if (paymentError || !paymentResult?.success) {
                     console.error('Payment failed:', paymentError || paymentResult);
-                    // Update order to failed
-                    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id);
+                    // Note: Order status will stay 'pending' (or be handled by backend cleanup)
+                    // We cannot update it here due to RLS security
                     setProcessing(false);
                     router.push({
                         pathname: '/payment-failed',
@@ -661,8 +700,9 @@ const Checkout = () => {
                 console.log('Payment successful:', paymentResult.paymentIntentId);
             }
 
-            // 5. Payment Success -> Update Order to Confirmed
-            await supabase.from('orders').update({ status: 'confirmed' }).eq('id', order.id);
+            // 5. Payment Success
+            // Note: Order status is updated by Stripe Webhook
+            // We cannot update it here due to RLS security
 
             // 6. Cleanup
             await clearCart(user.id);
@@ -978,87 +1018,136 @@ const Checkout = () => {
             {/* Card Details Form - ONLY SHOW IF CARD SELECTED */}
             {selectedPaymentMethod === 'card' && (
                 <View style={[styles.section, { marginTop: -12 }]}>
-                    <View style={styles.cardInputContainer}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                            <Text style={styles.sectionTitle}>Card Details</Text>
-                            <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-                                {/* Visa Logo */}
-                                <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff' }]}>
-                                    <Text style={{ color: '#1A1F71', fontSize: 10, fontWeight: '700', fontStyle: 'italic' }}>VISA</Text>
+                    {/* Saved Cards Selection */}
+                    {!loadingCards && savedCards && savedCards.length > 0 && (
+                        <View style={{ marginBottom: 24 }}>
+                            <Text style={styles.sectionTitle}>Saved Cards</Text>
+                            {savedCards.map((card) => (
+                                <TouchableOpacity
+                                    key={card.id}
+                                    style={[
+                                        styles.radioOption,
+                                        selectedSavedCardId === card.id && styles.radioOptionSelected,
+                                        { marginBottom: 8 }
+                                    ]}
+                                    onPress={() => {
+                                        setSelectedSavedCardId(card.id);
+                                        setSaveCard(false);
+                                    }}
+                                >
+                                    <View style={styles.radioRow}>
+                                        <View style={styles.radioCircle}>
+                                            {selectedSavedCardId === card.id && <View style={styles.radioDot} />}
+                                        </View>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                            <CreditCardIcon size={24} color={Colors.neutral[800]} />
+                                            <View>
+                                                <Text style={styles.radioTitle}>
+                                                    {card.brand.toUpperCase()} {card.last4}
+                                                </Text>
+                                                <Text style={styles.radioSubtitle}>{card.exp_month}/{card.exp_year}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                                style={[styles.radioOption, selectedSavedCardId === null && styles.radioOptionSelected]}
+                                onPress={() => setSelectedSavedCardId(null)}
+                            >
+                                <View style={styles.radioRow}>
+                                    <View style={styles.radioCircle}>
+                                        {selectedSavedCardId === null && <View style={styles.radioDot} />}
+                                    </View>
+                                    <Text style={styles.radioTitle}>Use a new card</Text>
                                 </View>
-                                {/* Mastercard Logo */}
-                                <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
-                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF5F00', marginRight: -2 }} />
-                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F79E1B' }} />
-                                </View>
-                                {/* Maestro Logo */}
-                                <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
-                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#0099DF', marginRight: -2 }} />
-                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#CC0000' }} />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {selectedSavedCardId === null && (
+                        <View style={styles.cardInputContainer}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <Text style={styles.sectionTitle}>Card Details</Text>
+                                <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                                    {/* Visa Logo */}
+                                    <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff' }]}>
+                                        <Text style={{ color: '#1A1F71', fontSize: 10, fontWeight: '700', fontStyle: 'italic' }}>VISA</Text>
+                                    </View>
+                                    {/* Mastercard Logo */}
+                                    <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF5F00', marginRight: -2 }} />
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F79E1B' }} />
+                                    </View>
+                                    {/* Maestro Logo */}
+                                    <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#0099DF', marginRight: -2 }} />
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#CC0000' }} />
+                                    </View>
                                 </View>
                             </View>
+
+
+                            {/* Stripe CardField - Secure PCI-compliant card input */}
+                            <View style={{ marginBottom: 16 }}>
+                                <Text style={styles.formLabel}>Card Information</Text>
+                                <CardField
+                                    postalCodeEnabled={false}
+                                    placeholders={{
+                                        number: '4242 4242 4242 4242',
+                                        expiration: 'MM/YY',
+                                        cvc: 'CVC',
+                                    }}
+                                    cardStyle={{
+                                        backgroundColor: '#FFFFFF',
+                                        textColor: Colors.text.primary,
+                                        borderColor: Colors.neutral[300],
+                                        borderWidth: 1,
+                                        borderRadius: 8,
+                                        fontSize: 16,
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        height: 50,
+                                        marginTop: 8,
+                                    }}
+                                    onCardChange={(details) => {
+                                        setCardDetails(details);
+                                        console.log('Card complete:', details.complete);
+                                    }}
+                                />
+                            </View>
+
+                            {/* Cardholder Name */}
+                            <View style={{ marginBottom: 16 }}>
+                                <Text style={styles.formLabel}>Cardholder's Name</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. John Doe"
+                                    value={cardHolderName}
+                                    onChangeText={setCardHolderName}
+                                    autoCapitalize="words"
+                                />
+                            </View>
+
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, justifyContent: 'space-between' }}>
+                                <Text style={{ ...styles.formLabel, marginBottom: 0 }}>Save for future purchases</Text>
+                                <Switch
+                                    value={saveCard}
+                                    onValueChange={setSaveCard}
+                                    trackColor={{ false: Colors.neutral[200], true: Colors.success[500] }}
+                                    thumbColor={'#FFFFFF'}
+                                />
+                            </View>
+
+
+
+                            <View style={styles.secureBadge}>
+                                <LockClosedIcon size={12} color={Colors.success[700]} />
+                                <Text style={styles.secureText}>Payments are secure and encrypted</Text>
+                            </View>
                         </View>
-
-
-                        {/* Stripe CardField - Secure PCI-compliant card input */}
-                        <View style={{ marginBottom: 16 }}>
-                            <Text style={styles.formLabel}>Card Information</Text>
-                            <CardField
-                                postalCodeEnabled={false}
-                                placeholders={{
-                                    number: '4242 4242 4242 4242',
-                                    expiration: 'MM/YY',
-                                    cvc: 'CVC',
-                                }}
-                                cardStyle={{
-                                    backgroundColor: '#FFFFFF',
-                                    textColor: Colors.text.primary,
-                                    borderColor: Colors.neutral[300],
-                                    borderWidth: 1,
-                                    borderRadius: 8,
-                                    fontSize: 16,
-                                }}
-                                style={{
-                                    width: '100%',
-                                    height: 50,
-                                    marginTop: 8,
-                                }}
-                                onCardChange={(details) => {
-                                    setCardDetails(details);
-                                    console.log('Card complete:', details.complete);
-                                }}
-                            />
-                        </View>
-
-                        {/* Cardholder Name */}
-                        <View style={{ marginBottom: 16 }}>
-                            <Text style={styles.formLabel}>Cardholder's Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. John Doe"
-                                value={cardHolderName}
-                                onChangeText={setCardHolderName}
-                                autoCapitalize="words"
-                            />
-                        </View>
-
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, justifyContent: 'space-between' }}>
-                            <Text style={{ ...styles.formLabel, marginBottom: 0 }}>Save for future purchases</Text>
-                            <Switch
-                                value={saveCard}
-                                onValueChange={setSaveCard}
-                                trackColor={{ false: Colors.neutral[200], true: Colors.success[500] }}
-                                thumbColor={'#FFFFFF'}
-                            />
-                        </View>
-
-
-
-                        <View style={styles.secureBadge}>
-                            <LockClosedIcon size={12} color={Colors.success[700]} />
-                            <Text style={styles.secureText}>Payments are secure and encrypted</Text>
-                        </View>
-                    </View>
+                    )}
                 </View>
             )}
         </View>

@@ -103,6 +103,11 @@ serve(async (req) => {
         // 4. Create Payment Intent
         const paymentIntent = await stripe.paymentIntents.create(options)
 
+        // Sync local DB order status if succeeded (Secure admin update)
+        if (paymentIntent.status === 'succeeded' && orderId) {
+            await supabaseAdmin.from('orders').update({ status: 'confirmed' }).eq('id', orderId);
+        }
+
         return new Response(
             JSON.stringify({
                 success: true,
