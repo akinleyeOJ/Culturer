@@ -114,6 +114,11 @@ const Checkout = () => {
     const [showCountryPicker, setShowCountryPicker] = useState(false);
     const [searchCountry, setSearchCountry] = useState('');
 
+    // Promo Code State
+    const [promoCode, setPromoCode] = useState('');
+    const [appliedDiscount, setAppliedDiscount] = useState<any>(null);
+    const [checkingCoupon, setCheckingCoupon] = useState(false);
+
     // Handle Back Navigation
     // Handle Back Navigation
     useEffect(() => {
@@ -339,10 +344,20 @@ const Checkout = () => {
         const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
         const shippingCost = shippingMethod === 'express' ? 15.00 : 0.00;
         const tax = subtotal * 0.10; // 10% Tax
-        const total = subtotal + shippingCost + tax;
 
-        return { subtotal, shippingCost, tax, total };
-    }, [cartItems, shippingMethod]);
+        let discountAmount = 0;
+        if (appliedDiscount) {
+            if (appliedDiscount.discount_type === 'percentage') {
+                discountAmount = subtotal * (appliedDiscount.discount_value / 100);
+            } else {
+                discountAmount = Number(appliedDiscount.discount_value);
+            }
+        }
+
+        const total = Math.max(0, subtotal + shippingCost + tax - discountAmount);
+
+        return { subtotal, shippingCost, tax, discount: discountAmount, total };
+    }, [cartItems, shippingMethod, appliedDiscount]);
 
     // Formatters
     const formatCardNumber = (text: string) => {
@@ -621,6 +636,9 @@ const Checkout = () => {
                         currency: 'eur',
                         paymentMethodId: paymentMethodId,
                         orderId: order.id,
+                        userId: user.id,          // Pass User ID for Customer creation
+                        email: user.email,        // Pass User Email
+                        saveCard: saveCard,       // Pass Switch State
                         metadata: {
                             customerEmail: user.email,
                             customerName: `${firstName} ${lastName}`,
@@ -1024,6 +1042,16 @@ const Checkout = () => {
                             />
                         </View>
 
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, justifyContent: 'space-between' }}>
+                            <Text style={{ ...styles.formLabel, marginBottom: 0 }}>Save for future purchases</Text>
+                            <Switch
+                                value={saveCard}
+                                onValueChange={setSaveCard}
+                                trackColor={{ false: Colors.neutral[200], true: Colors.success[500] }}
+                                thumbColor={'#FFFFFF'}
+                            />
+                        </View>
+
 
 
                         <View style={styles.secureBadge}>
@@ -1035,6 +1063,33 @@ const Checkout = () => {
             )}
         </View>
     );
+
+    const handleApplyCoupon = async () => {
+        if (!promoCode) return;
+        setCheckingCoupon(true);
+        try {
+            const { data, error } = await supabase
+                .from('coupons' as any)
+                .select('*')
+                .eq('code', promoCode.toUpperCase())
+                .eq('is_active', true)
+                .single();
+
+            if (error || !data) {
+                Alert.alert('Invalid Coupon', 'This code does not exist or has expired.');
+                setAppliedDiscount(null);
+                setCheckingCoupon(false);
+                return;
+            }
+
+            setAppliedDiscount(data);
+            Alert.alert('Success', `Coupon applied: ${data.code}`);
+        } catch (e) {
+            console.error(e);
+            Alert.alert('Error', 'Failed to apply coupon.');
+        }
+        setCheckingCoupon(false);
+    };
 
     // Review Order - Step 3
     const renderReviewStep = () => (
@@ -1061,12 +1116,44 @@ const Checkout = () => {
                 ))}
             </View>
 
+            {/* Promo Code */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Discount Code</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TextInput
+                        style={[styles.input, { flex: 1, marginBottom: 0, marginRight: 8 }]}
+                        placeholder="Enter promo code"
+                        value={promoCode}
+                        onChangeText={setPromoCode}
+                        autoCapitalize="characters"
+                    />
+                    <TouchableOpacity
+                        style={{ backgroundColor: Colors.primary[500], padding: 12, borderRadius: 8 }}
+                        onPress={handleApplyCoupon}
+                        disabled={checkingCoupon}
+                    >
+                        {checkingCoupon ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Apply</Text>}
+                    </TouchableOpacity>
+                </View>
+                {appliedDiscount && (
+                    <Text style={{ color: Colors.success[500], marginTop: 4, fontWeight: '600' }}>
+                        Coupon applied: {appliedDiscount.code}
+                    </Text>
+                )}
+            </View>
+
             {/* Order Totals */}
             <View style={styles.section}>
                 <View style={styles.costRow}>
                     <Text style={styles.costLabel}>Subtotal</Text>
                     <Text style={styles.costValue}>${totals.subtotal.toFixed(2)}</Text>
                 </View>
+                {appliedDiscount && (
+                    <View style={styles.costRow}>
+                        <Text style={[styles.costLabel, { color: Colors.success[500] }]}>Discount</Text>
+                        <Text style={[styles.costValue, { color: Colors.success[500] }]}>- ${totals.discount.toFixed(2)}</Text>
+                    </View>
+                )}
                 <View style={styles.costRow}>
                     <Text style={styles.costLabel}>Shipping</Text>
                     <Text style={styles.costValue}>${totals.shippingCost.toFixed(2)}</Text>
