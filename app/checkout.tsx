@@ -1171,8 +1171,9 @@ const Checkout = () => {
                 return;
             }
 
-            setAppliedDiscount(data);
-            Alert.alert('Success', `Coupon applied: ${data.code}`);
+            const couponData = data as any;
+            setAppliedDiscount(couponData);
+            Alert.alert('Success', `Coupon applied: ${couponData.code}`);
         } catch (e) {
             console.error(e);
             Alert.alert('Error', 'Failed to apply coupon.');
