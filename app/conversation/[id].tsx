@@ -95,7 +95,8 @@ export default function ConversationScreen() {
         }
 
         // Get other user details
-        const otherUserId = data.buyer_id === user?.id ? data.seller_id : data.buyer_id;
+        const conversationData = data as any;
+        const otherUserId = conversationData.buyer_id === user?.id ? conversationData.seller_id : conversationData.buyer_id;
         const { data: otherUser } = await supabase
             .from('profiles')
             .select('id, full_name, avatar_url')
@@ -103,7 +104,7 @@ export default function ConversationScreen() {
             .single();
 
         setConversationDetails({
-            ...data,
+            ...conversationData,
             other_user: otherUser,
         } as any);
         setLoading(false);
@@ -121,7 +122,7 @@ export default function ConversationScreen() {
             return;
         }
 
-        setMessages(data || []);
+        setMessages((data || []) as unknown as Message[]);
         setTimeout(() => scrollToBottom(), 100);
     };
 
@@ -255,7 +256,13 @@ export default function ConversationScreen() {
             (messages[index + 1] && new Date(messages[index + 1].created_at).getTime() - new Date(item.created_at).getTime() > 300000);
 
         return (
-            <View style={[styles.messageContainer, isMyMessage && styles.myMessageContainer]}>
+            <View
+                key={item.id} // Use item.id for key
+                style={[
+                    styles.messageContainer,
+                    isMyMessage ? styles.myMessageContainer : null,
+                ] as any}
+            >
                 {showAvatar ? (
                     <Image
                         source={{ uri: conversationDetails?.other_user?.avatar_url || 'https://via.placeholder.com/30' }}
@@ -274,13 +281,13 @@ export default function ConversationScreen() {
                             />
                         )}
                         {item.content && (
-                            <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>
+                            <Text style={[styles.messageText, isMyMessage && styles.myMessageText] as any}>
                                 {item.content}
                             </Text>
                         )}
                     </View>
                     {showTimestamp && (
-                        <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime]}>
+                        <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime] as any}>
                             {formatTime(item.created_at)}
                             {isMyMessage && item.is_read && ' • Seen'}
                         </Text>
@@ -366,7 +373,7 @@ export default function ConversationScreen() {
                 data={messages}
                 renderItem={renderMessage}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.messagesList}
+                contentContainerStyle={styles.messagesList as any}
                 ListHeaderComponent={
                     <>
                         {renderProductCard()}
@@ -421,7 +428,7 @@ export default function ConversationScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
+        backgroundColor: Colors.background.primary,
     },
     loadingContainer: {
         flex: 1,

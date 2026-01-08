@@ -178,7 +178,7 @@ const ItemDetail = () => {
                 .select('id')
                 .eq('product_id', id)
                 .eq('buyer_id', user.id)
-                .single();
+                .single() as any;
 
             if (existingConversation) {
                 // Navigate to existing conversation
@@ -193,7 +193,7 @@ const ItemDetail = () => {
                         seller_id: product.seller_id || 'seller-1', // TODO: Use actual seller_id
                     })
                     .select('id')
-                    .single();
+                    .single() as any;
 
                 if (error) throw error;
 

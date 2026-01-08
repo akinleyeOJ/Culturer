@@ -40,3 +40,8 @@ yarn-error.*
 docs/
 
 app-example
+
+
+# Notes
+MESSAGING_IMPLEMENTATION.md
+NEXT_STEPS.md
