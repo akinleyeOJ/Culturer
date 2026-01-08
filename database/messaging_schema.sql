@@ -30,10 +30,7 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
     -- At least one of content or image_url must be present
-    CHECK (content IS NOT NULL OR image_url IS NOT NULL),
-    
-    -- Index for fast queries
-    INDEX idx_messages_conversation (conversation_id, created_at DESC)
+    CHECK (content IS NOT NULL OR image_url IS NOT NULL)
 );
 
 -- ============================================
@@ -47,11 +44,12 @@ CREATE TABLE IF NOT EXISTS notifications (
     body TEXT NOT NULL,
     data JSONB, -- Flexible data (order_id, product_id, etc.)
     is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    -- Index for user queries
-    INDEX idx_notifications_user (user_id, created_at DESC)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
