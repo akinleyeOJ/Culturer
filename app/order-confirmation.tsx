@@ -35,7 +35,7 @@ export default function OrderConfirmation() {
                     </View>
                     <Text style={styles.title}>Order Placed!</Text>
                     <Text style={styles.subtitle}>
-                        Thank you for your purchase. Your order has been confirmed/
+                        Thank you for your purchase. Your order has been confirmed
                     </Text>
                     {orderId && (
                         <Text style={styles.orderId}>Order #{String(orderId).slice(0, 8).toUpperCase()}</Text>
