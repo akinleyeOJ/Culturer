@@ -10,9 +10,9 @@ import {
     RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { Colors } from '../constants/color';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { Colors } from '../../constants/color';
 import { ChatBubbleLeftIcon, BellIcon, CheckIcon, TrashIcon, Cog6ToothIcon } from 'react-native-heroicons/outline';
 import { ChatBubbleLeftIcon as ChatBubbleLeftSolid } from 'react-native-heroicons/solid';
 
@@ -77,7 +77,7 @@ export default function MessagesScreen() {
         if (!user) return;
 
         const { data, error } = await supabase
-            .from('conversations')
+            .from('conversations' as any)
             .select(`
                 *,
                 product:products(name, image_url, price),
@@ -121,7 +121,7 @@ export default function MessagesScreen() {
         if (!user) return;
 
         const { data, error } = await supabase
-            .from('notifications')
+            .from('notifications' as any)
             .select('*')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
@@ -132,7 +132,7 @@ export default function MessagesScreen() {
             return;
         }
 
-        setNotifications(data || []);
+        setNotifications((data || []) as unknown as Notification[]);
     };
 
     const subscribeToUpdates = () => {
@@ -169,7 +169,7 @@ export default function MessagesScreen() {
 
         if (activeTab === 'notifications') {
             await supabase
-                .from('notifications')
+                .from('notifications' as any)
                 .update({ is_read: true })
                 .eq('user_id', user.id)
                 .eq('is_read', false);
@@ -183,7 +183,7 @@ export default function MessagesScreen() {
 
         if (activeTab === 'notifications') {
             await supabase
-                .from('notifications')
+                .from('notifications' as any)
                 .delete()
                 .eq('user_id', user.id);
 
@@ -212,7 +212,7 @@ export default function MessagesScreen() {
             case 'order':
                 return Colors.primary[100];
             case 'delivery':
-                return Colors.info[100];
+                return Colors.primary[100]; // Using primary since info doesn't exist
             case 'message':
                 return Colors.secondary[100];
             case 'activity':
@@ -292,14 +292,14 @@ export default function MessagesScreen() {
             onPress={() => {
                 // Mark as read and navigate based on type
                 supabase
-                    .from('notifications')
+                    .from('notifications' as any)
                     .update({ is_read: true })
                     .eq('id', item.id)
                     .then(() => fetchNotifications());
 
                 // Navigate based on notification type
                 if (item.type === 'order' && item.data?.order_id) {
-                    router.push(`/order/${item.data.order_id}`);
+                    router.push(`/order/${item.data.order_id}` as any);
                 } else if (item.type === 'message' && item.data?.conversation_id) {
                     router.push(`/conversation/${item.data.conversation_id}`);
                 }
@@ -348,7 +348,7 @@ export default function MessagesScreen() {
             {activeTab === 'messages' && (
                 <TouchableOpacity
                     style={styles.discoverButton}
-                    onPress={() => router.push('/(tabs)/browse')}
+                    onPress={() => router.push('/browse' as any)}
                 >
                     <Text style={styles.discoverButtonText}>🔍 Discover items</Text>
                 </TouchableOpacity>
@@ -430,8 +430,8 @@ export default function MessagesScreen() {
                 </View>
             ) : (
                 <FlatList
-                    data={activeTab === 'messages' ? conversations : notifications}
-                    renderItem={activeTab === 'messages' ? renderConversationItem : renderNotificationItem}
+                    data={activeTab === 'messages' ? conversations : notifications as any}
+                    renderItem={activeTab === 'messages' ? renderConversationItem : renderNotificationItem as any}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.listContent}
                     ListEmptyComponent={renderEmptyState}
@@ -445,7 +445,7 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
+        backgroundColor: '#F5F5F5',
     },
     header: {
         paddingHorizontal: 20,
