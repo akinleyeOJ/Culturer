@@ -50,6 +50,20 @@ export default function TabLayout() {
   return (
     <Tabs screenOptions={{ tabBarActiveTintColor: Colors.primary[500] }}>
       <Tabs.Screen
+        name="Message"
+        options={{
+          title: "Message",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
+              OutlineIcon={EnvelopeIcon}
+              SolidIcon={EnvelopeIconSolid}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="Home"
         options={{
           title: "Home",
@@ -89,20 +103,6 @@ export default function TabLayout() {
               focused={focused}
               OutlineIcon={HeartIcon}
               SolidIcon={HeartIconSolid}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="Message"
-        options={{
-          title: "Message",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              focused={focused}
-              OutlineIcon={EnvelopeIcon}
-              SolidIcon={EnvelopeIconSolid}
               color={color}
             />
           ),
