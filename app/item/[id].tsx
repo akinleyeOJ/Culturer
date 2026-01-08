@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon, ShoppingBagIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon, ShoppingBagIcon, ChatBubbleLeftIcon } from 'react-native-heroicons/outline';
 import { HeartIcon as HeartOutline } from 'react-native-heroicons/outline';
 import { HeartIcon as HeartSolid } from 'react-native-heroicons/solid';
 import { Colors } from '../../constants/color';
@@ -30,6 +30,7 @@ import {
 import { addToCart } from '../../lib/services/cartService';
 import { useCart } from '../../contexts/CartContext';
 import { CartToast } from '../../components/CartToast';
+import { supabase } from '../../lib/supabase';
 
 const ItemDetail = () => {
     const router = useRouter();
@@ -161,6 +162,48 @@ const ItemDetail = () => {
     const decrementQuantity = () => {
         if (quantity > 1) {
             setQuantity(quantity - 1);
+        }
+    };
+
+    const handleMessageSeller = async () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in to message sellers');
+            return;
+        }
+
+        try {
+            // Check if conversation already exists
+            const { data: existingConversation } = await supabase
+                .from('conversations' as any)
+                .select('id')
+                .eq('product_id', id)
+                .eq('buyer_id', user.id)
+                .single();
+
+            if (existingConversation) {
+                // Navigate to existing conversation
+                router.push(`/conversation/${existingConversation.id}` as any);
+            } else {
+                // Create new conversation
+                const { data: newConversation, error } = await supabase
+                    .from('conversations' as any)
+                    .insert({
+                        product_id: id,
+                        buyer_id: user.id,
+                        seller_id: product.seller_id || 'seller-1', // TODO: Use actual seller_id
+                    })
+                    .select('id')
+                    .single();
+
+                if (error) throw error;
+
+                if (newConversation) {
+                    router.push(`/conversation/${newConversation.id}` as any);
+                }
+            }
+        } catch (error) {
+            console.error('Error creating conversation:', error);
+            Alert.alert('Error', 'Failed to start conversation. Please try again.');
         }
     };
 
@@ -369,6 +412,12 @@ const ItemDetail = () => {
 
             {/* Bottom Bar */}
             <View style={styles.bottomBar}>
+                <TouchableOpacity
+                    style={styles.messageButton}
+                    onPress={handleMessageSeller}
+                >
+                    <ChatBubbleLeftIcon size={20} color={Colors.primary[500]} />
+                </TouchableOpacity>
                 {isInStock ? (
                     <>
                         <View style={styles.quantitySelector}>
@@ -535,6 +584,16 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: Colors.neutral[200],
         gap: 12,
+    },
+    messageButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: Colors.primary[50],
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: Colors.primary[200],
     },
     quantitySelector: {
         flexDirection: 'row',
