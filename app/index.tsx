@@ -26,12 +26,12 @@ const Index = () => {
     );
   }
 
-  // TEMPORARY: Redirect to Browse for development
-  return <Redirect href="/(tabs)/Browse" />;
+  // Redirect to messages (new default)
+  return <Redirect href="/(tabs)/messages" />;
 
   // // If user is logged in, go to Home
   // if (user) {
-  //   return <Redirect href="/(tabs)/Home" />;
+  //   return <Redirect href="/(tabs)/home" />;
   // }
 
   // // If not logged in, go to Splash screen (which flows to Onboarding -> Auth)

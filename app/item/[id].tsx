@@ -70,7 +70,7 @@ const ItemDetail = () => {
 
             // Load recommendations
             const [seller, similar] = await Promise.all([
-                fetchSellerProducts('seller-1', id, 6, user?.id), // TODO: Use actual seller_id
+                fetchSellerProducts(productData.seller_id || 'seller-1', id, 6, user?.id),
                 fetchSimilarProducts(
                     id,
                     productData.category,
@@ -166,8 +166,8 @@ const ItemDetail = () => {
     };
 
     const handleMessageSeller = async () => {
-        if (!user) {
-            Alert.alert('Sign In Required', 'Please sign in to message sellers');
+        if (!user || !product) {
+            if (!user) Alert.alert('Sign In Required', 'Please sign in to message sellers');
             return;
         }
 
@@ -190,7 +190,7 @@ const ItemDetail = () => {
                     .insert({
                         product_id: id,
                         buyer_id: user.id,
-                        seller_id: product.seller_id || 'seller-1', // TODO: Use actual seller_id
+                        seller_id: product.seller_id,
                     })
                     .select('id')
                     .single() as any;

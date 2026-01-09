@@ -36,7 +36,7 @@ export interface FilterOptions {
   searchQuery?: string;
   minPrice?: number;
   maxPrice?: number;
-  condition?: string;
+  condition?: 'new' | 'like_new' | 'good' | 'fair';
   shipping?: string;
   culture?: string;
   sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'popularity';
@@ -263,6 +263,7 @@ export const fetchProductById = async (productId: string, userId?: string) => {
     dimensions: (product as any).dimensions || '',
     returns_policy: (product as any).returns_policy || '7 days',
     seller_name: (product as any).seller_name || 'Unknown Seller',
+    seller_id: (product as any).seller_id,
     seller_avatar: (product as any).seller_avatar,
     seller_rating: (product as any).seller_rating || 4.5,
     seller_reviews_count: (product as any).seller_reviews_count || 0,

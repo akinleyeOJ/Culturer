@@ -12,7 +12,7 @@ export default function OrderConfirmation() {
     // Prevent back button from going back to checkout
     useEffect(() => {
         const backAction = () => {
-            router.replace('/(tabs)/Home');
+            router.replace('/(tabs)/home' as any);
             return true;
         };
 
@@ -65,7 +65,7 @@ export default function OrderConfirmation() {
             <View style={styles.footer}>
                 <TouchableOpacity
                     style={styles.primaryButton}
-                    onPress={() => router.replace('/(tabs)/Home')}
+                    onPress={() => router.replace('/(tabs)/home' as any)}
                 >
                     <HomeIcon size={20} color="#FFF" style={{ marginRight: 8 }} />
                     <Text style={styles.buttonText}>Return Home</Text>
@@ -73,7 +73,7 @@ export default function OrderConfirmation() {
 
                 <TouchableOpacity
                     style={styles.secondaryButton}
-                    onPress={() => router.replace('/(tabs)/Browse')}
+                    onPress={() => router.replace('/(tabs)/browse' as any)}
                 >
                     <ShoppingBagIcon size={20} color={Colors.primary[600]} style={{ marginRight: 8 }} />
                     <Text style={styles.secondaryButtonText}>Continue Shopping</Text>

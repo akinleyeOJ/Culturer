@@ -299,7 +299,7 @@ const Home = () => {
         cartCount={cartCount}
         isScrolled={isScrolled}
         onSearchPress={() => router.push('/search')}
-        onWishlistPress={() => router.push('/(tabs)/Wishlist')}
+        onWishlistPress={() => router.push('/(tabs)/wishlist' as any)}
         onCartPress={() => router.push('/cart')}
       />
 
@@ -461,7 +461,7 @@ const Home = () => {
             {!loading && hotProducts.length > 0 && (
               <TouchableOpacity
                 onPress={() => router.navigate({
-                  pathname: '/(tabs)/Browse',
+                  pathname: '/(tabs)/browse' as any,
                   params: {
                     sortBy: 'popularity',
                     timestamp: Date.now()

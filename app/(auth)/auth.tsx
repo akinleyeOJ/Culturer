@@ -101,14 +101,14 @@ const AuthScreen = () => {
           // OAuth users don't need email confirmation, navigate directly
           if (hasOAuthIdentity) {
             console.log("OAuth user detected, navigating to home...");
-            router.replace("/(tabs)/Home");
+            router.replace("/(tabs)/home" as any);
             return;
           }
 
           // For email users, check if email is confirmed
           if (session.user.email_confirmed_at) {
             console.log("Email confirmed! Navigating to home...");
-            router.replace("/(tabs)/Home");
+            router.replace("/(tabs)/home" as any);
           } else {
             console.log("Email not yet confirmed");
           }
@@ -543,7 +543,7 @@ const AuthScreen = () => {
         }
 
         // Navigate to the home screen after successful login
-        router.replace("/(tabs)/Home");
+        router.replace("/(tabs)/home" as any);
       } catch (error: any) {
         Alert.alert("Sign In Error", error.message || "Invalid credentials");
       } finally {
@@ -612,7 +612,7 @@ const AuthScreen = () => {
               refresh_token,
             });
 
-            router.replace("/(tabs)/Home");
+            router.replace("/(tabs)/home" as any);
           }
         } else if (result.type === "cancel") {
           Alert.alert("Cancelled", "Sign in was cancelled");

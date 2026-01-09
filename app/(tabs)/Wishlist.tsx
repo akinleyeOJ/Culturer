@@ -481,7 +481,7 @@ const Wishlist = () => {
     router.push({
       pathname: '/filter',
       params: {
-        returnPath: '/(tabs)/Wishlist',
+        returnPath: '/(tabs)/wishlist',
         search: searchQuery,
         categories: selectedCategories.join(','),
         minPrice: filters.minPrice,

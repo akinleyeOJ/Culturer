@@ -41,30 +41,15 @@ export default function TabLayout() {
     );
   }
 
-  // // Redirect to auth if not logged in
-  // if (!user) {
-  //   return <Redirect href="/(auth)/auth" />;
-  // }
+  // Redirect to auth if not logged in
+  if (!user) {
+    return <Redirect href="/(auth)/auth" />;
+  }
 
-  // User is authenticated, show tabs
   return (
     <Tabs screenOptions={{ tabBarActiveTintColor: Colors.primary[500] }}>
       <Tabs.Screen
-        name="Message"
-        options={{
-          title: "Message",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              focused={focused}
-              OutlineIcon={EnvelopeIcon}
-              SolidIcon={EnvelopeIconSolid}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="Home"
+        name="home"
         options={{
           title: "Home",
           headerShown: false,
@@ -79,7 +64,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="Browse"
+        name="browse"
         options={{
           title: "Browse",
           headerShown: false,
@@ -94,7 +79,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="Wishlist"
+        name="wishlist"
         options={{
           title: "Wishlist",
           headerShown: false,
@@ -109,7 +94,21 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="Profile"
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
+              OutlineIcon={EnvelopeIcon}
+              SolidIcon={EnvelopeIconSolid}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
         options={{
           title: "Profile",
           tabBarIcon: ({ color, focused }) => (

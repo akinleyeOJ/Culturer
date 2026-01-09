@@ -77,7 +77,7 @@ const Browse = () => {
   const [sortBy, setSortBy] = useState<any>(params.sortBy || "newest");
   const [minPrice, setMinPrice] = useState(params.minPrice ? Number(params.minPrice) : undefined);
   const [maxPrice, setMaxPrice] = useState(params.maxPrice ? Number(params.maxPrice) : undefined);
-  const [condition, setCondition] = useState(params.condition as string || undefined);
+  const [condition, setCondition] = useState<'new' | 'like_new' | 'good' | 'fair' | undefined>(params.condition as any || undefined);
   const [shipping, setShipping] = useState(params.shipping as string || undefined);
   const [culture, setCulture] = useState(params.culture as string || undefined);
 
@@ -113,7 +113,7 @@ const Browse = () => {
     }
     if (params.minPrice) setMinPrice(Number(params.minPrice));
     if (params.maxPrice) setMaxPrice(Number(params.maxPrice));
-    if (params.condition) setCondition(params.condition as string);
+    if (params.condition) setCondition(params.condition as any);
     if (params.shipping) setShipping(params.shipping as string);
     if (params.culture) setCulture(params.culture as string);
 
@@ -492,7 +492,7 @@ const Browse = () => {
         wishlistCount={wishlistCount}
         cartCount={cartCount}
         isScrolled={isScrolled}
-        onWishlistPress={() => router.push('/(tabs)/Wishlist')}
+        onWishlistPress={() => router.push('/(tabs)/wishlist' as any)}
         onCartPress={() => router.push('/cart')}
       />
 
