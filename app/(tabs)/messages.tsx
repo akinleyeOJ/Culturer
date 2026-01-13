@@ -8,6 +8,7 @@ import {
     Image,
     ActivityIndicator,
     RefreshControl,
+    ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
@@ -243,46 +244,94 @@ export default function MessagesScreen() {
         const diff = now.getTime() - time.getTime();
         const minutes = Math.floor(diff / 60000);
         const hours = Math.floor(diff / 3600000);
-        const days = Math.floor(diff / 86400000);
 
         if (minutes < 1) return 'Just now';
-        if (minutes < 60) return `${minutes}m ago`;
-        if (hours < 24) return `${hours}h ago`;
-        if (days === 1) return 'Yesterday';
-        if (days < 7) return `${days}d ago`;
-        return time.toLocaleDateString();
+        if (minutes < 60) return `${minutes}m`;
+        if (hours < 24) {
+            if (now.getDate() === time.getDate()) {
+                return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            return 'Yesterday';
+        }
+        return time.toLocaleDateString([], { month: 'short', day: 'numeric' });
     };
+
+    const getDateGroup = (timestamp: string) => {
+        const now = new Date();
+        const date = new Date(timestamp);
+        const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
+
+        if (diffDays === 0 && now.getDate() === date.getDate()) return 'Today';
+        if (diffDays === 1 || (diffDays === 0 && now.getDate() !== date.getDate())) return 'Yesterday';
+        if (diffDays < 7) return 'This Week';
+        return 'Earlier';
+    };
+
+    const groupItemsByDate = (items: any[]) => {
+        const groups: { title: string; data: any[] }[] = [];
+        items.forEach(item => {
+            const dateStr = item.last_message_at || item.created_at;
+            const groupTitle = getDateGroup(dateStr);
+            const group = groups.find(g => g.title === groupTitle);
+            if (group) {
+                group.data.push(item);
+            } else {
+                groups.push({ title: groupTitle, data: [item] });
+            }
+        });
+        return groups;
+    };
+
+    const MessageSkeleton = () => (
+        <View style={styles.skeletonItem}>
+            <View style={styles.skeletonAvatar} />
+            <View style={styles.skeletonContent}>
+                <View style={styles.skeletonRow}>
+                    <View style={[styles.skeletonLine, { width: '40%' }]} />
+                    <View style={[styles.skeletonLine, { width: '15%' }]} />
+                </View>
+                <View style={[styles.skeletonLine, { width: '30%', marginTop: 8 }]} />
+                <View style={[styles.skeletonLine, { width: '80%', marginTop: 8 }]} />
+            </View>
+        </View>
+    );
 
     const renderConversationItem = ({ item }: { item: Conversation }) => (
         <TouchableOpacity
             style={styles.conversationItem}
             onPress={() => router.push(`/conversation/${item.id}`)}
+            activeOpacity={0.7}
         >
-            <Image
-                source={{ uri: item.other_user?.avatar_url || 'https://via.placeholder.com/50' }}
-                style={styles.avatar}
-            />
+            <View style={styles.avatarWrapper}>
+                <Image
+                    source={{ uri: item.other_user?.avatar_url || 'https://via.placeholder.com/50' }}
+                    style={styles.avatar}
+                />
+                {item.product?.image_url && (
+                    <View style={styles.productThumbnailBadge}>
+                        <Image source={{ uri: item.product.image_url }} style={styles.productThumbnail} />
+                    </View>
+                )}
+            </View>
             <View style={styles.conversationContent}>
                 <View style={styles.conversationHeader}>
-                    <Text style={styles.userName}>{item.other_user?.full_name || 'Unknown User'}</Text>
+                    <Text style={styles.userName} numberOfLines={1}>
+                        {item.other_user?.full_name || 'Unknown User'}
+                    </Text>
                     <Text style={styles.timestamp}>{formatTime(item.last_message_at)}</Text>
                 </View>
-                <Text style={styles.productName} numberOfLines={1}>
-                    {item.product?.name}
-                </Text>
-                <Text
-                    style={[styles.lastMessage, item.unread_count > 0 && styles.unreadMessage]}
-                    numberOfLines={1}
-                >
-                    {item.last_message || 'Start a conversation...'}
-                </Text>
-            </View>
-            {item.unread_count > 0 && (
-                <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadText}>{item.unread_count}</Text>
+                <View style={styles.messagePreviewRow}>
+                    <Text
+                        style={[styles.lastMessage, item.unread_count > 0 && styles.unreadMessage]}
+                        numberOfLines={1}
+                    >
+                        {item.last_message || 'Start a conversation...'}
+                    </Text>
+                    {item.unread_count > 0 && (
+                        <View style={styles.unreadDotIndicator} />
+                    )}
                 </View>
-            )}
-            <ChatBubbleLeftIcon size={20} color={Colors.neutral[400]} />
+            </View>
         </TouchableOpacity>
     );
 
@@ -357,85 +406,82 @@ export default function MessagesScreen() {
     );
 
     const unreadNotificationsCount = notifications.filter((n) => !n.is_read).length;
+    const groupedData = groupItemsByDate(activeTab === 'messages' ? conversations : notifications);
 
     return (
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Inbox</Text>
-            </View>
-
-            {/* Tabs */}
-            <View style={styles.tabContainer}>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'messages' && styles.activeTab]}
-                    onPress={() => setActiveTab('messages')}
-                >
-                    <ChatBubbleLeftSolid size={20} color={activeTab === 'messages' ? '#FFF' : Colors.primary[500]} />
-                    <Text style={[styles.tabText, activeTab === 'messages' && styles.activeTabText]}>
-                        Messages
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'notifications' && styles.activeTab]}
-                    onPress={() => setActiveTab('notifications')}
-                >
-                    <BellIcon size={20} color={activeTab === 'notifications' ? Colors.primary[500] : Colors.neutral[400]} />
-                    <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>
-                        Notifications
-                    </Text>
-                    {unreadNotificationsCount > 0 && (
-                        <View style={styles.tabBadge}>
-                            <Text style={styles.tabBadgeText}>{unreadNotificationsCount}</Text>
-                        </View>
-                    )}
-                </TouchableOpacity>
-            </View>
-
-            {/* Section Header */}
-            <View style={styles.sectionHeader}>
-                <View>
-                    <Text style={styles.sectionTitle}>All notifications</Text>
-                    <Text style={styles.sectionSubtitle}>
-                        {activeTab === 'messages'
-                            ? 'Showing messages and system updates in one place. Simple and clean.'
-                            : 'Stay updated on orders, deliveries, and activity'}
-                    </Text>
-                </View>
-                <Text style={styles.todayLabel}>Today</Text>
-            </View>
-
-            {/* Action Buttons (for notifications) */}
-            {activeTab === 'notifications' && notifications.length > 0 && (
-                <View style={styles.actionBar}>
-                    <TouchableOpacity style={styles.actionButton} onPress={markAllAsRead}>
-                        <CheckIcon size={16} color={Colors.primary[500]} />
-                        <Text style={styles.actionButtonText}>Mark all read</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionButton} onPress={clearAll}>
-                        <TrashIcon size={16} color={Colors.danger[500]} />
-                        <Text style={[styles.actionButtonText, { color: Colors.danger[500] }]}>Clear</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.preferencesButton}>
-                        <Cog6ToothIcon size={16} color={Colors.neutral[600]} />
-                        <Text style={styles.actionButtonText}>Preferences</Text>
+                <View style={styles.headerTop}>
+                    <Text style={styles.headerTitle}>Inbox</Text>
+                    <TouchableOpacity style={styles.headerIconBtn}>
+                        <Cog6ToothIcon size={24} color={Colors.text.primary} />
                     </TouchableOpacity>
                 </View>
-            )}
+
+                {/* Modern Segmented Control */}
+                <View style={styles.segmentedControl}>
+                    <TouchableOpacity
+                        style={[styles.segment, activeTab === 'messages' && styles.activeSegment]}
+                        onPress={() => setActiveTab('messages')}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={[styles.segmentText, activeTab === 'messages' && styles.activeSegmentText]}>
+                            Messages
+                        </Text>
+                        {conversations.some(c => c.unread_count > 0) && (
+                            <View style={[styles.dot, { backgroundColor: activeTab === 'messages' ? Colors.primary[500] : Colors.neutral[400] }]} />
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.segment, activeTab === 'notifications' && styles.activeSegment]}
+                        onPress={() => setActiveTab('notifications')}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={[styles.segmentText, activeTab === 'notifications' && styles.activeSegmentText]}>
+                            Notifications
+                        </Text>
+                        {unreadNotificationsCount > 0 && (
+                            <View style={styles.countBadge}>
+                                <Text style={styles.countBadgeText}>{unreadNotificationsCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </View>
 
             {/* Content */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={Colors.primary[500]} />
-                </View>
+            {loading && !refreshing ? (
+                <ScrollView style={styles.listContent}>
+                    {[1, 2, 3, 4, 5, 6].map(i => <MessageSkeleton key={i} />)}
+                </ScrollView>
             ) : (
                 <FlatList
-                    data={activeTab === 'messages' ? conversations : notifications as any}
-                    renderItem={activeTab === 'messages' ? renderConversationItem : renderNotificationItem as any}
-                    keyExtractor={(item) => item.id}
+                    data={groupedData}
+                    keyExtractor={(group) => group.title}
+                    renderItem={({ item: group }) => (
+                        <View>
+                            <View style={styles.dateHeader}>
+                                <Text style={styles.dateHeaderText}>{group.title}</Text>
+                            </View>
+                            {group.data.map((item: any) => (
+                                <View key={item.id}>
+                                    {activeTab === 'messages'
+                                        ? renderConversationItem({ item })
+                                        : renderNotificationItem({ item })}
+                                </View>
+                            ))}
+                        </View>
+                    )}
                     contentContainerStyle={styles.listContent}
                     ListEmptyComponent={renderEmptyState}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor={Colors.primary[500]}
+                        />
+                    }
                 />
             )}
         </View>
@@ -445,109 +491,93 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F5F5',
+        backgroundColor: '#FFFFFF',
     },
     header: {
-        paddingHorizontal: 20,
         paddingTop: 60,
-        paddingBottom: 16,
         backgroundColor: '#FFF',
         borderBottomWidth: 1,
-        borderBottomColor: Colors.neutral[200],
+        borderBottomColor: Colors.neutral[100],
     },
-    headerTitle: {
-        fontSize: 28,
-        fontWeight: '700',
-        color: Colors.text.primary,
-    },
-    tabContainer: {
-        flexDirection: 'row',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        gap: 12,
-        backgroundColor: '#FFF',
-    },
-    tab: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 24,
-        gap: 8,
-        backgroundColor: Colors.neutral[100],
-    },
-    activeTab: {
-        backgroundColor: Colors.primary[500],
-    },
-    tabText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: Colors.neutral[600],
-    },
-    activeTabText: {
-        color: '#FFF',
-    },
-    tabBadge: {
-        backgroundColor: Colors.danger[500],
-        borderRadius: 10,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        marginLeft: 4,
-    },
-    tabBadgeText: {
-        color: '#FFF',
-        fontSize: 11,
-        fontWeight: '700',
-    },
-    sectionHeader: {
+    headerTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: '#FFF',
+        marginBottom: 16,
     },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+    headerTitle: {
+        fontSize: 32,
+        fontWeight: '800',
         color: Colors.text.primary,
-        marginBottom: 4,
+        letterSpacing: -0.5,
     },
-    sectionSubtitle: {
-        fontSize: 13,
-        color: Colors.text.secondary,
-        lineHeight: 18,
-        maxWidth: '80%',
+    headerIconBtn: {
+        padding: 8,
     },
-    todayLabel: {
-        fontSize: 13,
-        color: Colors.text.secondary,
-        fontWeight: '500',
-    },
-    actionBar: {
+    segmentedControl: {
         flexDirection: 'row',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        gap: 12,
-        backgroundColor: '#FFF',
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.neutral[200],
+        backgroundColor: Colors.neutral[100],
+        marginHorizontal: 20,
+        marginBottom: 16,
+        padding: 4,
+        borderRadius: 12,
     },
-    actionButton: {
+    segment: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        borderRadius: 8,
         gap: 6,
     },
-    actionButtonText: {
+    activeSegment: {
+        backgroundColor: '#FFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    segmentText: {
         fontSize: 14,
         fontWeight: '600',
-        color: Colors.primary[500],
+        color: Colors.neutral[500],
     },
-    preferencesButton: {
-        flexDirection: 'row',
+    activeSegmentText: {
+        color: Colors.text.primary,
+    },
+    dot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    countBadge: {
+        backgroundColor: Colors.primary[500],
+        borderRadius: 10,
+        minWidth: 18,
+        height: 18,
         alignItems: 'center',
-        gap: 6,
-        marginLeft: 'auto',
+        justifyContent: 'center',
+        paddingHorizontal: 4,
+    },
+    countBadgeText: {
+        color: '#FFF',
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    dateHeader: {
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        backgroundColor: Colors.neutral[50],
+    },
+    dateHeaderText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: Colors.neutral[500],
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     listContent: {
         flexGrow: 1,
@@ -555,16 +585,39 @@ const styles = StyleSheet.create({
     conversationItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 16,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
         backgroundColor: '#FFF',
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.neutral[100],
+    },
+    avatarWrapper: {
+        position: 'relative',
     },
     avatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        marginRight: 12,
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        marginRight: 16,
+        backgroundColor: Colors.neutral[100],
+    },
+    productThumbnailBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 12,
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: '#FFF',
+        backgroundColor: '#FFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        overflow: 'hidden',
+    },
+    productThumbnail: {
+        width: '100%',
+        height: '100%',
     },
     conversationContent: {
         flex: 1,
@@ -572,59 +625,58 @@ const styles = StyleSheet.create({
     conversationHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 4,
+        alignItems: 'center',
+        marginBottom: 2,
     },
     userName: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
         color: Colors.text.primary,
+        flex: 1,
+        marginRight: 8,
     },
     timestamp: {
         fontSize: 12,
-        color: Colors.text.secondary,
+        color: Colors.neutral[500],
+        fontWeight: '500',
     },
-    productName: {
-        fontSize: 13,
-        color: Colors.text.secondary,
-        marginBottom: 2,
+    messagePreviewRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     lastMessage: {
         fontSize: 14,
-        color: Colors.text.secondary,
+        color: Colors.neutral[500],
+        lineHeight: 20,
+        flex: 1,
     },
     unreadMessage: {
         fontWeight: '600',
         color: Colors.text.primary,
     },
-    unreadBadge: {
+    unreadDotIndicator: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
         backgroundColor: Colors.primary[500],
-        borderRadius: 12,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        marginRight: 8,
-    },
-    unreadText: {
-        color: '#FFF',
-        fontSize: 12,
-        fontWeight: '700',
+        marginLeft: 8,
     },
     notificationItem: {
         flexDirection: 'row',
-        padding: 16,
+        padding: 20,
         backgroundColor: '#FFF',
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.neutral[100],
     },
     unreadNotification: {
-        backgroundColor: Colors.primary[50],
+        backgroundColor: Colors.primary[50] + '40', // Very light tint
     },
     notificationIcon: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 12,
+        marginRight: 16,
     },
     notificationContent: {
         flex: 1,
@@ -632,78 +684,134 @@ const styles = StyleSheet.create({
     notificationHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'flex-start',
         marginBottom: 4,
     },
     notificationTitle: {
         fontSize: 15,
-        fontWeight: '500',
+        fontWeight: '600',
         color: Colors.text.primary,
         flex: 1,
+        marginRight: 8,
+        lineHeight: 20,
     },
     unreadTitle: {
-        fontWeight: '700',
+        fontWeight: '800',
     },
     notificationBody: {
         fontSize: 14,
-        color: Colors.text.secondary,
+        color: Colors.neutral[600],
+        lineHeight: 20,
         marginBottom: 8,
     },
     notificationBadge: {
         alignSelf: 'flex-start',
         paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-        backgroundColor: Colors.primary[100],
+        paddingVertical: 2,
+        borderRadius: 6,
+        backgroundColor: Colors.neutral[100],
     },
     badgeText: {
         fontSize: 11,
-        fontWeight: '600',
+        fontWeight: '700',
+        textTransform: 'uppercase',
     },
     unreadDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
         backgroundColor: Colors.primary[500],
-        marginLeft: 8,
+        alignSelf: 'center',
+        marginLeft: 12,
+    },
+    actionBar: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        gap: 16,
+        backgroundColor: '#FFF',
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.neutral[100],
+    },
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    actionButtonText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: Colors.primary[500],
     },
     emptyState: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 40,
-        paddingVertical: 60,
+        paddingVertical: 80,
     },
     emptyIconContainer: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: Colors.primary[50],
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: Colors.neutral[50],
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 20,
-    },
-    emptyTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: Colors.text.primary,
-        marginBottom: 8,
-    },
-    emptySubtitle: {
-        fontSize: 15,
-        color: Colors.text.secondary,
-        textAlign: 'center',
         marginBottom: 24,
     },
+    emptyTitle: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: Colors.text.primary,
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    emptySubtitle: {
+        fontSize: 16,
+        color: Colors.neutral[500],
+        textAlign: 'center',
+        lineHeight: 24,
+        marginBottom: 32,
+    },
     discoverButton: {
-        backgroundColor: Colors.primary[50],
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 24,
+        backgroundColor: Colors.primary[500],
+        paddingHorizontal: 32,
+        paddingVertical: 16,
+        borderRadius: 30,
+        shadowColor: Colors.primary[500],
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     discoverButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: Colors.primary[500],
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFF',
+    },
+    skeletonItem: {
+        flexDirection: 'row',
+        padding: 20,
+        alignItems: 'center',
+    },
+    skeletonAvatar: {
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        backgroundColor: Colors.neutral[100],
+        marginRight: 16,
+    },
+    skeletonContent: {
+        flex: 1,
+    },
+    skeletonRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    skeletonLine: {
+        height: 12,
+        backgroundColor: Colors.neutral[100],
+        borderRadius: 6,
     },
     loadingContainer: {
         flex: 1,
