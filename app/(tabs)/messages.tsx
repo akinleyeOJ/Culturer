@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
     },
     header: {
-        paddingTop: 60,
+        paddingTop: 44,
         backgroundColor: '#FFF',
         borderBottomWidth: 1,
         borderBottomColor: Colors.neutral[100],
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        marginBottom: 16,
+        marginBottom: 8,
     },
     headerTitle: {
         fontSize: 32,
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         backgroundColor: Colors.neutral[100],
         marginHorizontal: 20,
-        marginBottom: 16,
+        marginBottom: 12,
         padding: 4,
         borderRadius: 12,
     },

@@ -36,10 +36,10 @@ export default function AuthCallback() {
             router.replace("/(auth)/reset-password");
           } else if (type === "signup") {
             // Email confirmed successfully
-            router.replace("/(tabs)/Home");
+            router.replace("/(tabs)/home" as any);
           } else {
             // Regular OAuth callback or other types
-            router.replace("/(tabs)/Home");
+            router.replace("/(tabs)/home" as any);
           }
         } else {
           // No tokens, redirect to auth

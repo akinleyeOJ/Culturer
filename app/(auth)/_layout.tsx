@@ -17,7 +17,7 @@ const AuthLayout = () => {
   // Redirect to Home if already logged in
   // Exception: Allow callback screen even when logged in (needed for password reset)
   if (user) {
-    return <Redirect href="/(tabs)/Home" />;
+    return <Redirect href="/(tabs)/home" />;
   }
 
   // User is not authenticated, show auth screens
