@@ -45,3 +45,6 @@ app-example
 # Notes
 MESSAGING_IMPLEMENTATION.md
 NEXT_STEPS.md
+check_product_ownership.sql
+database/fix_notification_rls.sql
+database/separate_seller_account.sql

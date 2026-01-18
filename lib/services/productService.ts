@@ -249,6 +249,17 @@ export const fetchProductById = async (productId: string, userId?: string) => {
     return null;
   }
 
+  // Fetch seller details separately to avoid join errors
+  let sellerProfile = null;
+  if ((product as any).user_id) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', (product as any).user_id)
+      .single();
+    sellerProfile = data;
+  }
+
   return {
     ...transformProduct(product, favoriteIds),
     description: (product as any).description || '',
@@ -262,9 +273,9 @@ export const fetchProductById = async (productId: string, userId?: string) => {
     cultural_origin: (product as any).cultural_origin || '',
     dimensions: (product as any).dimensions || '',
     returns_policy: (product as any).returns_policy || '7 days',
-    seller_name: (product as any).seller_name || 'Unknown Seller',
+    seller_name: sellerProfile?.full_name || 'Unknown Seller',
     seller_id: (product as any).user_id,
-    seller_avatar: (product as any).seller_avatar,
+    seller_avatar: sellerProfile?.avatar_url,
     seller_rating: (product as any).seller_rating || 4.5,
     seller_reviews_count: (product as any).seller_reviews_count || 0,
     seller_location: (product as any).seller_location || 'Berlin',

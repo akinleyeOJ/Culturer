@@ -11,6 +11,7 @@ import {
     Image,
     ActivityIndicator,
     Alert,
+    ScrollView,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -84,7 +85,7 @@ export default function ConversationScreen() {
                 id,
                 buyer_id,
                 seller_id,
-                product:products(id, name, image_url, price, seller_id)
+                product:products(id, name, image_url, price, user_id)
             `)
             .eq('id', id)
             .single();
@@ -138,7 +139,11 @@ export default function ConversationScreen() {
                     filter: `conversation_id=eq.${id}`,
                 },
                 (payload) => {
-                    setMessages((prev) => [...prev, payload.new as Message]);
+                    setMessages((prev) => {
+                        // Prevent duplicates from subscription if we already added it locally
+                        if (prev.some(m => m.id === payload.new.id)) return prev;
+                        return [...prev, payload.new as Message];
+                    });
                     setTimeout(() => scrollToBottom(), 100);
                     markMessagesAsRead();
                 }
@@ -217,18 +222,34 @@ export default function ConversationScreen() {
         if (!user) return;
 
         setSending(true);
-        const { error } = await supabase.from('messages' as any).insert({
-            conversation_id: id,
-            sender_id: user.id,
-            content: messageContent || null,
-            image_url: imageUrl || null,
-        });
+
+        const { data, error } = await supabase
+            .from('messages' as any)
+            .insert({
+                conversation_id: id,
+                sender_id: user.id,
+                content: messageContent || null,
+                image_url: imageUrl || null,
+            })
+            .select()
+            .single();
 
         if (error) {
             console.error('Error sending message:', error);
             Alert.alert('Error', 'Failed to send message');
-        } else {
+        } else if (data) {
+            // Optimistically add message to list if subscription handles duplicates or logic allows
+            // In many cases, we might duplicate if subscription is fast. 
+            // A safer way is to rely on subscription, OR append here and filter duplicates in state.
+            // For now, let's append here because user reported "doesn't show".
+            // We can prevent duplicates by checking ID in setMessages.
+            const newMessage = data as unknown as Message;
+            setMessages((prev) => {
+                if (prev.some(m => m.id === newMessage.id)) return prev;
+                return [...prev, newMessage];
+            });
             setNewMessage('');
+            setTimeout(() => scrollToBottom(), 100);
         }
         setSending(false);
     };
@@ -317,7 +338,7 @@ export default function ConversationScreen() {
             onPress={() => router.push(`/product/${conversationDetails?.product?.id}` as any)}
         >
             <View style={styles.productCardContent}>
-                <Text style={styles.productCardLabel}>Listing • Amina Crafts</Text>
+                <Text style={styles.productCardLabel}>Listing • {conversationDetails?.other_user?.full_name || 'Seller'}</Text>
                 <Image
                     source={{ uri: conversationDetails?.product?.image_url || 'https://via.placeholder.com/60' }}
                     style={styles.productImage}
@@ -588,21 +609,23 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 12,
         gap: 8,
-        borderTopWidth: 1,
-        borderTopColor: Colors.neutral[200],
     },
     quickReplyButton: {
         backgroundColor: Colors.neutral[100],
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 12, // Taller button for easier tap
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: Colors.neutral[300],
+        width: '48%', // 2 by 2 grid (approx >48% to fit gap)
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     quickReplyText: {
-        fontSize: 14,
+        fontSize: 13,
         color: Colors.text.primary,
         fontWeight: '500',
+        textAlign: 'center',
     },
     inputContainer: {
         flexDirection: 'row',
