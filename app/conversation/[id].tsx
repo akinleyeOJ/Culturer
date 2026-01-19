@@ -11,7 +11,6 @@ import {
     Image,
     ActivityIndicator,
     Alert,
-    ScrollView,
     Modal,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -97,7 +96,6 @@ export default function ConversationScreen() {
             return;
         }
 
-        // Get other user details
         const conversationData = data as any;
         const otherUserId = conversationData.buyer_id === user?.id ? conversationData.seller_id : conversationData.buyer_id;
         const { data: otherUser } = await supabase
@@ -118,7 +116,7 @@ export default function ConversationScreen() {
             .from('messages' as any)
             .select('*')
             .eq('conversation_id', id)
-            .order('created_at', { ascending: true });
+            .order('created_at', { ascending: false });
 
         if (error) {
             console.error('Error fetching messages:', error);
@@ -126,7 +124,6 @@ export default function ConversationScreen() {
         }
 
         setMessages((data || []) as unknown as Message[]);
-        setTimeout(() => scrollToBottom(), 100);
     };
 
     const subscribeToMessages = () => {
@@ -142,34 +139,79 @@ export default function ConversationScreen() {
                 },
                 (payload) => {
                     setMessages((prev) => {
-                        // Prevent duplicates from subscription if we already added it locally
                         if (prev.some(m => m.id === payload.new.id)) return prev;
-                        return [...prev, payload.new as Message];
+                        return [payload.new as Message, ...prev];
                     });
-                    setTimeout(() => scrollToBottom(), 100);
                     markMessagesAsRead();
                 }
             )
             .subscribe();
 
         return () => {
-            // We might not want to proactively remove channel here if it causes issues on quick re-renders
-            // But for correctness, we should. Let's try wrapping it.
-            // Actually, the issue 'refresh to see' is usually because 'postgres_changes' isn't firing for 'INSERT'.
-            // Optimistic update handles 'sending', but 'receiving' needs this.
             supabase.removeChannel(channel);
         };
     };
 
     const markMessagesAsRead = async () => {
         if (!user) return;
-
         await supabase
             .from('messages' as any)
             .update({ is_read: true })
             .eq('conversation_id', id)
             .neq('sender_id', user.id)
             .eq('is_read', false);
+    };
+
+    const deleteConversation = async () => {
+        if (!user) {
+            Alert.alert('Error', 'You must be logged in to delete conversations');
+            return;
+        }
+
+        try {
+            console.log('Starting conversation deletion for ID:', id);
+
+            // First delete all messages in the conversation
+            console.log('Deleting messages...');
+            const { data: deletedMessages, error: messagesError } = await supabase
+                .from('messages' as any)
+                .delete()
+                .eq('conversation_id', id)
+                .select();
+
+            if (messagesError) {
+                console.error('Error deleting messages:', messagesError);
+                throw new Error(`Failed to delete messages: ${messagesError.message}`);
+            }
+
+            console.log('Deleted messages:', deletedMessages?.length || 0);
+
+            // Then delete the conversation itself
+            console.log('Deleting conversation...');
+            const { data: deletedConversation, error: conversationError } = await supabase
+                .from('conversations' as any)
+                .delete()
+                .eq('id', id)
+                .select();
+
+            if (conversationError) {
+                console.error('Error deleting conversation:', conversationError);
+                throw new Error(`Failed to delete conversation: ${conversationError.message}`);
+            }
+
+            console.log('Deleted conversation:', deletedConversation);
+
+            // Check if deletion actually worked
+            if (!deletedConversation || deletedConversation.length === 0) {
+                throw new Error('Deletion failed. You may not have permission to delete this conversation. Please check your database Row Level Security policies.');
+            }
+
+            // Navigate back to inbox
+            router.back();
+        } catch (error: any) {
+            console.error('Error in deleteConversation:', error);
+            Alert.alert('Error', error.message || 'Failed to delete conversation. Please try again.');
+        }
     };
 
     const uploadImage = async (uri: string): Promise<string | null> => {
@@ -206,7 +248,7 @@ export default function ConversationScreen() {
         }
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ['images'],
             allowsEditing: true,
             aspect: [4, 3],
             quality: 0.8,
@@ -244,24 +286,14 @@ export default function ConversationScreen() {
             console.error('Error sending message:', error);
             Alert.alert('Error', 'Failed to send message');
         } else if (data) {
-            // Optimistically add message to list if subscription handles duplicates or logic allows
-            // In many cases, we might duplicate if subscription is fast. 
-            // A safer way is to rely on subscription, OR append here and filter duplicates in state.
-            // For now, let's append here because user reported "doesn't show".
-            // We can prevent duplicates by checking ID in setMessages.
             const newMessage = data as unknown as Message;
             setMessages((prev) => {
                 if (prev.some(m => m.id === newMessage.id)) return prev;
-                return [...prev, newMessage];
+                return [newMessage, ...prev];
             });
             setNewMessage('');
-            setTimeout(() => scrollToBottom(), 100);
         }
         setSending(false);
-    };
-
-    const scrollToBottom = () => {
-        flatListRef.current?.scrollToEnd({ animated: true });
     };
 
     const formatTime = (timestamp: string) => {
@@ -277,28 +309,25 @@ export default function ConversationScreen() {
 
     const renderMessage = ({ item, index }: { item: Message; index: number }) => {
         const isMyMessage = item.sender_id === user?.id;
-        const previousMessage = index > 0 ? messages[index - 1] : null;
-        const showAvatar = !isMyMessage && (!previousMessage || previousMessage.sender_id !== item.sender_id);
-        const showTimestamp = index === messages.length - 1 ||
-            (messages[index + 1] && new Date(messages[index + 1].created_at).getTime() - new Date(item.created_at).getTime() > 300000);
+
+        const messageAbove = index < messages.length - 1 ? messages[index + 1] : null;
+        const messageBelow = index > 0 ? messages[index - 1] : null;
+
+        const showTimestamp = index === 0 ||
+            (messageBelow && new Date(item.created_at).getTime() - new Date(messageBelow.created_at).getTime() > 300000);
 
         return (
             <View
-                key={item.id} // Use item.id for key
+                key={item.id}
                 style={[
                     styles.messageContainer,
-                    isMyMessage ? styles.myMessageContainer : null,
-                ] as any}
+                    isMyMessage ? styles.myMessageContainer : styles.theirMessageContainer,
+                ]}
             >
-                {showAvatar ? (
-                    <Image
-                        source={{ uri: conversationDetails?.other_user?.avatar_url || 'https://via.placeholder.com/30' }}
-                        style={styles.messageAvatar}
-                    />
-                ) : (
-                    <View style={styles.messageAvatar} />
-                )}
-                <View style={{ maxWidth: '75%', marginRight: 8 }}>
+                <View style={[
+                    { maxWidth: '80%' },
+
+                ]}>
                     <View style={[styles.messageBubble, isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble]}>
                         {item.image_url && (
                             <Image
@@ -308,13 +337,13 @@ export default function ConversationScreen() {
                             />
                         )}
                         {item.content && (
-                            <Text style={[styles.messageText, isMyMessage && styles.myMessageText] as any}>
+                            <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>
                                 {item.content}
                             </Text>
                         )}
                     </View>
                     {showTimestamp && (
-                        <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime] as any}>
+                        <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime]}>
                             {formatTime(item.created_at)}
                             {isMyMessage && item.is_read && ' • Seen'}
                         </Text>
@@ -403,21 +432,21 @@ export default function ConversationScreen() {
                 data={messages}
                 renderItem={renderMessage}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.messagesList as any}
-                ListHeaderComponent={
+                inverted={true}
+                contentContainerStyle={styles.messagesList}
+                ListFooterComponent={
                     <>
                         {renderProductCard()}
                         {renderDateSeparator()}
                     </>
                 }
-                ListFooterComponent={
+                ListHeaderComponent={
                     messages.length === 0 ? (
                         <View style={styles.emptyMessages}>
                             <Text style={styles.emptyMessagesText}>Start the conversation!</Text>
                         </View>
                     ) : null
                 }
-                onContentSizeChange={() => scrollToBottom()}
             />
 
             {messages.length === 0 && renderQuickReplies()}
@@ -452,7 +481,6 @@ export default function ConversationScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* Options Menu Modal */}
             <Modal
                 visible={menuVisible}
                 transparent
@@ -513,7 +541,7 @@ export default function ConversationScreen() {
                                 setMenuVisible(false);
                                 Alert.alert("Delete Conversation", "Are you sure you want to delete this conversation? This action cannot be undone.", [
                                     { text: "Cancel", style: "cancel" },
-                                    { text: "Delete", style: "destructive", onPress: () => router.back() }
+                                    { text: "Delete", style: "destructive", onPress: deleteConversation }
                                 ]);
                             }}
                         >
@@ -536,7 +564,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-start',
         alignItems: 'flex-end',
-        paddingTop: 60, // Align roughly with header
+        paddingTop: 60,
         paddingRight: 16,
     },
     menuContainer: {
@@ -601,7 +629,7 @@ const styles = StyleSheet.create({
     productCard: {
         backgroundColor: '#FFF',
         marginHorizontal: 16,
-        marginTop: 24, // Increased top margin to make room for label
+        marginTop: 24,
         marginBottom: 8,
         borderRadius: 12,
         padding: 12,
@@ -614,7 +642,7 @@ const styles = StyleSheet.create({
     },
     productCardLabel: {
         position: 'absolute',
-        top: -30, // Move label higher up
+        top: -30,
         left: 0,
         marginBottom: 4,
         fontSize: 11,
@@ -655,27 +683,36 @@ const styles = StyleSheet.create({
         borderRadius: 12,
     },
     messagesList: {
-        paddingHorizontal: 16,
-        paddingBottom: 32, // Increased from 16 to 32 for better visibility
+        paddingHorizontal: 12,
+        paddingTop: 10,
+        paddingBottom: 4, // Reduced to minimize end-of-chat gap
     },
     messageContainer: {
         flexDirection: 'row',
-        marginBottom: 4,
+        marginBottom: 4, // Tight gap for grouping
         alignItems: 'flex-end',
+    },
+    theirMessageContainer: {
+        justifyContent: 'flex-start',
     },
     myMessageContainer: {
         justifyContent: 'flex-end',
     },
     messageAvatar: {
-        height: 30,
-        borderRadius: 15,
-        marginRight: 8,
+        height: 28,
+        width: 28,
+        borderRadius: 14,
+        marginRight: 6,
+    },
+    avatarSpacer: {
+        width: 28,
+        marginRight: 6,
     },
     messageBubble: {
         maxWidth: '100%',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 18,
     },
     myMessageBubble: {
         backgroundColor: Colors.primary[500],
@@ -702,13 +739,13 @@ const styles = StyleSheet.create({
     messageTime: {
         fontSize: 11,
         color: Colors.text.secondary,
-        marginTop: 4,
-        marginLeft: 38,
+        marginTop: 2, // Tighten status text to bubble
+        marginBottom: 0, // Removed gap below Seen/Timestamp
+        marginLeft: 0,
     },
     myMessageTime: {
         textAlign: 'right',
-        marginLeft: 0,
-        marginRight: 8,
+        marginRight: 4,
     },
     emptyMessages: {
         alignItems: 'center',
@@ -728,11 +765,11 @@ const styles = StyleSheet.create({
     quickReplyButton: {
         backgroundColor: Colors.neutral[100],
         paddingHorizontal: 12,
-        paddingVertical: 12, // Taller button for easier tap
+        paddingVertical: 12,
         borderRadius: 12,
         borderWidth: 1,
         borderColor: Colors.neutral[300],
-        width: '48%', // 2 by 2 grid (approx >48% to fit gap)
+        width: '48%',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -747,7 +784,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 12, // More padding for iPhone home indicator
+        paddingBottom: Platform.OS === 'ios' ? 34 : 12,
         backgroundColor: '#FFF',
         borderTopWidth: 1,
         borderTopColor: Colors.neutral[200],
