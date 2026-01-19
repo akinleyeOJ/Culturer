@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,12 @@ import {
     ActivityIndicator,
     RefreshControl,
     ScrollView,
+    Alert,
+    Pressable,
+    TouchableWithoutFeedback,
 } from 'react-native';
+import Animated, { useAnimatedReaction, runOnJS, SharedValue } from 'react-native-reanimated';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -58,6 +63,8 @@ export default function MessagesScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    const currentlyOpenSwipeable = useRef<React.ComponentRef<typeof Swipeable> | null>(null);
+
     useEffect(() => {
         if (user) {
             fetchData();
@@ -65,12 +72,24 @@ export default function MessagesScreen() {
         }
     }, [user, activeTab]);
 
-    const fetchData = async () => {
-        if (activeTab === 'messages') {
-            await fetchConversations();
-        } else {
-            await fetchNotifications();
+    const closeCurrentSwipeable = () => {
+        if (currentlyOpenSwipeable.current) {
+            currentlyOpenSwipeable.current.close();
+            currentlyOpenSwipeable.current = null;
         }
+    };
+
+    // Close Swipeable when switching tabs or refreshing
+    useEffect(() => {
+        closeCurrentSwipeable();
+    }, [activeTab, refreshing]);
+
+    const fetchData = async () => {
+        // Fetch both to ensure badges are correct regardless of active tab
+        await Promise.all([
+            fetchConversations(),
+            fetchNotifications()
+        ]);
         setLoading(false);
     };
 
@@ -146,11 +165,18 @@ export default function MessagesScreen() {
                 {
                     event: '*',
                     schema: 'public',
-                    table: activeTab === 'messages' ? 'messages' : 'notifications',
+                    table: 'messages',
                 },
-                () => {
-                    fetchData();
-                }
+                () => fetchConversations()
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'notifications',
+                },
+                () => fetchNotifications()
             )
             .subscribe();
 
@@ -163,6 +189,35 @@ export default function MessagesScreen() {
         setRefreshing(true);
         await fetchData();
         setRefreshing(false);
+    };
+
+    const deleteConversation = (conversationId: string) => {
+        Alert.alert(
+            "Delete Conversation",
+            "Are you sure you want to delete this conversation? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        // Optimistic update
+                        setConversations(prev => prev.filter(c => c.id !== conversationId));
+
+                        const { error } = await supabase
+                            .from('conversations' as any)
+                            .delete()
+                            .eq('id', conversationId);
+
+                        if (error) {
+                            console.error("Error deleting conversation:", error);
+                            Alert.alert("Error", "Could not delete conversation");
+                            fetchConversations(); // Revert
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const markAllAsRead = async () => {
@@ -193,48 +248,32 @@ export default function MessagesScreen() {
     };
 
     const getNotificationIcon = (type: string) => {
-        const iconProps = { size: 20, color: Colors.primary[500] };
         switch (type) {
-            case 'order':
-                return '📦';
-            case 'delivery':
-                return '🚚';
-            case 'message':
-                return '💬';
-            case 'activity':
-                return '💭';
-            default:
-                return '🔔';
+            case 'order': return '📦';
+            case 'delivery': return '🚚';
+            case 'message': return '💬';
+            case 'activity': return '💭';
+            default: return '🔔';
         }
     };
 
     const getNotificationBadgeColor = (type: string) => {
         switch (type) {
-            case 'order':
-                return Colors.primary[100];
-            case 'delivery':
-                return Colors.primary[100]; // Using primary since info doesn't exist
-            case 'message':
-                return Colors.secondary[100];
-            case 'activity':
-                return Colors.neutral[100];
-            default:
-                return Colors.neutral[100];
+            case 'order': return Colors.primary[100];
+            case 'delivery': return Colors.primary[100];
+            case 'message': return Colors.secondary[100];
+            case 'activity': return Colors.neutral[100];
+            default: return Colors.neutral[100];
         }
     };
 
     const getNotificationBadgeText = (type: string) => {
         switch (type) {
-            case 'order':
-                return 'Order';
-            case 'delivery':
-                return 'Delivery';
-            case 'message':
-                return 'Message';
-            case 'activity':
-                return 'Activity';
-            default:
-                return 'Update';
+            case 'order': return 'Order';
+            case 'delivery': return 'Delivery';
+            case 'message': return 'Message';
+            case 'activity': return 'Activity';
+            default: return 'Update';
         }
     };
 
@@ -296,44 +335,115 @@ export default function MessagesScreen() {
         </View>
     );
 
-    const renderConversationItem = ({ item }: { item: Conversation }) => (
-        <TouchableOpacity
-            style={styles.conversationItem}
-            onPress={() => router.push(`/conversation/${item.id}`)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.avatarWrapper}>
-                <Image
-                    source={{ uri: item.other_user?.avatar_url || 'https://via.placeholder.com/50' }}
-                    style={styles.avatar}
-                />
-                {item.product?.image_url && (
-                    <View style={styles.productThumbnailBadge}>
-                        <Image source={{ uri: item.product.image_url }} style={styles.productThumbnail} />
+    const DeleteAction = ({
+        dragX,
+        onDelete,
+        close
+    }: {
+        dragX: SharedValue<number>,
+        onDelete: () => void,
+        close: () => void
+    }) => {
+        const hasTriggered = useRef(false);
+
+        useAnimatedReaction(
+            () => dragX.value,
+            (x) => {
+                // Threshold for deletion (adjustable)
+                if (x < -120 && !hasTriggered.current) {
+                    hasTriggered.current = true;
+                    runOnJS(close)();
+                    runOnJS(onDelete)();
+                } else if (x > -120 && hasTriggered.current) {
+                    hasTriggered.current = false;
+                }
+            }
+        );
+
+        return (
+            <TouchableOpacity
+                style={styles.deleteAction}
+                onPress={() => {
+                    close();
+                    onDelete();
+                }}
+            >
+                <TrashIcon size={24} color="#FFF" />
+                <Text style={styles.deleteActionText}>Delete</Text>
+            </TouchableOpacity>
+        );
+    };
+
+    const renderRightActions = (conversationId: string, dragX: any, swipeableRef: any) => {
+        return (
+            <DeleteAction
+                dragX={dragX}
+                onDelete={() => deleteConversation(conversationId)}
+                close={() => swipeableRef?.close()}
+            />
+        );
+    };
+
+    const onSwipeableWillOpen = (ref: any) => {
+        if (currentlyOpenSwipeable.current && currentlyOpenSwipeable.current !== ref) {
+            currentlyOpenSwipeable.current.close();
+        }
+        currentlyOpenSwipeable.current = ref;
+    };
+
+    const renderConversationItem = ({ item }: { item: Conversation }) => {
+        let swipeableRow: React.ComponentRef<typeof Swipeable> | null = null;
+
+        return (
+            <Swipeable
+                ref={(ref) => (swipeableRow = ref)}
+                renderRightActions={(progress, dragX) => renderRightActions(item.id, dragX, swipeableRow)}
+                onSwipeableWillOpen={() => onSwipeableWillOpen(swipeableRow)}
+                rightThreshold={40}
+            >
+                <TouchableOpacity
+                    style={styles.conversationItem}
+                    onPress={() => {
+                        closeCurrentSwipeable(); // Close any open swipeable when tapping a conversation
+                        router.push(`/conversation/${item.id}`);
+                    }}
+                    onLongPress={() => deleteConversation(item.id)}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.avatarWrapper}>
+                        <Image
+                            source={{ uri: item.other_user?.avatar_url || 'https://via.placeholder.com/50' }}
+                            style={styles.avatar}
+                        />
+                        {item.product?.image_url && (
+                            <View style={styles.productThumbnailBadge}>
+                                <Image source={{ uri: item.product.image_url }} style={styles.productThumbnail} />
+                            </View>
+                        )}
                     </View>
-                )}
-            </View>
-            <View style={styles.conversationContent}>
-                <View style={styles.conversationHeader}>
-                    <Text style={styles.userName} numberOfLines={1}>
-                        {item.other_user?.full_name || 'Unknown User'}
-                    </Text>
-                    <Text style={styles.timestamp}>{formatTime(item.last_message_at)}</Text>
-                </View>
-                <View style={styles.messagePreviewRow}>
-                    <Text
-                        style={[styles.lastMessage, item.unread_count > 0 && styles.unreadMessage]}
-                        numberOfLines={1}
-                    >
-                        {item.last_message || 'Start a conversation...'}
-                    </Text>
-                    {item.unread_count > 0 && (
-                        <View style={styles.unreadDotIndicator} />
-                    )}
-                </View>
-            </View>
-        </TouchableOpacity>
-    );
+                    <View style={styles.conversationContent}>
+                        <View style={styles.conversationHeader}>
+                            <Text style={styles.userName} numberOfLines={1}>
+                                {item.other_user?.full_name || 'Unknown User'}
+                            </Text>
+                            <Text style={styles.timestamp}>{formatTime(item.last_message_at)}</Text>
+                        </View>
+                        <View style={styles.messagePreviewRow}>
+                            <Text
+                                style={[styles.lastMessage, item.unread_count > 0 && styles.unreadMessage]}
+                                numberOfLines={1}
+                            >
+                                {item.last_message || 'Start a conversation...'}
+                            </Text>
+                            {item.unread_count > 0 && (
+                                <View style={styles.unreadDotIndicator} />
+                            )}
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Swipeable>
+        );
+    };
 
     const renderNotificationItem = ({ item }: { item: Notification }) => (
         <TouchableOpacity
@@ -377,8 +487,10 @@ export default function MessagesScreen() {
         </TouchableOpacity>
     );
 
+
+
     const renderEmptyState = () => (
-        <View style={styles.emptyState}>
+        <Pressable style={styles.emptyState} onPress={closeCurrentSwipeable}>
             <View style={styles.emptyIconContainer}>
                 {activeTab === 'messages' ? (
                     <ChatBubbleLeftIcon size={60} color={Colors.primary[300]} />
@@ -402,89 +514,112 @@ export default function MessagesScreen() {
                     <Text style={styles.discoverButtonText}>🔍 Discover items</Text>
                 </TouchableOpacity>
             )}
-        </View>
+        </Pressable>
     );
 
     const unreadNotificationsCount = notifications.filter((n) => !n.is_read).length;
     const groupedData = groupItemsByDate(activeTab === 'messages' ? conversations : notifications);
 
     return (
-        <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <Text style={styles.headerTitle}>Inbox</Text>
-                    <TouchableOpacity style={styles.headerIconBtn}>
-                        <Cog6ToothIcon size={24} color={Colors.text.primary} />
-                    </TouchableOpacity>
-                </View>
+        <TouchableWithoutFeedback onPress={closeCurrentSwipeable}>
+            <View style={styles.container}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <View style={styles.headerTop}>
+                        <Text style={styles.headerTitle}>Inbox</Text>
+                        <TouchableOpacity
+                            style={styles.headerIconBtn}
+                            onPress={() => {
+                                Alert.alert(
+                                    "Notification Settings",
+                                    "Manage your push notification preferences.",
+                                    [
+                                        { text: "Turn All Off", style: "destructive", onPress: () => Alert.alert("Updated", "Notifications have been disabled") },
+                                        { text: "Turn All On", onPress: () => Alert.alert("Updated", "Notifications have been enabled") },
+                                        { text: "Cancel", style: "cancel" }
+                                    ]
+                                );
+                            }}
+                        >
+                            <Cog6ToothIcon size={24} color={Colors.text.primary} />
+                        </TouchableOpacity>
+                    </View>
 
-                {/* Modern Segmented Control */}
-                <View style={styles.segmentedControl}>
-                    <TouchableOpacity
-                        style={[styles.segment, activeTab === 'messages' && styles.activeSegment]}
-                        onPress={() => setActiveTab('messages')}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={[styles.segmentText, activeTab === 'messages' && styles.activeSegmentText]}>
-                            Messages
-                        </Text>
-                        {conversations.some(c => c.unread_count > 0) && (
-                            <View style={[styles.dot, { backgroundColor: activeTab === 'messages' ? Colors.primary[500] : Colors.neutral[400] }]} />
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.segment, activeTab === 'notifications' && styles.activeSegment]}
-                        onPress={() => setActiveTab('notifications')}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={[styles.segmentText, activeTab === 'notifications' && styles.activeSegmentText]}>
-                            Notifications
-                        </Text>
-                        {unreadNotificationsCount > 0 && (
-                            <View style={styles.countBadge}>
-                                <Text style={styles.countBadgeText}>{unreadNotificationsCount}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            {/* Content */}
-            {loading && !refreshing ? (
-                <ScrollView style={styles.listContent}>
-                    {[1, 2, 3, 4, 5, 6].map(i => <MessageSkeleton key={i} />)}
-                </ScrollView>
-            ) : (
-                <FlatList
-                    data={groupedData}
-                    keyExtractor={(group) => group.title}
-                    renderItem={({ item: group }) => (
-                        <View>
-                            <View style={styles.dateHeader}>
-                                <Text style={styles.dateHeaderText}>{group.title}</Text>
-                            </View>
-                            {group.data.map((item: any) => (
-                                <View key={item.id}>
-                                    {activeTab === 'messages'
-                                        ? renderConversationItem({ item })
-                                        : renderNotificationItem({ item })}
+                    {/* Modern Segmented Control */}
+                    <View style={styles.segmentedControl}>
+                        <TouchableOpacity
+                            style={[styles.segment, activeTab === 'messages' && styles.activeSegment]}
+                            onPress={() => setActiveTab('messages')}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={[styles.segmentText, activeTab === 'messages' && styles.activeSegmentText]}>
+                                Messages
+                            </Text>
+                            {conversations.some(c => c.unread_count > 0) && (
+                                <View style={[styles.dot, { backgroundColor: activeTab === 'messages' ? Colors.primary[500] : Colors.neutral[400] }]} />
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.segment, activeTab === 'notifications' && styles.activeSegment]}
+                            onPress={() => setActiveTab('notifications')}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={[styles.segmentText, activeTab === 'notifications' && styles.activeSegmentText]}>
+                                Notifications
+                            </Text>
+                            {unreadNotificationsCount > 0 && (
+                                <View style={styles.countBadge}>
+                                    <Text style={styles.countBadgeText}>{unreadNotificationsCount}</Text>
                                 </View>
-                            ))}
-                        </View>
-                    )}
-                    contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={renderEmptyState}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor={Colors.primary[500]}
-                        />
-                    }
-                />
-            )}
-        </View>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Content */}
+                {loading && !refreshing ? (
+                    <ScrollView style={styles.listContent}>
+                        {[1, 2, 3, 4, 5, 6].map(i => <MessageSkeleton key={i} />)}
+                    </ScrollView>
+                ) : (
+                    <FlatList
+                        data={groupedData}
+                        keyExtractor={(group) => group.title}
+                        renderItem={({ item: group }) => (
+                            <View>
+                                <View style={styles.dateHeader}>
+                                    <Text style={styles.dateHeaderText}>{group.title}</Text>
+                                </View>
+                                {group.data.map((item: any) => (
+                                    <View key={item.id}>
+                                        {activeTab === 'messages'
+                                            ? renderConversationItem({ item })
+                                            : renderNotificationItem({ item })}
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+                        contentContainerStyle={styles.listContent}
+                        ListEmptyComponent={renderEmptyState}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={onRefresh}
+                                tintColor={Colors.primary[500]}
+                            />
+                        }
+                        onScrollBeginDrag={closeCurrentSwipeable}
+                        ListFooterComponent={
+                            <Pressable
+                                onPress={closeCurrentSwipeable}
+                                style={{ flex: 1 }}
+                            />
+                        }
+                        ListFooterComponentStyle={{ flex: 1 }}
+                    />
+                )}
+            </View>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -598,6 +733,19 @@ const styles = StyleSheet.create({
         borderRadius: 27,
         marginRight: 16,
         backgroundColor: Colors.neutral[100],
+    },
+    deleteAction: {
+        backgroundColor: '#EF4444',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 80,
+        height: '100%',
+    },
+    deleteActionText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '600',
+        marginTop: 4,
     },
     productThumbnailBadge: {
         position: 'absolute',

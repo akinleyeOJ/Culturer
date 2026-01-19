@@ -12,6 +12,7 @@ import {
     ActivityIndicator,
     Alert,
     ScrollView,
+    Modal,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -67,6 +68,7 @@ export default function ConversationScreen() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
+    const [menuVisible, setMenuVisible] = useState(false);
     const flatListRef = useRef<FlatList>(null);
 
     useEffect(() => {
@@ -330,7 +332,10 @@ export default function ConversationScreen() {
             <View style={styles.headerCenter}>
                 <Text style={styles.headerTitle}>{conversationDetails?.other_user?.full_name}</Text>
             </View>
-            <TouchableOpacity style={styles.moreButton}>
+            <TouchableOpacity
+                style={styles.moreButton}
+                onPress={() => setMenuVisible(true)}
+            >
                 <EllipsisVerticalIcon size={24} color={Colors.text.primary} />
             </TouchableOpacity>
         </View>
@@ -446,6 +451,77 @@ export default function ConversationScreen() {
                     )}
                 </TouchableOpacity>
             </View>
+
+            {/* Options Menu Modal */}
+            <Modal
+                visible={menuVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setMenuVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setMenuVisible(false)}
+                >
+                    <View style={styles.menuContainer}>
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                setMenuVisible(false);
+                                router.push(`/profile/${conversationDetails?.other_user?.id}` as any);
+                            }}
+                        >
+                            <Text style={styles.menuItemText}>View Profile</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                setMenuVisible(false);
+                                if (conversationDetails?.product?.id) {
+                                    router.push(`/item/${conversationDetails.product.id}` as any);
+                                }
+                            }}
+                        >
+                            <Text style={styles.menuItemText}>View Item</Text>
+                        </TouchableOpacity>
+                        <View style={styles.menuDivider} />
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                setMenuVisible(false);
+                                Alert.alert("Block User", "Are you sure you want to block this user?", [
+                                    { text: "Cancel", style: "cancel" },
+                                    { text: "Block", style: "destructive" }
+                                ]);
+                            }}
+                        >
+                            <Text style={styles.menuItemText}>Block User</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                setMenuVisible(false);
+                                Alert.alert("Report User", "User has been flagged for review.");
+                            }}
+                        >
+                            <Text style={styles.menuItemText}>Report User</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                setMenuVisible(false);
+                                Alert.alert("Delete Conversation", "Are you sure you want to delete this conversation? This action cannot be undone.", [
+                                    { text: "Cancel", style: "cancel" },
+                                    { text: "Delete", style: "destructive", onPress: () => router.back() }
+                                ]);
+                            }}
+                        >
+                            <Text style={[styles.menuItemText, styles.menuItemDestructive]}>Delete Conversation</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }
@@ -454,6 +530,43 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: Colors.background.primary,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-start',
+        alignItems: 'flex-end',
+        paddingTop: 60, // Align roughly with header
+        paddingRight: 16,
+    },
+    menuContainer: {
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        width: 200,
+        paddingVertical: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 5,
+        marginTop: 40,
+    },
+    menuItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+    },
+    menuItemText: {
+        fontSize: 15,
+        fontWeight: '500',
+        color: Colors.text.primary,
+    },
+    menuItemDestructive: {
+        color: '#EF4444',
+    },
+    menuDivider: {
+        height: 1,
+        backgroundColor: Colors.neutral[100],
+        marginVertical: 4,
     },
     loadingContainer: {
         flex: 1,
@@ -543,7 +656,7 @@ const styles = StyleSheet.create({
     },
     messagesList: {
         paddingHorizontal: 16,
-        paddingBottom: 16,
+        paddingBottom: 32, // Increased from 16 to 32 for better visibility
     },
     messageContainer: {
         flexDirection: 'row',
