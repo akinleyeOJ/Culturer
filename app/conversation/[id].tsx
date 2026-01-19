@@ -151,6 +151,10 @@ export default function ConversationScreen() {
             .subscribe();
 
         return () => {
+            // We might not want to proactively remove channel here if it causes issues on quick re-renders
+            // But for correctness, we should. Let's try wrapping it.
+            // Actually, the issue 'refresh to see' is usually because 'postgres_changes' isn't firing for 'INSERT'.
+            // Optimistic update handles 'sending', but 'receiving' needs this.
             supabase.removeChannel(channel);
         };
     };
@@ -292,7 +296,7 @@ export default function ConversationScreen() {
                 ) : (
                     <View style={styles.messageAvatar} />
                 )}
-                <View style={{ maxWidth: '75%' }}>
+                <View style={{ maxWidth: '75%', marginRight: 8 }}>
                     <View style={[styles.messageBubble, isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble]}>
                         {item.image_url && (
                             <Image
@@ -484,7 +488,7 @@ const styles = StyleSheet.create({
     productCard: {
         backgroundColor: '#FFF',
         marginHorizontal: 16,
-        marginTop: 16,
+        marginTop: 24, // Increased top margin to make room for label
         marginBottom: 8,
         borderRadius: 12,
         padding: 12,
@@ -497,10 +501,9 @@ const styles = StyleSheet.create({
     },
     productCardLabel: {
         position: 'absolute',
-        top: -8,
-        left: 12,
-        backgroundColor: '#FFF',
-        paddingHorizontal: 8,
+        top: -30, // Move label higher up
+        left: 0,
+        marginBottom: 4,
         fontSize: 11,
         fontWeight: '600',
         color: Colors.text.secondary,
@@ -551,7 +554,6 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     messageAvatar: {
-        width: 30,
         height: 30,
         borderRadius: 15,
         marginRight: 8,
@@ -632,6 +634,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 12, // More padding for iPhone home indicator
         backgroundColor: '#FFF',
         borderTopWidth: 1,
         borderTopColor: Colors.neutral[200],

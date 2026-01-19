@@ -48,3 +48,6 @@ NEXT_STEPS.md
 check_product_ownership.sql
 database/fix_notification_rls.sql
 database/separate_seller_account.sql
+database/enable_public_profiles.sql
+database/fix_realtime_setup.sql
+database/realtime_messages.sql
