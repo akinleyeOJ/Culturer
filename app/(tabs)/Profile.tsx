@@ -10,10 +10,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
+import { useRouter } from "expo-router";
 import { Colors } from "../../constants/color";
-// router import removed as it is no longer needed for sign out
 
 const Profile = () => {
+  const router = useRouter();
   const { user, signOut } = useAuth();
 
   const handleSignOut = () => {
@@ -66,6 +67,15 @@ const Profile = () => {
           <TouchableOpacity style={styles.menuItem}>
             <Text style={styles.menuIcon}>📦</Text>
             <Text style={styles.menuText}>Orders</Text>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/profile/notifications' as any)}
+          >
+            <Text style={styles.menuIcon}>🔔</Text>
+            <Text style={styles.menuText}>Notification Settings</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 

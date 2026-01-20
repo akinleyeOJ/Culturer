@@ -8,6 +8,7 @@ import {
     Alert,
     Share,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -88,6 +89,21 @@ const ItemDetail = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleBuyNow = () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in to purchase items');
+            return;
+        }
+
+        router.push({
+            pathname: '/checkout',
+            params: {
+                productId: id,
+                quantity: quantity
+            }
+        });
     };
 
     const handleToggleFavorite = async () => {
@@ -406,20 +422,15 @@ const ItemDetail = () => {
                         </View>
                     )}
 
-                    <View style={{ height: 100 }} />
+                    <View style={{ height: 130 }} />
                 </View>
             </ScrollView>
 
-            {/* Bottom Bar */}
-            <View style={styles.bottomBar}>
-                <TouchableOpacity
-                    style={styles.messageButton}
-                    onPress={handleMessageSeller}
-                >
-                    <ChatBubbleLeftIcon size={20} color={Colors.primary[500]} />
-                </TouchableOpacity>
-                {isInStock ? (
-                    <>
+            {/* Bottom Section */}
+            <View style={styles.bottomContainer}>
+                {isInStock && (
+                    <View style={styles.quantityRow}>
+                        <Text style={styles.quantityLabel}>Quantity</Text>
                         <View style={styles.quantitySelector}>
                             <TouchableOpacity onPress={decrementQuantity} style={styles.quantityButton}>
                                 <MinusIcon size={16} color={Colors.text.primary} />
@@ -429,20 +440,41 @@ const ItemDetail = () => {
                                 <PlusIcon size={16} color={Colors.text.primary} />
                             </TouchableOpacity>
                         </View>
-                        <CustomButton
-                            title="Add to cart"
-                            onPress={handleAddToCart}
-                            style={styles.addToCartButton}
-                        />
-                    </>
-                ) : (
-                    <CustomButton
-                        title="Sold Out"
-                        onPress={() => { }}
-                        bgVariant="secondary"
-                        style={styles.soldOutButton}
-                    />
+                    </View>
                 )}
+
+                <View style={styles.bottomBar}>
+                    <TouchableOpacity
+                        style={styles.messageButton}
+                        onPress={handleMessageSeller}
+                    >
+                        <ChatBubbleLeftIcon size={20} color={Colors.primary[500]} />
+                    </TouchableOpacity>
+                    {isInStock ? (
+                        <>
+                            <CustomButton
+                                title="Add to cart"
+                                onPress={handleAddToCart}
+                                style={styles.addToCartButton}
+                                bgVariant="outline"
+                                textVariant="primary"
+                            />
+                            <CustomButton
+                                title="Buy Now"
+                                onPress={handleBuyNow}
+                                style={styles.buyNowButton}
+                            />
+                        </>
+                    ) : (
+                        <CustomButton
+                            title="Sold Out"
+                            onPress={() => { }}
+                            style={styles.soldOutButton}
+                            bgVariant="secondary"
+                            disabled
+                        />
+                    )}
+                </View>
             </View>
         </SafeAreaView>
     );
@@ -575,14 +607,34 @@ const styles = StyleSheet.create({
     horizontalScroll: {
         paddingRight: 16,
     },
-    bottomBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 27,
-        paddingHorizontal: 16,
+    bottomContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: Colors.neutral[200],
+        paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+    },
+    quantityRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        paddingBottom: 0,
+    },
+    quantityLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.text.secondary,
+    },
+    bottomBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
         gap: 12,
     },
     messageButton: {
@@ -595,26 +647,30 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: Colors.primary[200],
     },
+    addToCartButton: {
+        flex: 1,
+    },
+    buyNowButton: {
+        flex: 1.5,
+    },
     quantitySelector: {
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: Colors.neutral[300],
-        borderRadius: 8,
-        paddingHorizontal: 8,
+        borderColor: Colors.neutral[200],
+        borderRadius: 24,
+        paddingHorizontal: 4,
+        backgroundColor: '#F9F9F9',
     },
     quantityButton: {
-        padding: 12,
+        padding: 8,
     },
     quantityText: {
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 15,
+        fontWeight: '700',
         color: Colors.text.primary,
-        minWidth: 30,
+        minWidth: 28,
         textAlign: 'center',
-    },
-    addToCartButton: {
-        flex: 1,
     },
     soldOutButton: {
         flex: 1,

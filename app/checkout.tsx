@@ -19,7 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MagnifyingGlassIcon, XMarkIcon, ChevronDownIcon } from 'react-native-heroicons/outline';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useNavigation } from 'expo-router';
+import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../constants/color';
 import CustomButton from '../components/Button';
 import { useCart } from '../contexts/CartContext';
@@ -70,6 +70,7 @@ const Checkout = () => {
     const navigation = useNavigation();
     const { user } = useAuth();
     const { refreshCartCount } = useCart();
+    const { productId, quantity: paramQuantity } = useLocalSearchParams<{ productId?: string, quantity?: string }>();
 
     // State management 
     const [step, setStep] = useState<CheckoutStep>(1);
@@ -164,8 +165,46 @@ const Checkout = () => {
     useEffect(() => {
         const loadData = async () => {
             if (!user) return;
-            const items = await fetchCart(user.id);
-            setCartItems(items);
+
+            if (productId) {
+                // Direct "Buy Now" flow
+                const { data: product, error } = await supabase
+                    .from('products')
+                    .select('*, profiles:user_id(full_name)')
+                    .eq('id', productId)
+                    .single();
+
+                if (product) {
+                    const p = product as any;
+                    const quantity = paramQuantity ? parseInt(paramQuantity) : 1;
+                    const priceNum = typeof p.price === 'string'
+                        ? parseFloat(p.price.replace('$', ''))
+                        : p.price;
+
+                    setCartItems([{
+                        id: p.id,
+                        product_id: p.id,
+                        user_id: user.id,
+                        quantity: quantity,
+                        created_at: new Date().toISOString(),
+                        product: {
+                            id: p.id,
+                            name: p.name,
+                            price: priceNum,
+                            image_url: p.image_url || undefined,
+                            seller_id: p.user_id,
+                            seller_name: p.profiles?.full_name || 'Seller',
+                            emoji: p.emoji || '📦',
+                            shipping: p.shipping || 'Standard',
+                            out_of_stock: p.out_of_stock || false,
+                            stock_quantity: p.stock_quantity || 1
+                        }
+                    }]);
+                }
+            } else {
+                const items = await fetchCart(user.id);
+                setCartItems(items);
+            }
 
             // Prefill form data if available 
             const { data: profile, error: profileError } = await supabase.from('profiles')
@@ -705,7 +744,9 @@ const Checkout = () => {
             // We cannot update it here due to RLS security
 
             // 6. Cleanup
-            await clearCart(user.id);
+            if (!productId) {
+                await clearCart(user.id);
+            }
             await AsyncStorage.removeItem('checkout_draft');
             await refreshCartCount();
 
