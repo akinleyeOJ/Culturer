@@ -30,6 +30,8 @@ const CustomButton = ({
 
   const getTextStyle = () => {
     switch (textVariant) {
+      case "primary":
+        return styles.textPrimary;
       case "secondary":
         return styles.textSecondary;
       case "danger":
@@ -88,6 +90,9 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  textPrimary: {
+    color: Colors.text.primary,
   },
   textSecondary: {
     color: "#6B7280", // gray-500
