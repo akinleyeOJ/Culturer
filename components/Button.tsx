@@ -46,7 +46,12 @@ const CustomButton = ({
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[styles.button, getBgStyle(), style]}
+      style={[
+        styles.button,
+        getBgStyle(),
+        styles.shadow,
+        style
+      ]}
       {...props}
     >
       {IconLeft && <IconLeft />}
@@ -64,12 +69,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.1)", // shadow-md equivalent, use specific packages or custom shadow if needed
-    padding: 12, // Example padding
+    padding: 12,
     gap: 8
   },
-  // Add other specific styles based on your background variant and className
-  // Example for different background variants:
+  shadow: {
+    shadowColor: "#050505ff",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2.5,
+    elevation: 2,
+  },
   bgPrimary: {
     backgroundColor: Colors.primary[500], // Coral/orange - app's primary color
   },
@@ -80,7 +92,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ee2424ff", // red-500
   },
   bgOutline: {
-    backgroundColor: "transparent",
+    backgroundColor: "#FFFFFF",
     borderColor: "#D1D5DB", // Neutral color for border
     borderWidth: 0.5,
   },

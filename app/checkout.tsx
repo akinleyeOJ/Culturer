@@ -165,21 +165,43 @@ const Checkout = () => {
     useEffect(() => {
         const loadData = async () => {
             if (!user) return;
+            setLoading(true);
+
+            console.log('Checkout loadData - productId:', productId, 'quantity:', paramQuantity);
 
             if (productId) {
                 // Direct "Buy Now" flow
-                const { data: product, error } = await supabase
-                    .from('products')
-                    .select('*, profiles:user_id(full_name)')
-                    .eq('id', productId)
-                    .single();
+                try {
+                    // Fetch product
+                    const { data: p, error: pError } = await supabase
+                        .from('products')
+                        .select('*')
+                        .eq('id', productId)
+                        .single();
 
-                if (product) {
-                    const p = product as any;
-                    const quantity = paramQuantity ? parseInt(paramQuantity) : 1;
+                    if (pError || !p) {
+                        console.error('Error fetching product for Buy Now:', pError);
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Fetch seller profile separately
+                    let sellerName = 'Seller';
+                    if (p.user_id) {
+                        const { data: profile } = await supabase
+                            .from('profiles')
+                            .select('full_name')
+                            .eq('id', p.user_id)
+                            .single();
+                        if (profile?.full_name) sellerName = profile.full_name;
+                    }
+
+                    const quantity = paramQuantity ? parseInt(paramQuantity as string) : 1;
                     const priceNum = typeof p.price === 'string'
-                        ? parseFloat(p.price.replace('$', ''))
+                        ? parseFloat((p.price as string).replace('$', ''))
                         : p.price;
+
+                    console.log('Setting direct purchase item:', { id: p.id, name: p.name, price: priceNum, quantity });
 
                     setCartItems([{
                         id: p.id,
@@ -193,13 +215,15 @@ const Checkout = () => {
                             price: priceNum,
                             image_url: p.image_url || undefined,
                             seller_id: p.user_id,
-                            seller_name: p.profiles?.full_name || 'Seller',
+                            seller_name: sellerName,
                             emoji: p.emoji || '📦',
                             shipping: p.shipping || 'Standard',
                             out_of_stock: p.out_of_stock || false,
                             stock_quantity: p.stock_quantity || 1
                         }
                     }]);
+                } catch (err) {
+                    console.error('Exception in Buy Now loadData:', err);
                 }
             } else {
                 const items = await fetchCart(user.id);
@@ -286,7 +310,7 @@ const Checkout = () => {
             setLoading(false);
         };
         loadData();
-    }, [user]);
+    }, [user, productId, paramQuantity]);
 
     // Switch Payment Method if Country Changes (P24 only for Poland)
     useEffect(() => {
@@ -1349,7 +1373,7 @@ const Checkout = () => {
         );
     }
 
-    if (cartItems.length === 0 && !processing) {
+    if (cartItems.length === 0 && !processing && !productId) {
         return (
             <SafeAreaView style={styles.container}>
                 {renderHeader()}

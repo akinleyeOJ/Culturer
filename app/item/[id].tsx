@@ -648,10 +648,12 @@ const styles = StyleSheet.create({
         borderColor: Colors.primary[200],
     },
     addToCartButton: {
-        flex: 1,
+        flex: 1.5,
+        borderWidth: 1,
+        borderColor: Colors.neutral[300],
     },
     buyNowButton: {
-        flex: 1.5,
+        flex: 1.2,
     },
     quantitySelector: {
         flexDirection: 'row',
