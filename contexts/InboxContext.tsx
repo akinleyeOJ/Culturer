@@ -46,7 +46,7 @@ export const InboxProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 return;
             }
 
-            const ids = convIds.map(c => c.id);
+            const ids = (convIds as any[]).map(c => c.id);
             const { count: msgCount } = await supabase
                 .from('messages' as any)
                 .select('*', { count: 'exact', head: true })

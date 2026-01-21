@@ -206,9 +206,15 @@ export default function MessagesScreen() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => fetchNotifications())
             .subscribe();
 
+        const messageSub = supabase
+            .channel('public:messages_list')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchConversations())
+            .subscribe();
+
         return () => {
             supabase.removeChannel(conversationSub);
             supabase.removeChannel(notificationSub);
+            supabase.removeChannel(messageSub);
         };
     };
 

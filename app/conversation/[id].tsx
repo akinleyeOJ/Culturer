@@ -17,6 +17,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useInbox } from '../../contexts/InboxContext';
 import { Colors } from '../../constants/color';
 import {
     ChevronLeftIcon,
@@ -61,6 +62,7 @@ const QUICK_REPLIES = [
 export default function ConversationScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { user } = useAuth();
+    const { refreshUnreadCounts } = useInbox();
     const [messages, setMessages] = useState<Message[]>([]);
     const [conversationDetails, setConversationDetails] = useState<ConversationDetails | null>(null);
     const [newMessage, setNewMessage] = useState('');
@@ -77,7 +79,7 @@ export default function ConversationScreen() {
             const unsubscribe = subscribeToMessages();
             markMessagesAsRead();
 
-            return unsubscribe; 9
+            return unsubscribe;
         }
     }, [id, user]);
 
@@ -156,12 +158,16 @@ export default function ConversationScreen() {
 
     const markMessagesAsRead = async () => {
         if (!user) return;
-        await supabase
+        const { error } = await supabase
             .from('messages' as any)
             .update({ is_read: true })
             .eq('conversation_id', id)
             .neq('sender_id', user.id)
             .eq('is_read', false);
+
+        if (!error) {
+            refreshUnreadCounts();
+        }
     };
 
     const deleteConversation = async () => {
