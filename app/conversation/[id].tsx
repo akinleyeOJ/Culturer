@@ -77,7 +77,7 @@ export default function ConversationScreen() {
             const unsubscribe = subscribeToMessages();
             markMessagesAsRead();
 
-            return unsubscribe;
+            return unsubscribe; 9
         }
     }, [id, user]);
 
@@ -251,7 +251,11 @@ export default function ConversationScreen() {
             .insert({ conversation_id: id, sender_id: user.id, content: messageContent || null, image_url: imageUrl || null })
             .select().single();
         if (!error && data) {
-            setMessages(prev => [data as unknown as Message, ...prev]);
+            setMessages(prev => {
+                const newMessageObj = data as any;
+                if (prev.some(m => m.id === newMessageObj.id)) return prev;
+                return [newMessageObj as Message, ...prev];
+            });
             setNewMessage('');
         }
         setSending(false);
@@ -273,9 +277,22 @@ export default function ConversationScreen() {
                 )}
                 <View style={[styles.messageContainer, isMyMessage ? styles.myMessageContainer : styles.theirMessageContainer]}>
                     <View style={{ maxWidth: '80%' }}>
-                        <View style={[styles.messageBubble, isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble, item.image_url && !item.content && { padding: 0, overflow: 'hidden' }]}>
-                            {item.image_url && <Image source={{ uri: item.image_url }} style={[styles.messageImage, item.content && { marginBottom: 8, marginTop: 4, marginHorizontal: 4 }]} resizeMode="cover" />}
-                            {item.content && <Text style={[styles.messageText, isMyMessage && styles.myMessageText, item.image_url && { paddingHorizontal: 12, paddingBottom: 8 }]}>{item.content}</Text>}
+                        <View style={[
+                            styles.messageBubble,
+                            isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble,
+                            item.image_url && !item.content && { padding: 0, backgroundColor: 'transparent' }
+                        ]}>
+                            {item.image_url && (
+                                <Image
+                                    source={{ uri: item.image_url }}
+                                    style={[
+                                        styles.messageImage,
+                                        item.content ? { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 } : { borderRadius: 18 }
+                                    ]}
+                                    resizeMode="cover"
+                                />
+                            )}
+                            {item.content && <Text style={[styles.messageText, isMyMessage && styles.myMessageText, item.image_url && { paddingHorizontal: 12, paddingVertical: 10 }]}>{item.content}</Text>}
                         </View>
                         <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime]}>
                             {new Date(item.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
@@ -297,6 +314,36 @@ export default function ConversationScreen() {
                 <TouchableOpacity onPress={() => setMenuVisible(true)}><EllipsisVerticalIcon size={24} color={Colors.text.primary} /></TouchableOpacity>
             </View>
 
+            {/* Product Context Bar */}
+            {conversationDetails?.product && (
+                <TouchableOpacity
+                    style={styles.productBanner}
+                    onPress={() => router.push(`/item/${conversationDetails.product.id}` as any)}
+                >
+                    <Image
+                        source={{ uri: conversationDetails.product.image_url }}
+                        style={styles.productBannerImage}
+                    />
+                    <View style={styles.productBannerInfo}>
+                        <Text style={styles.productBannerName} numberOfLines={1}>
+                            {conversationDetails.product.name}
+                        </Text>
+                        <Text style={styles.productBannerPrice}>
+                            ${conversationDetails.product.price.toFixed(2)}
+                        </Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.buyShortButton}
+                        onPress={() => router.push({
+                            pathname: '/checkout',
+                            params: { productId: conversationDetails.product.id, quantity: 1 }
+                        })}
+                    >
+                        <Text style={styles.buyShortButtonText}>Buy</Text>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+            )}
+
             <FlatList
                 ref={flatListRef}
                 data={messages}
@@ -304,17 +351,6 @@ export default function ConversationScreen() {
                 keyExtractor={(item) => item.id}
                 inverted={true}
                 contentContainerStyle={styles.messagesList}
-                ListFooterComponent={
-                    <TouchableOpacity style={styles.productCard} onPress={() => router.push(`/item/${conversationDetails?.product?.id}`)}>
-                        <View style={styles.productCardContent}>
-                            <Image source={{ uri: conversationDetails?.product?.image_url }} style={styles.productImage} />
-                            <View style={styles.productInfo}>
-                                <Text style={styles.productName} numberOfLines={1}>{conversationDetails?.product?.name}</Text>
-                                <Text style={styles.productPrice}>${conversationDetails?.product?.price}</Text>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                }
             />
 
             {messages.length === 0 && (
@@ -370,6 +406,45 @@ const styles = StyleSheet.create({
     backButton: { padding: 4 },
     headerCenter: { flex: 1, alignItems: 'center' },
     headerTitle: { fontSize: 17, fontWeight: '600' },
+    productBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#F9F9F9',
+        borderBottomWidth: 1,
+        borderBottomColor: '#EEE',
+    },
+    productBannerImage: {
+        width: 40,
+        height: 40,
+        borderRadius: 6,
+        marginRight: 10,
+    },
+    productBannerInfo: {
+        flex: 1,
+    },
+    productBannerName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.text.primary,
+    },
+    productBannerPrice: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: Colors.primary[500],
+        marginTop: 1,
+    },
+    buyShortButton: {
+        backgroundColor: Colors.primary[500],
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+    },
+    buyShortButtonText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '700',
+    },
     messagesList: { paddingHorizontal: 16, paddingBottom: 20 },
     messageContainer: { marginVertical: 4, flexDirection: 'row' },
     myMessageContainer: { justifyContent: 'flex-end' },
@@ -382,12 +457,6 @@ const styles = StyleSheet.create({
     messageImage: { width: 240, height: 180, borderRadius: 12 },
     dateSeparator: { alignItems: 'center', marginVertical: 16 },
     dateSeparatorText: { fontSize: 12, color: '#999', fontWeight: '600', textTransform: 'uppercase' },
-    productCard: { backgroundColor: '#F9F9F9', borderRadius: 12, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: '#EEE' },
-    productCardContent: { flexDirection: 'row', alignItems: 'center' },
-    productImage: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
-    productInfo: { flex: 1 },
-    productName: { fontSize: 14, fontWeight: '600' },
-    productPrice: { fontSize: 15, fontWeight: '700', marginTop: 2 },
     quickRepliesContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: 16, borderTopWidth: 1, borderTopColor: '#EEE' },
     quickReplyButton: { backgroundColor: '#F0F0F0', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, marginRight: 8, marginBottom: 8 },
     quickReplyText: { fontSize: 13, color: '#555' },

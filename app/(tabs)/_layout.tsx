@@ -11,6 +11,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { Colors } from "../../constants/color";
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { useInbox } from "../../contexts/InboxContext";
 
 // Animated Tab Icon Component
 const TabIcon = ({ focused, OutlineIcon, SolidIcon, color }: any) => {
@@ -31,6 +32,7 @@ const TabIcon = ({ focused, OutlineIcon, SolidIcon, color }: any) => {
 
 export default function TabLayout() {
   const { user, loading } = useAuth();
+  const { totalUnread } = useInbox();
 
   // Show loading spinner while checking auth
   if (loading) {
@@ -98,6 +100,13 @@ export default function TabLayout() {
         options={{
           title: "Messages",
           headerShown: false,
+          tabBarBadge: totalUnread > 0 ? totalUnread : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: '#FF3B30',
+            color: '#FFF',
+            fontSize: 10,
+            fontWeight: 'bold',
+          },
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}

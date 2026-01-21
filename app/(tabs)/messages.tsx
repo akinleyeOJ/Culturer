@@ -13,6 +13,7 @@ import {
     Pressable,
     SectionList,
     TouchableWithoutFeedback,
+    TextInput,
 } from 'react-native';
 import Animated, { useAnimatedReaction, SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -20,6 +21,7 @@ import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useInbox } from '../../contexts/InboxContext';
 import { Colors } from '../../constants/color';
 import {
     ChatBubbleLeftIcon,
@@ -27,7 +29,9 @@ import {
     CheckIcon,
     TrashIcon,
     Cog6ToothIcon,
-    CheckCircleIcon
+    CheckCircleIcon,
+    MagnifyingGlassIcon,
+    XMarkIcon
 } from 'react-native-heroicons/outline';
 import { CheckCircleIcon as CheckCircleSolid } from 'react-native-heroicons/solid';
 
@@ -85,6 +89,7 @@ const DeleteAction = ({ conversationId, dragX, deleteConversation }: { conversat
 
 export default function MessagesScreen() {
     const { user } = useAuth();
+    const { refreshUnreadCounts } = useInbox();
     const [activeTab, setActiveTab] = useState<TabType>('messages');
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -94,6 +99,7 @@ export default function MessagesScreen() {
     // Selection state
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedNotifications, setSelectedNotifications] = useState<Set<string>>(new Set());
+    const [searchQuery, setSearchQuery] = useState('');
 
     const currentlyOpenSwipeable = useRef<any>(null);
 
@@ -116,6 +122,9 @@ export default function MessagesScreen() {
         if (activeTab === 'messages') {
             setSelectionMode(false);
             setSelectedNotifications(new Set());
+        } else if (activeTab === 'notifications') {
+            // Automatically mark all as read when opening the tab
+            markAllAsRead();
         }
     }, [activeTab]);
 
@@ -214,9 +223,31 @@ export default function MessagesScreen() {
 
             if (error) throw error;
             setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+            refreshUnreadCounts();
         } catch (error) {
             console.error('Error marking all as read:', error);
         }
+    };
+
+    const deleteAllNotifications = async () => {
+        if (!user) return;
+        Alert.alert('Clear All', 'Are you sure you want to delete all notifications?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Clear All',
+                style: 'destructive',
+                onPress: async () => {
+                    const { error } = await supabase
+                        .from('notifications' as any)
+                        .delete()
+                        .eq('user_id', user.id);
+                    if (!error) {
+                        setNotifications([]);
+                        refreshUnreadCounts();
+                    }
+                }
+            }
+        ]);
     };
 
     const markSelectedAsRead = async () => {
@@ -230,6 +261,7 @@ export default function MessagesScreen() {
 
             if (error) throw error;
             setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, is_read: true } : n));
+            refreshUnreadCounts();
             exitSelectionMode();
         } catch (error) {
             console.error('Error marking selected as read:', error);
@@ -251,6 +283,7 @@ export default function MessagesScreen() {
                         .in('id', ids);
                     if (!error) {
                         setNotifications(prev => prev.filter(n => !ids.includes(n.id)));
+                        refreshUnreadCounts();
                         exitSelectionMode();
                     }
                 }
@@ -363,7 +396,24 @@ export default function MessagesScreen() {
     };
 
     const getGroupedData = () => {
-        const data = activeTab === 'messages' ? conversations : notifications;
+        let data = activeTab === 'messages' ? conversations : notifications;
+
+        // Apply Search Filtering
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            if (activeTab === 'messages') {
+                data = (conversations as any[]).filter(conv =>
+                    conv.other_user?.full_name?.toLowerCase().includes(query) ||
+                    conv.product?.name?.toLowerCase().includes(query)
+                );
+            } else {
+                data = (notifications as any[]).filter(notif =>
+                    notif.title?.toLowerCase().includes(query) ||
+                    notif.body?.toLowerCase().includes(query)
+                );
+            }
+        }
+
         const groups: { [key: string]: any[] } = {};
 
         data.forEach((item: any) => {
@@ -470,12 +520,36 @@ export default function MessagesScreen() {
                                     <CheckIcon size={22} color={Colors.neutral[600]} />
                                 </TouchableOpacity>
                             )}
+                            {activeTab === 'notifications' && notifications.length > 0 && (
+                                <TouchableOpacity onPress={deleteAllNotifications} style={styles.headerIconButton}>
+                                    <TrashIcon size={22} color={Colors.neutral[600]} />
+                                </TouchableOpacity>
+                            )}
                             <TouchableOpacity onPress={() => router.push('/profile/notifications' as any)} style={styles.headerIconButton}>
                                 <Cog6ToothIcon size={24} color={Colors.neutral[600]} />
                             </TouchableOpacity>
                         </View>
                     </>
                 )}
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+                <View style={styles.searchBar}>
+                    <MagnifyingGlassIcon size={20} color={Colors.neutral[400]} />
+                    <TextInput
+                        placeholder={activeTab === 'messages' ? "Search messages..." : "Search notifications..."}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        style={styles.searchInput}
+                        placeholderTextColor={Colors.neutral[400]}
+                    />
+                    {searchQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchQuery('')}>
+                            <XMarkIcon size={20} color={Colors.neutral[400]} />
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             <View style={styles.segmentedTabContainer}>
@@ -497,7 +571,7 @@ export default function MessagesScreen() {
                     onPress={() => setActiveTab('notifications')}
                 >
                     <Text style={[styles.segmentedTabText, activeTab === 'notifications' && styles.activeSegmentedTabText]}>Notifications</Text>
-                    {notifications.filter(n => !n.is_read).length > 0 && (
+                    {notifications.some(n => !n.is_read) && (
                         <View style={styles.segmentedTabBadge}>
                             <Text style={styles.segmentedTabBadgeText}>
                                 {notifications.filter(n => !n.is_read).length}
@@ -565,6 +639,25 @@ const styles = StyleSheet.create({
     headerRightActions: { flexDirection: 'row', alignItems: 'center' },
     headerIconButton: { marginLeft: 16, padding: 4 },
     cancelText: { color: Colors.primary[600], fontWeight: '600', fontSize: 16 },
+    searchContainer: {
+        paddingHorizontal: 20,
+        marginBottom: 16,
+    },
+    searchBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F2F2F7',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        height: 44,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        color: Colors.text.primary,
+        marginLeft: 8,
+        height: '100%',
+    },
     segmentedTabContainer: {
         flexDirection: 'row',
         backgroundColor: '#F2F2F7',
@@ -599,7 +692,7 @@ const styles = StyleSheet.create({
         color: Colors.text.primary
     },
     segmentedTabBadge: {
-        backgroundColor: '#FF7F50',
+        backgroundColor: '#FF3B30',
         borderRadius: 10,
         minWidth: 20,
         height: 20,
@@ -639,7 +732,7 @@ const styles = StyleSheet.create({
     messagePreviewRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     lastMessage: { fontSize: 14, color: Colors.neutral[500], flex: 1 },
     unreadMessage: { fontWeight: '600', color: Colors.text.primary },
-    unreadDotIndicator: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary[500], marginLeft: 8 },
+    unreadDotIndicator: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF3B30', marginLeft: 8 },
     deleteAction: { backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', width: 90, height: '100%' },
     deleteActionText: { color: '#FFF', fontSize: 12, fontWeight: '600', marginTop: 4 },
     notificationItem: { flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: '#FFF' },
@@ -652,7 +745,7 @@ const styles = StyleSheet.create({
     notificationTitle: { fontSize: 15, fontWeight: '600', color: Colors.text.primary, flex: 1, marginRight: 8 },
     unreadTitle: { fontWeight: '800' },
     notificationBody: { fontSize: 14, color: Colors.neutral[600], lineHeight: 20 },
-    unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary[500], marginLeft: 10 },
+    unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF3B30', marginLeft: 10 },
     emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
     emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[400], marginBottom: 8 },
     emptySubtitle: { fontSize: 14, color: Colors.neutral[400] },

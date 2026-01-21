@@ -767,7 +767,35 @@ const Checkout = () => {
             // Note: Order status is updated by Stripe Webhook
             // We cannot update it here due to RLS security
 
-            // 6. Cleanup
+            // 6. Notifications
+            try {
+                // To Buyer
+                await supabase.from('notifications' as any).insert({
+                    user_id: user.id,
+                    type: 'order',
+                    title: 'Order Confirmed!',
+                    body: `Your order for ${cartItems[0]?.product.name}${cartItems.length > 1 ? ` and ${cartItems.length - 1} other items` : ''} has been placed.`,
+                    data: { orderId: order.id }
+                });
+
+                // To Seller(s)
+                const uniqueSellers = Array.from(new Set(cartItems.map(item => item.product.seller_id)));
+                for (const sellerId of uniqueSellers) {
+                    if (sellerId && sellerId !== 'system') {
+                        await supabase.from('notifications' as any).insert({
+                            user_id: sellerId,
+                            type: 'order',
+                            title: 'Item Sold!',
+                            body: `Good news! Someone just purchased your item. Time to ship!`,
+                            data: { orderId: order.id }
+                        });
+                    }
+                }
+            } catch (notifErr) {
+                console.error('Error creating post-checkout notifications:', notifErr);
+            }
+
+            // 7. Cleanup
             if (!productId) {
                 await clearCart(user.id);
             }

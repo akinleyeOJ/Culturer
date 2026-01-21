@@ -67,3 +67,4 @@ fix_last_message_photo.sql
 fix_chat_storage.sql
 fix_notifications_rls.sql
 orders_setup.sql
+update_message_notifications.sql
