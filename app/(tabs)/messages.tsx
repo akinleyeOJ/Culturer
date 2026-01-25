@@ -4,15 +4,11 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    FlatList,
     Image,
     ActivityIndicator,
     RefreshControl,
-    ScrollView,
     Alert,
-    Pressable,
     SectionList,
-    TouchableWithoutFeedback,
     TextInput,
 } from 'react-native';
 import Animated, { useAnimatedReaction, SharedValue } from 'react-native-reanimated';
@@ -656,6 +652,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         paddingHorizontal: 12,
         height: 44,
+        borderWidth: 1,
+        borderColor: '#E5E5EA',
     },
     searchInput: {
         flex: 1,
@@ -700,16 +698,18 @@ const styles = StyleSheet.create({
     segmentedTabBadge: {
         backgroundColor: '#FF3B30',
         borderRadius: 10,
-        minWidth: 20,
-        height: 20,
+        minWidth: 18,
+        height: 18,
         paddingHorizontal: 4,
         alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 6
+        position: 'absolute',
+        top: 6,
+        right: '10%',
     },
     segmentedTabBadgeText: {
         color: '#FFF',
-        fontSize: 12,
+        fontSize: 10,
         fontWeight: '800'
     },
     sectionHeader: {
@@ -725,163 +725,165 @@ const styles = StyleSheet.create({
         letterSpacing: 1.2,
     },
     centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listContent: {
-    flexGrow: 1,
-    paddingBottom: 20,
-  },
-  conversationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#FFF',
-  },
-  avatarWrapper: {
-    position: 'relative',
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    marginRight: 16,
-    backgroundColor: Colors.neutral[100],
-  },
-  productThumbnailBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 12,
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#FFF',
-    overflow: 'hidden',
-  },
-  productThumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  conversationContent: {
-    flex: 1,
-  },
-  conversationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.text.primary,
-  },
-  timestamp: {
-    fontSize: 12,
-    color: Colors.neutral[500],
-  },
-  messagePreviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  lastMessage: {
-    fontSize: 14,
-    color: Colors.neutral[500],
-    flex: 1,
-  },
-  unreadMessage: {
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-  unreadDotIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FF3B30',
-    marginLeft: 8,
-  },
-  deleteAction: {
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 90,
-    height: '100%',
-  },
-  deleteActionText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  notificationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#FFF',
-  },
-  unreadNotification: {
-    backgroundColor: Colors.primary[50] + '30',
-  },
-  selectedNotification: {
-    backgroundColor: Colors.primary[50],
-  },
-  checkboxContainer: {
-    marginRight: 15,
-  },
-  notificationIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  notificationTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    flex: 1,
-    marginRight: 8,
-  },
-  unreadTitle: {
-    fontWeight: '800',
-  },
-  notificationBody: {
-    fontSize: 14,
-    color: Colors.neutral[600],
-    lineHeight: 20,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FF3B30',
-    marginLeft: 10,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.neutral[400],
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: Colors.neutral[400],
-  },
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    listContent: {
+        flexGrow: 1,
+        paddingBottom: 20,
+    },
+    conversationItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#FFF',
+    },
+    avatarWrapper: {
+        position: 'relative',
+    },
+    avatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        marginRight: 16,
+        backgroundColor: Colors.neutral[100],
+    },
+    productThumbnailBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 12,
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: '#FFF',
+        overflow: 'hidden',
+    },
+    productThumbnail: {
+        width: '100%',
+        height: '100%',
+    },
+    conversationContent: {
+        flex: 1,
+    },
+    conversationHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    userName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        flex: 1,
+        marginRight: 8,
+    },
+    timestamp: {
+        fontSize: 12,
+        color: Colors.neutral[500],
+    },
+    messagePreviewRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    lastMessage: {
+        fontSize: 14,
+        color: Colors.neutral[500],
+        flex: 1,
+        marginRight: 10,
+    },
+    unreadMessage: {
+        fontWeight: '600',
+        color: Colors.text.primary,
+    },
+    unreadDotIndicator: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#FF3B30',
+    },
+    deleteAction: {
+        backgroundColor: '#EF4444',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 90,
+        height: '100%',
+    },
+    deleteActionText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '600',
+        marginTop: 4,
+    },
+    notificationItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#FFF',
+    },
+    unreadNotification: {
+        backgroundColor: Colors.primary[50] + '30',
+    },
+    selectedNotification: {
+        backgroundColor: Colors.primary[50],
+    },
+    checkboxContainer: {
+        marginRight: 15,
+    },
+    notificationIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 16,
+    },
+    notificationContent: {
+        flex: 1,
+    },
+    notificationHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    notificationTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: Colors.text.primary,
+        flex: 1,
+        marginRight: 8,
+    },
+    unreadTitle: {
+        fontWeight: '800',
+    },
+    notificationBody: {
+        fontSize: 14,
+        color: Colors.neutral[600],
+        lineHeight: 20,
+    },
+    unreadDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#FF3B30',
+        marginLeft: 10,
+    },
+    emptyState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 60,
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.neutral[400],
+        marginBottom: 8,
+    },
+    emptySubtitle: {
+        fontSize: 14,
+        color: Colors.neutral[400],
+    },
 });
