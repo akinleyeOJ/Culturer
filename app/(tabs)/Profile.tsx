@@ -64,7 +64,10 @@ const Profile = () => {
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/profile/orders' as any)}
+          >
             <Text style={styles.menuIcon}>📦</Text>
             <Text style={styles.menuText}>Orders</Text>
             <Text style={styles.menuArrow}>›</Text>
