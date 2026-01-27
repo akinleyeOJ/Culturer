@@ -70,7 +70,7 @@ const Checkout = () => {
     const navigation = useNavigation();
     const { user } = useAuth();
     const { refreshCartCount } = useCart();
-    const { productId, quantity: paramQuantity } = useLocalSearchParams<{ productId?: string, quantity?: string }>();
+    const { productId, quantity: paramQuantity, orderId } = useLocalSearchParams<{ productId?: string, quantity?: string, orderId?: string }>();
 
     // State management 
     const [step, setStep] = useState<CheckoutStep>(1);
@@ -225,6 +225,53 @@ const Checkout = () => {
                 } catch (err) {
                     console.error('Exception in Buy Now loadData:', err);
                 }
+            } else if (orderId) {
+                // Resume Pending Order Flow
+                try {
+                    console.log('Resuming pending order:', orderId);
+                    const { data: orderItems, error: itemsError } = await supabase
+                        .from('order_items' as any)
+                        .select('*, products(*)')
+                        .eq('order_id', orderId);
+
+                    if (itemsError || !orderItems) {
+                        console.error('Error fetching order items:', itemsError);
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Map to CartItem format
+                    const mappedItems = orderItems.map((item: any) => {
+                        const p = item.products;
+                        const priceNum = typeof p.price === 'string'
+                            ? parseFloat((p.price as string).replace('$', ''))
+                            : p.price;
+
+                        return {
+                            id: item.id,
+                            product_id: item.product_id,
+                            user_id: user.id,
+                            quantity: item.quantity,
+                            created_at: item.created_at || new Date().toISOString(),
+                            product: {
+                                id: p.id,
+                                name: p.name,
+                                price: priceNum,
+                                image_url: p.image_url || undefined,
+                                seller_id: p.user_id,
+                                seller_name: 'Seller', // Could fetch lookup if needed, but simplified for now
+                                emoji: p.emoji || '📦',
+                                shipping: p.shipping || 'Standard',
+                                out_of_stock: p.out_of_stock || false,
+                                stock_quantity: p.stock_quantity || 1
+                            }
+                        } as CartItem;
+                    });
+
+                    setCartItems(mappedItems);
+                } catch (err) {
+                    console.error('Exception in Resume Order loadData:', err);
+                }
             } else {
                 const items = await fetchCart(user.id);
                 setCartItems(items);
@@ -310,7 +357,7 @@ const Checkout = () => {
             setLoading(false);
         };
         loadData();
-    }, [user, productId, paramQuantity]);
+    }, [user, productId, paramQuantity, orderId]);
 
     // Switch Payment Method if Country Changes (P24 only for Poland)
     useEffect(() => {
@@ -698,36 +745,65 @@ const Checkout = () => {
                 }).eq('id', user.id);
             }
 
-            // 2. Create Order (Status: Pending)
-            const { data: order, error: orderError } = await supabase.from('orders').insert({
-                user_id: user.id,
-                seller_id: cartItems[0]?.product.seller_id || 'system',
-                subtotal: totals.subtotal,
-                shipping_cost: totals.shippingCost,
-                tax: totals.tax, // Changed from tax_rate to tax to match DB schema
-                total_amount: totals.total, // Changed to total_amount to match DB schema
-                status: 'pending', // Initial status
-                shipping_address: shippingAddressObj,
-                payment_method: selectedPaymentMethod,
-                notes: orderNote,
-            })
-                .select()
-                .single();
+            // 2. Create or Retrieve Order
+            let orderIdToUse = orderId;
+            let order: any;
 
-            if (orderError) throw orderError;
+            if (orderIdToUse) {
+                // Determine if we are resuming a pending order
+                const { data: existingOrder, error: fetchError } = await supabase
+                    .from('orders' as any)
+                    .select('*')
+                    .eq('id', orderIdToUse)
+                    .single();
 
-            // 3. Create Order Items
-            const orderItemsData = cartItems.map(item => ({
-                order_id: order.id,
-                product_id: item.product_id,
-                quantity: item.quantity,
-                price: item.product.price,
-                product_name: item.product.name,
-                product_image: item.product.image_url || item.product.images?.[0]
-            }));
+                if (fetchError || !existingOrder) {
+                    // Fallback to creating new if not found (shouldn't happen)
+                    orderIdToUse = undefined;
+                } else {
+                    order = existingOrder;
+                    // Update shipping info if changed during resume
+                    await supabase.from('orders' as any).update({
+                        shipping_address: shippingAddressObj,
+                        payment_method: selectedPaymentMethod
+                    }).eq('id', orderIdToUse);
+                }
+            }
 
-            const { error: itemsError } = await supabase.from('order_items').insert(orderItemsData);
-            if (itemsError) throw itemsError;
+            if (!orderIdToUse) {
+                const { data: newOrder, error: orderError } = await supabase.from('orders' as any).insert({
+                    user_id: user.id,
+                    seller_id: cartItems[0]?.product.seller_id || 'system',
+                    subtotal: totals.subtotal,
+                    shipping_cost: totals.shippingCost,
+                    tax: totals.tax,
+                    total_amount: totals.total,
+                    status: 'pending',
+                    shipping_address: shippingAddressObj,
+                    payment_method: selectedPaymentMethod,
+                    notes: orderNote,
+                })
+                    .select()
+                    .single();
+
+                if (orderError) throw orderError;
+                order = newOrder;
+
+                // 3. Create Order Items ONLY for new orders
+                const orderItemsData = cartItems.map(item => ({
+                    order_id: order.id,
+                    product_id: item.product_id,
+                    quantity: item.quantity,
+                    price: item.product.price,
+                    product_name: item.product.name,
+                    product_image: item.product.image_url || item.product.images?.[0]
+                }));
+
+                const { error: itemsError } = await supabase.from('order_items' as any).insert(orderItemsData);
+                if (itemsError) throw itemsError;
+            }
+
+
 
             // 4. Process Payment (Wrapper for Edge Function)
             if (selectedPaymentMethod === 'card' && paymentMethodId) {
@@ -761,6 +837,15 @@ const Checkout = () => {
                 }
 
                 console.log('Payment successful:', paymentResult.paymentIntentId);
+
+                // Update Order Status to Paid immediately upon success AND refresh created_at so it shows as new
+                await supabase.from('orders' as any)
+                    .update({
+                        status: 'paid',
+                        payment_intent_id: paymentResult.paymentIntentId,
+                        created_at: new Date().toISOString()
+                    })
+                    .eq('id', order.id);
             }
 
             // 5. Payment Success

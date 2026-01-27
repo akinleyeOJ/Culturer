@@ -152,25 +152,33 @@ const OrdersScreen = () => {
         );
     };
 
-    const renderEmptyState = () => (
-        <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconContainer}>
-                <InboxStackIcon size={64} color="#D1D5DB" />
+    const renderEmptyState = () => {
+        const isSelling = activeTab === 'selling';
+
+        return (
+            <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconContainer}>
+                    <InboxStackIcon size={64} color="#D1D5DB" />
+                </View>
+                <Text style={styles.emptyTitle}>
+                    {isSelling ? "No sales yet" : "No orders found"}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                    {isSelling
+                        ? "You haven't sold any items yet. List something to get started!"
+                        : "You haven't placed any orders yet. Start exploring the marketplace!"}
+                </Text>
+                <TouchableOpacity
+                    style={styles.shopButton}
+                    onPress={() => router.push(isSelling ? '/sell' as any : '/browse' as any)}
+                >
+                    <Text style={styles.shopButtonText}>
+                        {isSelling ? "List an Item" : "Start Shopping"}
+                    </Text>
+                </TouchableOpacity>
             </View>
-            <Text style={styles.emptyTitle}>No orders found</Text>
-            <Text style={styles.emptySubtitle}>
-                {statusFilter === 'all'
-                    ? "You haven't placed any orders yet."
-                    : `You don't have any ${statusFilter} orders.`}
-            </Text>
-            <TouchableOpacity
-                style={styles.shopButton}
-                onPress={() => router.push('/browse' as any)}
-            >
-                <Text style={styles.shopButtonText}>Start Shopping</Text>
-            </TouchableOpacity>
-        </View>
-    );
+        );
+    };
 
     const filters: OrderStatus[] = ['all', 'pending', 'paid', 'shipped', 'delivered', 'cancelled'];
 

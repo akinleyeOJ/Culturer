@@ -38,7 +38,7 @@ interface Order {
     shipping_cost: number;
     tax: number;
     total_amount: number;
-    status: 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled';
+    status: 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled' | 'confirmed';
     shipping_address: {
         line1: string;
         line2?: string;
@@ -50,6 +50,7 @@ interface Order {
     };
     payment_method: string;
     created_at: string;
+    updated_at?: string;
     order_items: OrderItem[];
 }
 
@@ -94,11 +95,22 @@ const OrderDetailsScreen = () => {
     ];
 
     const getStatusIndex = (status: string) => {
-        if (status === 'cancelled') return -1;
-        return statusSteps.findIndex(s => s.status === status);
+        if (!status) return 0;
+        const s = status.toLowerCase();
+        if (s === 'cancelled') return -1;
+        if (s === 'confirmed') return 1; // Map confirmed to paid
+        return statusSteps.findIndex(step => step.status === s);
     };
 
     const currentStatusIndex = order ? getStatusIndex(order.status) : 0;
+
+    const handleFinishPayment = () => {
+        // Redirect back to checkout with this order context
+        router.push({
+            pathname: '/checkout',
+            params: { orderId: order?.id }
+        } as any);
+    };
 
     const handleUpdateStatus = async (newStatus: Order['status']) => {
         try {
@@ -182,7 +194,18 @@ const OrderDetailsScreen = () => {
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Order #{order.id.slice(0, 8).toUpperCase()}</Text>
+                <View style={styles.headerTitleContainer}>
+                    <Text style={styles.headerTitle}>Order #{order.id.slice(0, 8).toUpperCase()}</Text>
+                    <Text style={styles.headerDate}>
+                        {new Date((order.status === 'paid' || order.status === 'confirmed') && order.updated_at ? order.updated_at : order.created_at).toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
+                    </Text>
+                </View>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -308,6 +331,20 @@ const OrderDetailsScreen = () => {
                     ) : (
                         // Buyer Actions
                         <>
+                            {order.status === 'pending' && (
+                                <View style={styles.pendingActionWrapper}>
+                                    <TouchableOpacity
+                                        style={styles.primaryActionButton}
+                                        onPress={handleFinishPayment}
+                                    >
+                                        <Text style={styles.primaryActionButtonText}>Complete Payment</Text>
+                                    </TouchableOpacity>
+                                    <Text style={styles.pendingNote}>
+                                        Your check out was started but payment isn't confirmed yet.
+                                    </Text>
+                                </View>
+                            )}
+
                             <TouchableOpacity
                                 style={styles.actionButton}
                                 onPress={handleContactUser}
@@ -359,10 +396,18 @@ const styles = StyleSheet.create({
     backButton: {
         padding: 8,
     },
+    headerTitleContainer: {
+        alignItems: 'center',
+    },
     headerTitle: {
         fontSize: 18,
         fontWeight: '700',
         color: '#111827',
+    },
+    headerDate: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2,
     },
     scrollContent: {
         paddingBottom: 40,
@@ -573,6 +618,20 @@ const styles = StyleSheet.create({
     },
     cancelButtonText: {
         color: Colors.danger[500],
+    },
+    pendingActionWrapper: {
+        marginBottom: 20,
+        backgroundColor: Colors.primary[50] + '30',
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: Colors.primary[100],
+    },
+    pendingNote: {
+        fontSize: 13,
+        color: Colors.text.secondary,
+        textAlign: 'center',
+        marginTop: 8,
     },
     centerContainer: {
         flex: 1,

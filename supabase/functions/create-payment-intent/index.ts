@@ -105,7 +105,10 @@ serve(async (req) => {
 
         // Sync local DB order status if succeeded (Secure admin update)
         if (paymentIntent.status === 'succeeded' && orderId) {
-            await supabaseAdmin.from('orders').update({ status: 'confirmed' }).eq('id', orderId);
+            await supabaseAdmin.from('orders').update({
+                status: 'paid',
+                created_at: new Date().toISOString()
+            }).eq('id', orderId);
         }
 
         return new Response(
