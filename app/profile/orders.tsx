@@ -22,6 +22,7 @@ type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled' | 
 interface Order {
     id: string;
     created_at: string;
+    updated_at?: string;
     total_amount: number;
     status: string;
     order_items: {
@@ -50,6 +51,7 @@ const OrdersScreen = () => {
                 .select(`
           id,
           created_at,
+          updated_at,
           total_amount,
           status,
           order_items (
@@ -97,6 +99,7 @@ const OrdersScreen = () => {
         switch (status.toLowerCase()) {
             case 'pending': return '#F59E0B';
             case 'paid': return '#3B82F6';
+            case 'confirmed': return '#3B82F6';
             case 'shipped': return '#8B5CF6';
             case 'delivered': return Colors.success[500];
             case 'cancelled': return Colors.danger[500];
@@ -115,7 +118,7 @@ const OrdersScreen = () => {
             >
                 <View style={styles.orderHeader}>
                     <Text style={styles.orderDate}>
-                        {new Date(item.created_at).toLocaleDateString('en-US', {
+                        {new Date((item.status === 'paid' || item.status === 'confirmed') && item.updated_at ? item.updated_at : item.created_at).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric'
