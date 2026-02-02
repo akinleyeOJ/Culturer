@@ -99,7 +99,7 @@ const OrdersScreen = () => {
         switch (status.toLowerCase()) {
             case 'pending': return '#F59E0B';
             case 'paid': return '#3B82F6';
-            case 'confirmed': return '#3B82F6';
+            case 'confirmed': return Colors.success[500];
             case 'shipped': return '#8B5CF6';
             case 'delivered': return Colors.success[500];
             case 'cancelled': return Colors.danger[500];
