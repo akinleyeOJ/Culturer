@@ -72,7 +72,7 @@ const OrdersScreen = () => {
                 query = query.eq('status', statusFilter);
             }
 
-            query = query.order('created_at', { ascending: false });
+            query = query.order('updated_at', { ascending: false }).order('created_at', { ascending: false });
 
             const { data, error } = await query;
 
