@@ -16,6 +16,7 @@ import {
     ChatBubbleLeftRightIcon,
     QuestionMarkCircleIcon,
     XCircleIcon,
+    StarIcon
 } from 'react-native-heroicons/outline';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -137,38 +138,81 @@ const OrderDetailsScreen = () => {
 
         // If I'm the buyer, contact seller. If I'm seller, contact buyer.
         const isSeller = user.id === order.seller_id;
-        const otherUserId = isSeller ? order.user_id : order.seller_id;
+        const targetUserId = isSeller ? order.user_id : order.seller_id;
         const firstItem = order.order_items[0];
 
+        // Helper to validate UUID
+        const isUUID = (str: string) => {
+            // Relaxed regex to accept any UUID version (just hex and dashes structure)
+            const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            return regex.test(str);
+        };
+
+        // DEBUG: Temporary alert to see what the ID actually is
+        // if (!isUUID(order.seller_id)) {
+        //     Alert.alert("Debug Info", `Seller ID is: '${order.seller_id}' (Type: ${typeof order.seller_id})`);
+        // }
+
+        // If seller is "system" (platform) or invalid UUID, redirect to help/support instead of chat
+        if (order.seller_id === 'system' || !isUUID(order.seller_id)) {
+            // "system" is not a valid UUID, so we can't create a chat record.
+            // Redirect to the support/issue form instead.
+            router.push(`/profile/order-issue/${order.id}` as any);
+            return;
+        }
+
         try {
-            // Find or create conversation
-            const { data: conversation } = await supabase
+            // Check for any conversation between these two users regarding this product
+            // Since conversation roles are fixed (buyer_id is always the one who bought, seller_id is always the one who sold),
+            // we can just query directly.
+            const query = supabase
                 .from('conversations' as any)
                 .select('id')
                 .eq('product_id', firstItem.product_id)
-                .or(`and(buyer_id.eq.${order.user_id},seller_id.eq.${order.seller_id})`)
+                .eq('buyer_id', order.user_id)
+                .eq('seller_id', order.seller_id);
+
+            const { data: conversations, error } = await query;
+
+            if (error) throw error;
+
+            if (conversations && conversations.length > 0) {
+                router.push(`/conversation/${(conversations[0] as any).id}` as any);
+                return;
+            }
+
+            // Create new conversation if none exists
+            const initialMessage = isSeller
+                ? `Hi, I'm contacting you regarding Order #${order.id.slice(0, 8)}`
+                : `Hi, I have a question about my order #${order.id.slice(0, 8)}`;
+
+            const { data: newConv, error: createError } = await supabase
+                .from('conversations' as any)
+                .insert({
+                    product_id: firstItem.product_id,
+                    buyer_id: order.user_id,
+                    seller_id: order.seller_id,
+                    last_message: initialMessage,
+                })
+                .select()
                 .single();
 
-            if (conversation) {
-                router.push(`/conversation/${(conversation as any).id}` as any);
-            } else {
-                const { data: newConv } = await supabase
-                    .from('conversations' as any)
-                    .insert({
-                        product_id: firstItem.product_id,
-                        buyer_id: order.user_id,
-                        seller_id: order.seller_id,
-                        last_message: isSeller ? 'Regarding your order...' : 'Regarding my order...',
-                    })
-                    .select()
-                    .single();
+            if (createError) throw createError;
 
-                if (newConv) {
-                    router.push(`/conversation/${(newConv as any).id}` as any);
-                }
+            if (newConv) {
+                // Also insert the message into the messages table so it appears in the chat
+                await supabase.from('messages' as any).insert({
+                    conversation_id: (newConv as any).id,
+                    sender_id: user.id,
+                    content: initialMessage,
+                    is_read: false
+                });
+
+                router.push(`/conversation/${(newConv as any).id}` as any);
             }
         } catch (err) {
             console.error('Error opening chat:', err);
+            Alert.alert('Error', 'Could not open chat. Please try again.');
         }
     };
 
@@ -248,18 +292,37 @@ const OrderDetailsScreen = () => {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Items</Text>
                     {order.order_items.map((item) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={styles.itemRow}
-                            onPress={() => router.push(`/item/${item.product_id}` as any)}
-                        >
-                            <Image source={{ uri: item.product_image }} style={styles.itemImage} />
-                            <View style={styles.itemDetails}>
-                                <Text style={styles.itemName} numberOfLines={1}>{item.product_name}</Text>
-                                <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
-                            </View>
-                            <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
-                        </TouchableOpacity>
+                        <View key={item.id} style={styles.itemContainer}>
+                            <TouchableOpacity
+                                style={styles.itemRow}
+                                onPress={() => router.push(`/item/${item.product_id}` as any)}
+                            >
+                                <Image source={{ uri: item.product_image }} style={styles.itemImage} />
+                                <View style={styles.itemDetails}>
+                                    <Text style={styles.itemName} numberOfLines={1}>{item.product_name}</Text>
+                                    <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
+                                </View>
+                                <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
+                            </TouchableOpacity>
+                            {/* Review Button - Only if delivered and I'm the buyer */}
+                            {(order.status === 'delivered') && user?.id === order.user_id && (
+                                <TouchableOpacity
+                                    style={styles.reviewButton}
+                                    onPress={() => router.push({
+                                        pathname: `/profile/review/${item.product_id}`,
+                                        params: {
+                                            orderId: order.id,
+                                            productName: item.product_name,
+                                            productImage: item.product_image,
+                                            price: item.price.toString()
+                                        }
+                                    } as any)}
+                                >
+                                    <StarIcon size={16} color={Colors.primary[500]} />
+                                    <Text style={styles.reviewButtonText}>Write a Review</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     ))}
                 </View>
 
@@ -358,7 +421,7 @@ const OrderDetailsScreen = () => {
                                 onPress={() => router.push(`/profile/order-issue/${order.id}` as any)}
                             >
                                 <QuestionMarkCircleIcon size={20} color={Colors.text.primary} />
-                                <Text style={styles.actionButtonText}>Need Help?</Text>
+                                <Text style={styles.actionButtonText}>Need Help from Culturar?</Text>
                             </TouchableOpacity>
 
                             {order.status === 'pending' && (
@@ -637,6 +700,24 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    itemContainer: {
+        marginBottom: 16,
+    },
+    reviewButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        padding: 8,
+        backgroundColor: Colors.primary[50], // subtle background
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+    },
+    reviewButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.primary[500],
+        marginLeft: 6,
     },
 });
 

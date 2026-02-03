@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
     View,
     Text,
@@ -72,12 +73,27 @@ const OrdersScreen = () => {
                 query = query.eq('status', statusFilter);
             }
 
-            query = query.order('updated_at', { ascending: false }).order('created_at', { ascending: false });
+            query = query.order('created_at', { ascending: false });
 
             const { data, error } = await query;
 
             if (error) throw error;
-            setOrders(data as unknown as Order[]);
+
+            // Client-side sort to handle the coalescing of updated_at and created_at
+            // This ensures the list order matches the displayed date
+            const sortedOrders = (data as unknown as Order[]).sort((a, b) => {
+                // If updated_at exists (meaning status changed from pending), use it. otherwise use created_at.
+                const getDate = (order: Order) => {
+                    if (order.updated_at) return new Date(order.updated_at);
+                    return new Date(order.created_at);
+                };
+
+                const dateA = getDate(a);
+                const dateB = getDate(b);
+                return dateB.getTime() - dateA.getTime();
+            });
+
+            setOrders(sortedOrders);
         } catch (error) {
             console.error('Error fetching orders:', error);
         } finally {
@@ -86,9 +102,11 @@ const OrdersScreen = () => {
         }
     }, [user, activeTab, statusFilter]);
 
-    useEffect(() => {
-        fetchOrders();
-    }, [fetchOrders]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchOrders();
+        }, [fetchOrders])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -118,7 +136,7 @@ const OrdersScreen = () => {
             >
                 <View style={styles.orderHeader}>
                     <Text style={styles.orderDate}>
-                        {new Date((item.status === 'paid' || item.status === 'confirmed') && item.updated_at ? item.updated_at : item.created_at).toLocaleDateString('en-US', {
+                        {new Date(item.updated_at || item.created_at).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric'

@@ -62,27 +62,50 @@ const CancelOrderScreen = () => {
     const performCancellation = async () => {
         setLoading(true);
         try {
-            // 1. Update order status
-            const { error: updateError } = await supabase
+            // 1. Verify eligibility FIRST
+            const { data: orderToCheck, error: fetchError } = await supabase
+                .from('orders' as any)
+                .select('status, user_id')
+                .eq('id', id)
+                .single();
+
+            if (fetchError) throw fetchError;
+            const orderData = orderToCheck as any;
+            if (!orderData) throw new Error("Order not found");
+
+            if (orderData.user_id !== user?.id) {
+                throw new Error("You do not have permission to cancel this order.");
+            }
+            if (orderData.status !== 'pending') {
+                throw new Error(`Order status is '${orderData.status}', cannot cancel.`);
+            }
+
+            // 2. Perform Update
+            const { data: updatedOrder, error: updateError } = await supabase
                 .from('orders' as any)
                 .update({
                     status: 'cancelled',
-                    notes: `Cancellation Reason: ${selectedReason === 'Other' ? otherReason : selectedReason}`
+                    notes: `Cancellation Reason: ${selectedReason === 'Other' ? otherReason : selectedReason}`,
+                    updated_at: new Date().toISOString()
                 })
                 .eq('id', id)
-                .eq('user_id', user?.id) // Extra safety check
-                .eq('status', 'pending'); // Can only cancel pending orders
+                .select()
+                .maybeSingle();
 
             if (updateError) throw updateError;
 
-            // 2. Notify Seller (Implementation depends on notification system)
+            if (!updatedOrder) {
+                throw new Error("Cancellation failed. Row Level Security violation likely.");
+            }
+
+            // 3. Notify Seller (Implementation depends on notification system)
             // We could add a notification here similar to checkout.tsx
 
             Alert.alert('Success', 'Your order has been cancelled successfully.');
             router.dismiss(2); // Go back to Order History, skipping Order Details
         } catch (error: any) {
             console.error('Error cancelling order:', error);
-            Alert.alert('Cancellation Failed', 'Could not cancel the order. It might have already been shipped or processed.');
+            Alert.alert('Cancellation Failed', error.message || 'Could not cancel the order.');
         } finally {
             setLoading(false);
         }
