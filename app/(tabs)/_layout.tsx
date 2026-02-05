@@ -48,8 +48,11 @@ export default function TabLayout() {
     return <Redirect href="/(auth)/auth" />;
   }
 
+  // Optional: Force redirect to profile on initial load if desired
+  // <Redirect href="/(tabs)/profile" />
+
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: Colors.primary[500] }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: Colors.primary[500] }} initialRouteName="profile">
       <Tabs.Screen
         name="home"
         options={{

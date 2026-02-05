@@ -26,16 +26,13 @@ const Index = () => {
     );
   }
 
-  // Redirect to messages (new default)
-  return <Redirect href="/(tabs)/messages" />;
+  // If user is logged in, go to Profile (landing page)
+  if (user) {
+    return <Redirect href="/(tabs)/profile" />;
+  }
 
-  // // If user is logged in, go to Home
-  // if (user) {
-  //   return <Redirect href="/(tabs)/home" />;
-  // }
-
-  // // If not logged in, go to Splash screen (which flows to Onboarding -> Auth)
-  // return <Redirect href="/(auth)/splash" />;
+  // If not logged in, go to Splash screen (which flows to Onboarding -> Auth)
+  return <Redirect href="/(auth)/splash" />;
 };
 
 const styles = StyleSheet.create({
