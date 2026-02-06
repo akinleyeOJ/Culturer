@@ -17,13 +17,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { Colors } from "../../constants/color";
-import { useAuth } from "../../contexts/AuthContext";
-import { useCart } from "../../contexts/CartContext";
-import { fetchWishlist, toggleFavorite, trackProductView } from "../../lib/services/productService";
-import { addToCart } from "../../lib/services/cartService";
-import { CATEGORIES } from "../../constants/categories";
-import { CartToast } from "../../components/CartToast";
+import { Colors } from "../constants/color";
+import { useAuth } from "../contexts/AuthContext";
+import { useCart } from "../contexts/CartContext";
+import { fetchWishlist, toggleFavorite, trackProductView } from "../lib/services/productService";
+import { addToCart } from "../lib/services/cartService";
+import { CATEGORIES } from "../constants/categories";
+import { CartToast } from "../components/CartToast";
 import {
   CheckCircleIcon as CheckCircleIconSolid,
   ArrowTrendingDownIcon,
@@ -36,6 +36,7 @@ import {
   TrashIcon,
   AdjustmentsHorizontalIcon,
   BellIcon,
+  ChevronLeftIcon,
   XMarkIcon,
   ShareIcon,
   CheckCircleIcon as CheckCircleIconOutline,
@@ -481,7 +482,7 @@ const Wishlist = () => {
     router.push({
       pathname: '/filter',
       params: {
-        returnPath: '/(tabs)/wishlist',
+        returnPath: '/wishlist',
         search: searchQuery,
         categories: selectedCategories.join(','),
         minPrice: filters.minPrice,
@@ -521,6 +522,9 @@ const Wishlist = () => {
         ) : (
           <View style={styles.topBar}>
             <View style={styles.headerLeft}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <ChevronLeftIcon size={24} color={Colors.text.primary} />
+              </TouchableOpacity>
               <Text style={styles.headerTitle}>Wishlist</Text>
             </View>
             <View style={styles.headerRight}>
@@ -687,7 +691,11 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 8,
+  },
+  backButton: {
+    padding: 4,
+    marginLeft: -4,
   },
   headerRight: {
     flexDirection: 'row',
@@ -695,8 +703,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 28,
+    fontWeight: 'bold',
     color: Colors.text.primary,
   },
   selectAllText: {

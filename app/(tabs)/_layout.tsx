@@ -1,8 +1,8 @@
-import { HomeIcon, MagnifyingGlassIcon, HeartIcon, EnvelopeIcon, UserIcon } from 'react-native-heroicons/outline';
+import { HomeIcon, MagnifyingGlassIcon, TagIcon, EnvelopeIcon, UserIcon } from 'react-native-heroicons/outline';
 import {
   HomeIcon as HomeIconSolid,
   MagnifyingGlassIcon as MagnifyingGlassIconSolid,
-  HeartIcon as HeartIconSolid,
+  TagIcon as TagIconSolid,
   EnvelopeIcon as EnvelopeIconSolid,
   UserIcon as UserIconSolid
 } from 'react-native-heroicons/solid';
@@ -84,15 +84,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="wishlist"
+        name="sell"
         options={{
-          title: "Wishlist",
+          title: "Sell",
           headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}
-              OutlineIcon={HeartIcon}
-              SolidIcon={HeartIconSolid}
+              OutlineIcon={TagIcon}
+              SolidIcon={TagIconSolid}
               color={color}
             />
           ),
@@ -124,6 +124,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: "Profile",
+          headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}

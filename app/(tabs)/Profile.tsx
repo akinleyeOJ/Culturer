@@ -207,12 +207,12 @@ const Profile = () => {
           <MenuItem
             icon={TagIcon}
             label="Your listings"
-            onPress={() => router.push('/(tabs)/sell' as any)} // Redirect to Sell tab for now as "Listings" manager
+            onPress={() => router.push('/sell' as any)}
           />
           <MenuItem
             icon={HeartIcon}
             label="Wishlists"
-            onPress={() => router.push('/(tabs)/wishlist' as any)} // Redirect to existing Wishlist tab
+            onPress={() => router.push('/wishlist' as any)}
             showBorder={false}
           />
         </View>

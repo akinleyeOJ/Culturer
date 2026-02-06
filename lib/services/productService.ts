@@ -345,3 +345,61 @@ export const fetchSimilarProducts = async (
 
   return products.map(p => transformProduct(p, favoriteIds));
 };
+
+// Create a new product listing
+export const createListing = async (listingData: {
+  user_id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  condition: string;
+  cultural_origin?: string;
+  cultural_story?: string;
+  images: string[];
+  status?: 'active' | 'draft';
+}) => {
+  const { data, error } = await supabase
+    .from('products')
+    .insert([{
+      ...listingData,
+      seller_id: listingData.user_id, // Ensure seller_id is set
+      in_stock: true,
+      created_at: new Date().toISOString(),
+    }] as any)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating listing:', error);
+    throw error;
+  }
+
+  return data;
+};
+
+// Upload multiple images to Supabase Storage
+export const uploadProductImages = async (
+  userId: string,
+  images: { base64: string, uri: string }[]
+): Promise<string[]> => {
+  const uploadPromises = images.map(async (img, index) => {
+    const { decode } = await import('base64-arraybuffer');
+    const fileName = `${userId}/${Date.now()}-${index}.jpg`;
+    const filePath = `product-images/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('products') // Ensure this bucket exists
+      .upload(filePath, decode(img.base64), {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('products').getPublicUrl(filePath);
+    return data.publicUrl;
+  });
+
+  return Promise.all(uploadPromises);
+};
