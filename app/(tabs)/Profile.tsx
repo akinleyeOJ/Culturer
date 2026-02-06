@@ -210,6 +210,11 @@ const Profile = () => {
             onPress={() => router.push('/sell' as any)}
           />
           <MenuItem
+            icon={DocumentTextIcon}
+            label="My drafts"
+            onPress={() => router.push('/profile/drafts' as any)}
+          />
+          <MenuItem
             icon={HeartIcon}
             label="Wishlists"
             onPress={() => router.push('/wishlist' as any)}

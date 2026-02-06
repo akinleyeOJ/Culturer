@@ -285,6 +285,7 @@ export const fetchProductById = async (productId: string, userId?: string) => {
     shipping_days_min: (product as any).shipping_days_min || 3,
     shipping_days_max: (product as any).shipping_days_max || 5,
     stock_quantity: (product as any).stock_quantity || 10,
+    cultural_story: (product as any).cultural_story || '',
   };
 };
 
@@ -346,8 +347,9 @@ export const fetchSimilarProducts = async (
   return products.map(p => transformProduct(p, favoriteIds));
 };
 
-// Create a new product listing
+// Create or update a product listing
 export const createListing = async (listingData: {
+  id?: string;
   user_id: string;
   name: string;
   description: string;
@@ -359,16 +361,31 @@ export const createListing = async (listingData: {
   images: string[];
   status?: 'active' | 'draft';
 }) => {
-  const { data, error } = await supabase
-    .from('products')
-    .insert([{
-      ...listingData,
-      seller_id: listingData.user_id, // Ensure seller_id is set
-      in_stock: true,
-      created_at: new Date().toISOString(),
-    }] as any)
-    .select()
-    .single();
+  const payload = {
+    ...listingData,
+    seller_id: listingData.user_id,
+    in_stock: true,
+    updated_at: new Date().toISOString(),
+  };
+
+  delete (payload as any).user_id; // Clean up payload
+
+  let query;
+  if (listingData.id) {
+    query = supabase
+      .from('products')
+      .update(payload as any)
+      .eq('id', listingData.id);
+  } else {
+    query = supabase
+      .from('products')
+      .insert([{
+        ...payload,
+        created_at: new Date().toISOString(),
+      }] as any);
+  }
+
+  const { data, error } = await query.select().single();
 
   if (error) {
     console.error('Error creating listing:', error);
@@ -376,6 +393,26 @@ export const createListing = async (listingData: {
   }
 
   return data;
+};
+
+// Fetch user drafts
+export const fetchUserDrafts = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('seller_id', userId)
+    .eq('status', 'draft')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching drafts:', error);
+    return [];
+  }
+
+  return (data as Product[]).map(p => ({
+    ...transformProduct(p),
+    full_data: p // Keep original data for editing
+  }));
 };
 
 // Upload multiple images to Supabase Storage

@@ -15,9 +15,10 @@ import {
     Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as Haptics from 'expo-haptics';
 import DraggableFlatList, {
     ScaleDecorator,
     RenderItemParams,
@@ -32,7 +33,7 @@ import {
 import { Colors } from '../../constants/color';
 import { CATEGORIES } from '../../constants/categories';
 import { useAuth } from '../../contexts/AuthContext';
-import { createListing, uploadProductImages } from '../../lib/services/productService';
+import { createListing, uploadProductImages, fetchProductById } from '../../lib/services/productService';
 
 interface ImageFile {
     uri: string;
@@ -49,8 +50,10 @@ const CONDITIONS = [
 const SellScreen = () => {
     const router = useRouter();
     const { user } = useAuth();
+    const { draftId } = useLocalSearchParams<{ draftId: string }>();
 
     const [loading, setLoading] = useState(false);
+    const [isFetchingDraft, setIsFetchingDraft] = useState(!!draftId);
 
     // Form State
     const [images, setImages] = useState<ImageFile[]>([]);
@@ -63,6 +66,47 @@ const SellScreen = () => {
     const [description, setDescription] = useState('');
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [isPickingImage, setIsPickingImage] = useState(false);
+
+    // Fetch Draft if editing
+    React.useEffect(() => {
+        if (draftId && user) {
+            const loadDraft = async () => {
+                try {
+                    const draft = await fetchProductById(draftId, user.id);
+                    if (draft) {
+                        setTitle(draft.name);
+                        setPrice(draft.price.replace('$', ''));
+                        setCategory(draft.category);
+                        setCondition(draft.condition.toLowerCase().replace(' ', '_'));
+                        setCulturalOrigin(draft.cultural_origin);
+                        setCulturalStory((draft as any).cultural_story || '');
+                        setDescription(draft.description);
+                        // Images in draft are URLs, we need to handle them differently
+                        // since our picker gives us base64/uri for NEW uploads.
+                        // For drafts, we'll store existing URLs.
+                        setImages(draft.images.map((url: string) => ({ uri: url })));
+                    }
+                } catch (error) {
+                    console.error('Error fetching draft:', error);
+                    Alert.alert('Error', 'Could not load draft.');
+                } finally {
+                    setIsFetchingDraft(false);
+                }
+            };
+            loadDraft();
+        } else if (!draftId) {
+            // Reset form for new listing
+            setTitle('');
+            setPrice('');
+            setCategory('');
+            setCondition('new');
+            setCulturalOrigin('');
+            setCulturalStory('');
+            setDescription('');
+            setImages([]);
+            setIsFetchingDraft(false);
+        }
+    }, [draftId, user]);
 
     const handlePickImage = async () => {
         if (isPickingImage) return;
@@ -132,12 +176,21 @@ const SellScreen = () => {
         try {
             setLoading(true);
 
-            // 1. Upload Images
-            const uploadData = images.map(img => ({ base64: img.base64!, uri: img.uri }));
-            const imageUrls = await uploadProductImages(user.id, uploadData);
+            // 1. Upload NEW Images (only those with base64)
+            const newImagesToUpload = images.filter(img => img.base64);
+            const existingUrls = images.filter(img => !img.base64).map(img => img.uri);
 
-            // 2. Create Listing in DB
+            let uploadedUrls: string[] = [];
+            if (newImagesToUpload.length > 0) {
+                const uploadData = newImagesToUpload.map(img => ({ base64: img.base64!, uri: img.uri }));
+                uploadedUrls = await uploadProductImages(user.id, uploadData);
+            }
+
+            const finalImages = [...existingUrls, ...uploadedUrls];
+
+            // 2. Create or Update Listing in DB
             await createListing({
+                id: draftId,
                 user_id: user.id,
                 name: title,
                 description,
@@ -146,7 +199,7 @@ const SellScreen = () => {
                 condition,
                 cultural_origin: culturalOrigin,
                 cultural_story: culturalStory,
-                images: imageUrls,
+                images: finalImages,
                 status,
             });
 
@@ -199,7 +252,7 @@ const SellScreen = () => {
                     <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
                         <XMarkIcon size={24} color={Colors.text.primary} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>New Listing</Text>
+                    <Text style={styles.headerTitle}>{draftId ? 'Edit Draft' : 'New Listing'}</Text>
                     <TouchableOpacity
                         onPress={() => handlePublish('draft')}
                         disabled={loading}
@@ -209,26 +262,52 @@ const SellScreen = () => {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                {isFetchingDraft ? (
+                    <View style={styles.center}>
+                        <ActivityIndicator size="large" color={Colors.primary[500]} />
+                        <Text style={styles.loadingText}>Loading draft...</Text>
+                    </View>
+                ) : (
+                    <ScrollView
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.scrollContent}
+                        keyboardShouldPersistTaps="handled"
+                    >
 
-                    {/* Image Collection */}
-                    <View style={styles.imageSection}>
-                        <View style={styles.horizontalScrollContainer}>
-                            <TouchableOpacity style={styles.addIconButton} onPress={handlePickImage}>
-                                <CameraIcon size={32} color={Colors.primary[500]} />
-                                <Text style={styles.addPhotoText}>Add Photo</Text>
-                                <Text style={styles.photoCount}>{images.length}/5</Text>
-                            </TouchableOpacity>
-
+                        {/* Image Collection */}
+                        <View style={styles.imageSection}>
                             <DraggableFlatList
-                                data={images}
-                                onDragEnd={({ data }) => setImages(data)}
-                                keyExtractor={(_, index) => `img-${index}`}
+                                data={['add', ...images]}
+                                onDragBegin={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                                onDragEnd={({ data }) => {
+                                    // Remove the 'add' placeholder before updating state
+                                    const newImages = data.filter(item => item !== 'add') as ImageFile[];
+                                    setImages(newImages);
+                                }}
+                                keyExtractor={(item) => typeof item === 'string' ? item : item.uri}
                                 horizontal
                                 showsHorizontalScrollIndicator={false}
+                                activationDistance={5}
+                                containerStyle={styles.dragListContainer}
                                 contentContainerStyle={styles.imageList}
-                                renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<ImageFile>) => {
-                                    const index = getIndex();
+                                renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<ImageFile | string>) => {
+                                    if (item === 'add') {
+                                        return (
+                                            <TouchableOpacity
+                                                style={styles.addIconButton}
+                                                onPress={handlePickImage}
+                                                activeOpacity={0.7}
+                                            >
+                                                <CameraIcon size={28} color={Colors.primary[500]} />
+                                                <Text style={styles.addPhotoText}>Add Photo</Text>
+                                                <Text style={styles.photoCount}>{images.length}/5</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    }
+
+                                    const index = getIndex()! - 1; // Adjust for 'add' item at index 0
+                                    const imageItem = item as ImageFile;
+
                                     return (
                                         <ScaleDecorator>
                                             <TouchableOpacity
@@ -237,13 +316,13 @@ const SellScreen = () => {
                                                 activeOpacity={1}
                                                 style={[
                                                     styles.imageWrapper,
-                                                    isActive && { zIndex: 10 }
+                                                    isActive && { zIndex: 10, opacity: 0.9, scale: 1.05 }
                                                 ]}
                                             >
-                                                <Image source={{ uri: item.uri }} style={styles.imagePreview} />
+                                                <Image source={{ uri: imageItem.uri }} style={styles.imagePreview} />
                                                 <TouchableOpacity
                                                     style={styles.removeBadge}
-                                                    onPress={() => removeImage(index!)}
+                                                    onPress={() => removeImage(index)}
                                                 >
                                                     <XMarkIcon size={14} color="#FFF" />
                                                 </TouchableOpacity>
@@ -257,118 +336,118 @@ const SellScreen = () => {
                                     );
                                 }}
                             />
-                        </View>
-                        <Text style={styles.helperText}>First photo is your cover image. Long press to rearrange</Text>
-                    </View>
-
-                    {/* Details Section */}
-                    <View style={styles.section}>
-                        <View style={styles.inputGroup}>
-                            <FormLabel label="Item Title" required />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Vintage Hand-woven Rug"
-                                value={title}
-                                onChangeText={setTitle}
-                                maxLength={80}
-                            />
+                            <Text style={styles.helperText}>The first photo is your cover image. Long press to rearrange.</Text>
                         </View>
 
-                        <View style={styles.row}>
-                            <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
-                                <FormLabel label="Price ($)" required />
+                        {/* Details Section */}
+                        <View style={styles.section}>
+                            <View style={styles.inputGroup}>
+                                <FormLabel label="Item Title" required />
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="0.00"
-                                    keyboardType="decimal-pad"
-                                    value={price}
-                                    onChangeText={setPrice}
+                                    placeholder="e.g. Vintage Hand-woven Rug"
+                                    value={title}
+                                    onChangeText={setTitle}
+                                    maxLength={80}
                                 />
                             </View>
-                            <View style={[styles.inputGroup, { flex: 1 }]}>
-                                <FormLabel label="Category" required />
-                                <CategoryPicker />
+
+                            <View style={styles.row}>
+                                <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
+                                    <FormLabel label="Price ($)" required />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="0.00"
+                                        keyboardType="decimal-pad"
+                                        value={price}
+                                        onChangeText={setPrice}
+                                    />
+                                </View>
+                                <View style={[styles.inputGroup, { flex: 1 }]}>
+                                    <FormLabel label="Category" required />
+                                    <CategoryPicker />
+                                </View>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <FormLabel label="Condition" required />
+                                <View style={styles.conditionRow}>
+                                    {CONDITIONS.map(c => (
+                                        <TouchableOpacity
+                                            key={c.id}
+                                            style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
+                                            onPress={() => setCondition(c.id)}
+                                        >
+                                            <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
+                                                {c.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
                             </View>
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <FormLabel label="Condition" required />
-                            <View style={styles.conditionRow}>
-                                {CONDITIONS.map(c => (
-                                    <TouchableOpacity
-                                        key={c.id}
-                                        style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
-                                        onPress={() => setCondition(c.id)}
-                                    >
-                                        <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
-                                            {c.label}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
+                        {/* Culture Section */}
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeaderRow}>
+                                <Text style={styles.sectionTitle}>Cultural Story</Text>
+                                <TouchableOpacity>
+                                    <InformationCircleIcon size={20} color={Colors.neutral[400]} />
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.sectionSub}>Sharing the heritage behind your item helps buyers appreciate its value.</Text>
+
+                            <View style={styles.inputGroup}>
+                                <FormLabel label="Origin / Culture" />
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. Ottoman Empire, Moroccan Berber"
+                                    value={culturalOrigin}
+                                    onChangeText={setCulturalOrigin}
+                                />
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <FormLabel label="The Story" />
+                                <TextInput
+                                    style={[styles.input, styles.textArea]}
+                                    placeholder="Tell us how it was made, its significance, or your family connection..."
+                                    multiline
+                                    numberOfLines={4}
+                                    value={culturalStory}
+                                    onChangeText={setCulturalStory}
+                                    textAlignVertical="top"
+                                />
                             </View>
                         </View>
-                    </View>
 
-                    {/* Culture Section */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeaderRow}>
-                            <Text style={styles.sectionTitle}>Cultural Story</Text>
-                            <TouchableOpacity>
-                                <InformationCircleIcon size={20} color={Colors.neutral[400]} />
-                            </TouchableOpacity>
-                        </View>
-                        <Text style={styles.sectionSub}>Sharing the heritage behind your item helps buyers appreciate its value.</Text>
-
-                        <View style={styles.inputGroup}>
-                            <FormLabel label="Origin / Culture" />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Ottoman Empire, Moroccan Berber"
-                                value={culturalOrigin}
-                                onChangeText={setCulturalOrigin}
-                            />
+                        {/* Description Section */}
+                        <View style={styles.section}>
+                            <View style={styles.inputGroup}>
+                                <FormLabel label="General Description" required />
+                                <TextInput
+                                    style={[styles.input, styles.textArea]}
+                                    placeholder="Brand, size, materials, and any flaws..."
+                                    multiline
+                                    numberOfLines={4}
+                                    value={description}
+                                    onChangeText={setDescription}
+                                    textAlignVertical="top"
+                                />
+                            </View>
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <FormLabel label="The Story" />
-                            <TextInput
-                                style={[styles.input, styles.textArea]}
-                                placeholder="Tell us how it was made, its significance, or your family connection..."
-                                multiline
-                                numberOfLines={4}
-                                value={culturalStory}
-                                onChangeText={setCulturalStory}
-                                textAlignVertical="top"
-                            />
-                        </View>
-                    </View>
+                        {/* Submit Button */}
+                        <TouchableOpacity
+                            style={[styles.publishButton, loading && styles.publishButtonDisabled]}
+                            onPress={() => handlePublish('active')}
+                            disabled={loading}
+                        >
+                            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.publishButtonText}>{draftId ? 'Save & Publish' : 'Publish Listing'}</Text>}
+                        </TouchableOpacity>
 
-                    {/* Description Section */}
-                    <View style={styles.section}>
-                        <View style={styles.inputGroup}>
-                            <FormLabel label="General Description" required />
-                            <TextInput
-                                style={[styles.input, styles.textArea]}
-                                placeholder="Brand, size, materials, and any flaws..."
-                                multiline
-                                numberOfLines={4}
-                                value={description}
-                                onChangeText={setDescription}
-                                textAlignVertical="top"
-                            />
-                        </View>
-                    </View>
-
-                    {/* Submit Button */}
-                    <TouchableOpacity
-                        style={[styles.publishButton, loading && styles.publishButtonDisabled]}
-                        onPress={() => handlePublish('active')}
-                        disabled={loading}
-                    >
-                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.publishButtonText}>Publish Listing</Text>}
-                    </TouchableOpacity>
-
-                </ScrollView>
+                    </ScrollView>
+                )}
             </KeyboardAvoidingView>
 
             {/* Category Modal */}
@@ -428,19 +507,24 @@ const styles = StyleSheet.create({
         borderBottomColor: '#F3F4F6',
     },
     closeButton: { padding: 4 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { marginTop: 12, color: '#6B7280', fontSize: 14 },
     headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
     draftButton: { paddingHorizontal: 12, paddingVertical: 6 },
     draftText: { fontSize: 15, color: Colors.primary[500], fontWeight: '600' },
     scrollContent: { paddingBottom: 40 },
-    imageSection: { padding: 16, borderBottomWidth: 8, borderBottomColor: '#F9FAFB' },
-    horizontalScrollContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    imageSection: {
+        paddingVertical: 16,
+        borderBottomWidth: 8,
+        borderBottomColor: '#F9FAFB'
     },
     imageList: {
-        paddingLeft: 12,
-        paddingRight: 16,
+        paddingHorizontal: 16,
+        paddingBottom: 8,
         alignItems: 'center',
+    },
+    dragListContainer: {
+        height: 110, // Fixed height to prevent layout jumps
     },
     addIconButton: {
         width: 100,
@@ -452,6 +536,7 @@ const styles = StyleSheet.create({
         borderStyle: 'dashed',
         justifyContent: 'center',
         alignItems: 'center',
+        marginRight: 12, // Match imageWrapper spacing
     },
     addPhotoText: { fontSize: 12, fontWeight: '600', color: Colors.primary[600], marginTop: 4 },
     photoCount: { fontSize: 10, color: Colors.primary[400], marginTop: 2 },
