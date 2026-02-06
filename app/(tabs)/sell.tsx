@@ -81,9 +81,6 @@ const SellScreen = () => {
                         setCulturalOrigin(draft.cultural_origin);
                         setCulturalStory((draft as any).cultural_story || '');
                         setDescription(draft.description);
-                        // Images in draft are URLs, we need to handle them differently
-                        // since our picker gives us base64/uri for NEW uploads.
-                        // For drafts, we'll store existing URLs.
                         setImages(draft.images.map((url: string) => ({ uri: url })));
                     }
                 } catch (error) {
@@ -95,7 +92,6 @@ const SellScreen = () => {
             };
             loadDraft();
         } else if (!draftId) {
-            // Reset form for new listing
             setTitle('');
             setPrice('');
             setCategory('');
@@ -128,10 +124,9 @@ const SellScreen = () => {
 
             if (!result.canceled) {
                 const newImages = await Promise.all(result.assets.map(async (asset) => {
-                    // Compress and resize
                     const manipulated = await ImageManipulator.manipulateAsync(
                         asset.uri,
-                        [{ resize: { width: 1200 } }], // Reasonable size for marketplace
+                        [{ resize: { width: 1200 } }],
                         { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
                     );
                     return {
@@ -142,7 +137,7 @@ const SellScreen = () => {
 
                 setImages(prev => {
                     const combined = [...prev, ...newImages];
-                    return combined.slice(0, 5); // Safety cap
+                    return combined.slice(0, 5);
                 });
             }
         } catch (error) {
@@ -155,6 +150,10 @@ const SellScreen = () => {
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleDragEnd = ({ data }: { data: ImageFile[] }) => {
+        setImages(data);
     };
 
     const handlePublish = async (status: 'active' | 'draft' = 'active') => {
@@ -175,20 +174,22 @@ const SellScreen = () => {
 
         try {
             setLoading(true);
-
-            // 1. Upload NEW Images (only those with base64)
             const newImagesToUpload = images.filter(img => img.base64);
-            const existingUrls = images.filter(img => !img.base64).map(img => img.uri);
-
             let uploadedUrls: string[] = [];
+
             if (newImagesToUpload.length > 0) {
                 const uploadData = newImagesToUpload.map(img => ({ base64: img.base64!, uri: img.uri }));
                 uploadedUrls = await uploadProductImages(user.id, uploadData);
             }
 
-            const finalImages = [...existingUrls, ...uploadedUrls];
+            let uploadIndex = 0;
+            const finalImages = images.map(img => {
+                if (!img.base64) return img.uri;
+                const nextUrl = uploadedUrls[uploadIndex];
+                uploadIndex += 1;
+                return nextUrl;
+            }).filter(Boolean) as string[];
 
-            // 2. Create or Update Listing in DB
             await createListing({
                 id: draftId,
                 user_id: user.id,
@@ -247,7 +248,6 @@ const SellScreen = () => {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
-                {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
                         <XMarkIcon size={24} color={Colors.text.primary} />
@@ -273,42 +273,29 @@ const SellScreen = () => {
                         contentContainerStyle={styles.scrollContent}
                         keyboardShouldPersistTaps="handled"
                     >
-
-                        {/* Image Collection */}
+                        {/* Image Collection Section */}
                         <View style={styles.imageSection}>
-                            <DraggableFlatList
-                                data={['add', ...images]}
-                                onDragBegin={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-                                onDragEnd={({ data }) => {
-                                    // Remove the 'add' placeholder before updating state
-                                    const newImages = data.filter(item => item !== 'add') as ImageFile[];
-                                    setImages(newImages);
-                                }}
-                                keyExtractor={(item) => typeof item === 'string' ? item : item.uri}
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                activationDistance={5}
-                                containerStyle={styles.dragListContainer}
-                                contentContainerStyle={styles.imageList}
-                                renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<ImageFile | string>) => {
-                                    if (item === 'add') {
-                                        return (
-                                            <TouchableOpacity
-                                                style={styles.addIconButton}
-                                                onPress={handlePickImage}
-                                                activeOpacity={0.7}
-                                            >
-                                                <CameraIcon size={28} color={Colors.primary[500]} />
-                                                <Text style={styles.addPhotoText}>Add Photo</Text>
-                                                <Text style={styles.photoCount}>{images.length}/5</Text>
-                                            </TouchableOpacity>
-                                        );
-                                    }
+                            <View style={styles.horizontalScrollContainer}>
+                                <TouchableOpacity
+                                    style={styles.addIconButton}
+                                    onPress={handlePickImage}
+                                    activeOpacity={0.7}
+                                >
+                                    <CameraIcon size={32} color={Colors.primary[500]} />
+                                    <Text style={styles.addPhotoText}>Add Photo</Text>
+                                    <Text style={styles.photoCount}>{images.length}/5</Text>
+                                </TouchableOpacity>
 
-                                    const index = getIndex()! - 1; // Adjust for 'add' item at index 0
-                                    const imageItem = item as ImageFile;
-
-                                    return (
+                                <DraggableFlatList
+                                    data={images}
+                                    onDragBegin={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                                    onDragEnd={handleDragEnd}
+                                    keyExtractor={(item) => item.uri}
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    activationDistance={16}
+                                    contentContainerStyle={styles.imageList}
+                                    renderItem={({ item, drag, isActive, index }: RenderItemParams<ImageFile>) => (
                                         <ScaleDecorator>
                                             <TouchableOpacity
                                                 onLongPress={drag}
@@ -316,10 +303,10 @@ const SellScreen = () => {
                                                 activeOpacity={1}
                                                 style={[
                                                     styles.imageWrapper,
-                                                    isActive && { zIndex: 10, opacity: 0.9, scale: 1.05 }
+                                                    isActive && { zIndex: 10 }
                                                 ]}
                                             >
-                                                <Image source={{ uri: imageItem.uri }} style={styles.imagePreview} />
+                                                <Image source={{ uri: item.uri }} style={styles.imagePreview} />
                                                 <TouchableOpacity
                                                     style={styles.removeBadge}
                                                     onPress={() => removeImage(index)}
@@ -333,13 +320,12 @@ const SellScreen = () => {
                                                 )}
                                             </TouchableOpacity>
                                         </ScaleDecorator>
-                                    );
-                                }}
-                            />
+                                    )}
+                                />
+                            </View>
                             <Text style={styles.helperText}>The first photo is your cover image. Long press to rearrange.</Text>
                         </View>
 
-                        {/* Details Section */}
                         <View style={styles.section}>
                             <View style={styles.inputGroup}>
                                 <FormLabel label="Item Title" required />
@@ -370,24 +356,23 @@ const SellScreen = () => {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <FormLabel label="Condition" required />
-                                <View style={styles.conditionRow}>
-                                    {CONDITIONS.map(c => (
-                                        <TouchableOpacity
-                                            key={c.id}
-                                            style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
-                                            onPress={() => setCondition(c.id)}
-                                        >
-                                            <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
-                                                {c.label}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
+                                 <FormLabel label="Condition" required />
+                                    <View style={styles.conditionRow}>
+                                        {CONDITIONS.map(c => (
+                                            <TouchableOpacity
+                                                key={c.id}
+                                                style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
+                                                onPress={() => setCondition(c.id)}
+                                            >
+                                                <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
+                                                    {c.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
                                 </View>
                             </View>
-                        </View>
 
-                        {/* Culture Section */}
                         <View style={styles.section}>
                             <View style={styles.sectionHeaderRow}>
                                 <Text style={styles.sectionTitle}>Cultural Story</Text>
@@ -421,7 +406,6 @@ const SellScreen = () => {
                             </View>
                         </View>
 
-                        {/* Description Section */}
                         <View style={styles.section}>
                             <View style={styles.inputGroup}>
                                 <FormLabel label="General Description" required />
@@ -437,7 +421,6 @@ const SellScreen = () => {
                             </View>
                         </View>
 
-                        {/* Submit Button */}
                         <TouchableOpacity
                             style={[styles.publishButton, loading && styles.publishButtonDisabled]}
                             onPress={() => handlePublish('active')}
@@ -445,12 +428,10 @@ const SellScreen = () => {
                         >
                             {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.publishButtonText}>{draftId ? 'Save & Publish' : 'Publish Listing'}</Text>}
                         </TouchableOpacity>
-
                     </ScrollView>
                 )}
             </KeyboardAvoidingView>
 
-            {/* Category Modal */}
             <Modal
                 visible={showCategoryModal}
                 transparent
@@ -514,17 +495,18 @@ const styles = StyleSheet.create({
     draftText: { fontSize: 15, color: Colors.primary[500], fontWeight: '600' },
     scrollContent: { paddingBottom: 40 },
     imageSection: {
-        paddingVertical: 16,
+        padding: 16,
         borderBottomWidth: 8,
         borderBottomColor: '#F9FAFB'
     },
-    imageList: {
-        paddingHorizontal: 16,
-        paddingBottom: 8,
+    horizontalScrollContainer: {
+        flexDirection: 'row',
         alignItems: 'center',
     },
-    dragListContainer: {
-        height: 110, // Fixed height to prevent layout jumps
+    imageList: {
+        paddingLeft: 12,
+        paddingRight: 16,
+        alignItems: 'center',
     },
     addIconButton: {
         width: 100,
@@ -536,7 +518,7 @@ const styles = StyleSheet.create({
         borderStyle: 'dashed',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12, // Match imageWrapper spacing
+        marginRight: 12,
     },
     addPhotoText: { fontSize: 12, fontWeight: '600', color: Colors.primary[600], marginTop: 4 },
     photoCount: { fontSize: 10, color: Colors.primary[400], marginTop: 2 },
