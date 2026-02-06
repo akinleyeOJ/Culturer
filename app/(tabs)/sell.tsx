@@ -18,6 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import DraggableFlatList, {
+    ScaleDecorator,
+    RenderItemParams,
+} from 'react-native-draggable-flatlist';
 import {
     ChevronLeftIcon,
     CameraIcon,
@@ -209,27 +213,52 @@ const SellScreen = () => {
 
                     {/* Image Collection */}
                     <View style={styles.imageSection}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageList}>
+                        <View style={styles.horizontalScrollContainer}>
                             <TouchableOpacity style={styles.addIconButton} onPress={handlePickImage}>
                                 <CameraIcon size={32} color={Colors.primary[500]} />
                                 <Text style={styles.addPhotoText}>Add Photo</Text>
                                 <Text style={styles.photoCount}>{images.length}/5</Text>
                             </TouchableOpacity>
 
-                            {images.map((img, index) => (
-                                <View key={index} style={styles.imageWrapper}>
-                                    <Image source={{ uri: img.uri }} style={styles.imagePreview} />
-                                    <TouchableOpacity
-                                        style={styles.removeBadge}
-                                        onPress={() => removeImage(index)}
-                                    >
-                                        <XMarkIcon size={14} color="#FFF" />
-                                    </TouchableOpacity>
-                                    {index === 0 && <View style={styles.mainBadge}><Text style={styles.mainBadgeText}>Main</Text></View>}
-                                </View>
-                            ))}
-                        </ScrollView>
-                        <Text style={styles.helperText}>First photo is your cover image. Make sure to use quality photos</Text>
+                            <DraggableFlatList
+                                data={images}
+                                onDragEnd={({ data }) => setImages(data)}
+                                keyExtractor={(_, index) => `img-${index}`}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.imageList}
+                                renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<ImageFile>) => {
+                                    const index = getIndex();
+                                    return (
+                                        <ScaleDecorator>
+                                            <TouchableOpacity
+                                                onLongPress={drag}
+                                                disabled={isActive}
+                                                activeOpacity={1}
+                                                style={[
+                                                    styles.imageWrapper,
+                                                    isActive && { zIndex: 10 }
+                                                ]}
+                                            >
+                                                <Image source={{ uri: item.uri }} style={styles.imagePreview} />
+                                                <TouchableOpacity
+                                                    style={styles.removeBadge}
+                                                    onPress={() => removeImage(index!)}
+                                                >
+                                                    <XMarkIcon size={14} color="#FFF" />
+                                                </TouchableOpacity>
+                                                {index === 0 && (
+                                                    <View style={styles.mainBadge}>
+                                                        <Text style={styles.mainBadgeText}>Main</Text>
+                                                    </View>
+                                                )}
+                                            </TouchableOpacity>
+                                        </ScaleDecorator>
+                                    );
+                                }}
+                            />
+                        </View>
+                        <Text style={styles.helperText}>First photo is your cover image. Long press to rearrange</Text>
                     </View>
 
                     {/* Details Section */}
@@ -404,7 +433,15 @@ const styles = StyleSheet.create({
     draftText: { fontSize: 15, color: Colors.primary[500], fontWeight: '600' },
     scrollContent: { paddingBottom: 40 },
     imageSection: { padding: 16, borderBottomWidth: 8, borderBottomColor: '#F9FAFB' },
-    imageList: { gap: 12, paddingRight: 16 },
+    horizontalScrollContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    imageList: {
+        paddingLeft: 12,
+        paddingRight: 16,
+        alignItems: 'center',
+    },
     addIconButton: {
         width: 100,
         height: 100,
@@ -418,7 +455,10 @@ const styles = StyleSheet.create({
     },
     addPhotoText: { fontSize: 12, fontWeight: '600', color: Colors.primary[600], marginTop: 4 },
     photoCount: { fontSize: 10, color: Colors.primary[400], marginTop: 2 },
-    imageWrapper: { position: 'relative' },
+    imageWrapper: {
+        position: 'relative',
+        marginRight: 12,
+    },
     imagePreview: { width: 100, height: 100, borderRadius: 12 },
     removeBadge: {
         position: 'absolute',
