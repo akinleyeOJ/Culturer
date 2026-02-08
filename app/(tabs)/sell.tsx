@@ -11,18 +11,13 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    FlatList,
     Modal,
 } from 'react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as Haptics from 'expo-haptics';
-import DraggableFlatList, {
-    ScaleDecorator,
-    RenderItemParams,
-} from 'react-native-draggable-flatlist';
 import {
     ChevronLeftIcon,
     CameraIcon,
@@ -36,6 +31,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { createListing, uploadProductImages, fetchProductById } from '../../lib/services/productService';
 
 interface ImageFile {
+    id: string;
     uri: string;
     base64?: string;
 }
@@ -81,7 +77,13 @@ const SellScreen = () => {
                         setCulturalOrigin(draft.cultural_origin);
                         setCulturalStory((draft as any).cultural_story || '');
                         setDescription(draft.description);
-                        setImages(draft.images.map((url: string) => ({ uri: url })));
+                        // Images in draft are URLs, we need to handle them differently
+                        // since our picker gives us base64/uri for NEW uploads.
+                        // For drafts, we'll store existing URLs.
+                        setImages(draft.images.map((url: string, index: number) => ({
+                            id: `draft-${index}-${url}`,
+                            uri: url,
+                        })));
                     }
                 } catch (error) {
                     console.error('Error fetching draft:', error);
@@ -92,6 +94,7 @@ const SellScreen = () => {
             };
             loadDraft();
         } else if (!draftId) {
+            // Reset form for new listing
             setTitle('');
             setPrice('');
             setCategory('');
@@ -123,13 +126,15 @@ const SellScreen = () => {
             });
 
             if (!result.canceled) {
-                const newImages = await Promise.all(result.assets.map(async (asset) => {
+                const newImages = await Promise.all(result.assets.map(async (asset, index) => {
+                    // Compress and resize
                     const manipulated = await ImageManipulator.manipulateAsync(
                         asset.uri,
-                        [{ resize: { width: 1200 } }],
+                        [{ resize: { width: 1200 } }], // Reasonable size for marketplace
                         { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
                     );
                     return {
+                        id: `new-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
                         uri: manipulated.uri,
                         base64: manipulated.base64
                     };
@@ -137,7 +142,7 @@ const SellScreen = () => {
 
                 setImages(prev => {
                     const combined = [...prev, ...newImages];
-                    return combined.slice(0, 5);
+                    return combined.slice(0, 5); // Safety cap
                 });
             }
         } catch (error) {
@@ -148,12 +153,39 @@ const SellScreen = () => {
         }
     };
 
-    const removeImage = (index: number) => {
-        setImages(prev => prev.filter((_, i) => i !== index));
-    };
+    const removeImage = useCallback((id: string) => {
+        setImages(prev => prev.filter(img => img.id !== id));
+    }, []);
 
-    const handleDragEnd = ({ data }: { data: ImageFile[] }) => {
-        setImages(data);
+    const imageKeyExtractor = useCallback((item: ImageFile) => item.id, []);
+
+    const renderImageItem = useCallback(
+        ({ item, index, drag, isActive }: RenderItemParams<ImageFile>) => (
+            <ScaleDecorator>
+                <View style={[styles.imageWrapper, isActive && styles.imageWrapperActive]}>
+                    <TouchableOpacity
+                        activeOpacity={0.9}
+                        onLongPress={drag}
+                        delayLongPress={150}
+                    >
+                        <Image source={{ uri: item.uri }} style={styles.imagePreview} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.removeBadge}
+                        onPress={() => removeImage(item.id)}
+                    >
+                        <XMarkIcon size={14} color="#FFF" />
+                    </TouchableOpacity>
+                    {index === 0 && (
+                        <View style={styles.mainBadge}>
+                            <Text style={styles.mainBadgeText}>Main</Text>
+                        </View>
+                    )}
+                </View>
+            </ScaleDecorator>
+        ),
+        [removeImage]
+    );
     };
 
     const handlePublish = async (status: 'active' | 'draft' = 'active') => {
@@ -174,22 +206,20 @@ const SellScreen = () => {
 
         try {
             setLoading(true);
-            const newImagesToUpload = images.filter(img => img.base64);
-            let uploadedUrls: string[] = [];
 
+            // 1. Upload NEW Images (only those with base64)
+            const newImagesToUpload = images.filter(img => img.base64);
+            const existingUrls = images.filter(img => !img.base64).map(img => img.uri);
+
+            let uploadedUrls: string[] = [];
             if (newImagesToUpload.length > 0) {
                 const uploadData = newImagesToUpload.map(img => ({ base64: img.base64!, uri: img.uri }));
                 uploadedUrls = await uploadProductImages(user.id, uploadData);
             }
 
-            let uploadIndex = 0;
-            const finalImages = images.map(img => {
-                if (!img.base64) return img.uri;
-                const nextUrl = uploadedUrls[uploadIndex];
-                uploadIndex += 1;
-                return nextUrl;
-            }).filter(Boolean) as string[];
+            const finalImages = [...existingUrls, ...uploadedUrls];
 
+            // 2. Create or Update Listing in DB
             await createListing({
                 id: draftId,
                 user_id: user.id,
@@ -248,6 +278,7 @@ const SellScreen = () => {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
+                {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
                         <XMarkIcon size={24} color={Colors.text.primary} />
@@ -268,64 +299,32 @@ const SellScreen = () => {
                         <Text style={styles.loadingText}>Loading draft...</Text>
                     </View>
                 ) : (
-                    <ScrollView
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.scrollContent}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {/* Image Collection Section */}
-                        <View style={styles.imageSection}>
-                            <View style={styles.horizontalScrollContainer}>
-                                <TouchableOpacity
-                                    style={styles.addIconButton}
-                                    onPress={handlePickImage}
-                                    activeOpacity={0.7}
-                                >
-                                    <CameraIcon size={32} color={Colors.primary[500]} />
-                                    <Text style={styles.addPhotoText}>Add Photo</Text>
-                                    <Text style={styles.photoCount}>{images.length}/5</Text>
-                                </TouchableOpacity>
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
-                                <DraggableFlatList
-                                    data={images}
-                                    onDragBegin={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-                                    onDragEnd={handleDragEnd}
-                                    keyExtractor={(item) => item.uri}
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    activationDistance={16}
-                                    contentContainerStyle={styles.imageList}
-                                    renderItem={({ item, drag, isActive, index }: RenderItemParams<ImageFile>) => (
-                                        <ScaleDecorator>
-                                            <TouchableOpacity
-                                                onLongPress={drag}
-                                                disabled={isActive}
-                                                activeOpacity={1}
-                                                style={[
-                                                    styles.imageWrapper,
-                                                    isActive && { zIndex: 10 }
-                                                ]}
-                                            >
-                                                <Image source={{ uri: item.uri }} style={styles.imagePreview} />
-                                                <TouchableOpacity
-                                                    style={styles.removeBadge}
-                                                    onPress={() => removeImage(index)}
-                                                >
-                                                    <XMarkIcon size={14} color="#FFF" />
-                                                </TouchableOpacity>
-                                                {index === 0 && (
-                                                    <View style={styles.mainBadge}>
-                                                        <Text style={styles.mainBadgeText}>Main</Text>
-                                                    </View>
-                                                )}
-                                            </TouchableOpacity>
-                                        </ScaleDecorator>
-                                    )}
-                                />
-                            </View>
-                            <Text style={styles.helperText}>The first photo is your cover image. Long press to rearrange.</Text>
+                        {/* Image Collection */}
+                        <View style={styles.imageSection}>
+                            <DraggableFlatList
+                                horizontal
+                                data={images}
+                                keyExtractor={imageKeyExtractor}
+                                renderItem={renderImageItem}
+                                onDragEnd={({ data }) => setImages(data)}
+                                contentContainerStyle={styles.imageList}
+                                showsHorizontalScrollIndicator={false}
+                                activationDistance={8}
+                                ListHeaderComponent={() => (
+                                    <TouchableOpacity style={styles.addIconButton} onPress={handlePickImage}>
+                                        <CameraIcon size={32} color={Colors.primary[500]} />
+                                        <Text style={styles.addPhotoText}>Add Photo</Text>
+                                        <Text style={styles.photoCount}>{images.length}/5</Text>
+                                    </TouchableOpacity>
+                                )}
+                                ListHeaderComponentStyle={styles.addHeader}
+                            />
+                            <Text style={styles.helperText}>Press and hold to reorder. First photo is your cover image. Max 5 photos.</Text>
                         </View>
 
+                        {/* Details Section */}
                         <View style={styles.section}>
                             <View style={styles.inputGroup}>
                                 <FormLabel label="Item Title" required />
@@ -356,23 +355,24 @@ const SellScreen = () => {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                 <FormLabel label="Condition" required />
-                                    <View style={styles.conditionRow}>
-                                        {CONDITIONS.map(c => (
-                                            <TouchableOpacity
-                                                key={c.id}
-                                                style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
-                                                onPress={() => setCondition(c.id)}
-                                            >
-                                                <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
-                                                    {c.label}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
+                                <FormLabel label="Condition" required />
+                                <View style={styles.conditionRow}>
+                                    {CONDITIONS.map(c => (
+                                        <TouchableOpacity
+                                            key={c.id}
+                                            style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
+                                            onPress={() => setCondition(c.id)}
+                                        >
+                                            <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
+                                                {c.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
                                 </View>
                             </View>
+                        </View>
 
+                        {/* Culture Section */}
                         <View style={styles.section}>
                             <View style={styles.sectionHeaderRow}>
                                 <Text style={styles.sectionTitle}>Cultural Story</Text>
@@ -406,6 +406,7 @@ const SellScreen = () => {
                             </View>
                         </View>
 
+                        {/* Description Section */}
                         <View style={styles.section}>
                             <View style={styles.inputGroup}>
                                 <FormLabel label="General Description" required />
@@ -421,6 +422,7 @@ const SellScreen = () => {
                             </View>
                         </View>
 
+                        {/* Submit Button */}
                         <TouchableOpacity
                             style={[styles.publishButton, loading && styles.publishButtonDisabled]}
                             onPress={() => handlePublish('active')}
@@ -428,10 +430,12 @@ const SellScreen = () => {
                         >
                             {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.publishButtonText}>{draftId ? 'Save & Publish' : 'Publish Listing'}</Text>}
                         </TouchableOpacity>
+
                     </ScrollView>
                 )}
             </KeyboardAvoidingView>
 
+            {/* Category Modal */}
             <Modal
                 visible={showCategoryModal}
                 transparent
@@ -494,19 +498,18 @@ const styles = StyleSheet.create({
     draftButton: { paddingHorizontal: 12, paddingVertical: 6 },
     draftText: { fontSize: 15, color: Colors.primary[500], fontWeight: '600' },
     scrollContent: { paddingBottom: 40 },
-    imageSection: {
-        padding: 16,
-        borderBottomWidth: 8,
-        borderBottomColor: '#F9FAFB'
-    },
+    imageSection: { padding: 16, borderBottomWidth: 8, borderBottomColor: '#F9FAFB' },
     horizontalScrollContainer: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     imageList: {
-        paddingLeft: 12,
+        paddingLeft: 16,
         paddingRight: 16,
         alignItems: 'center',
+    },
+    addHeader: {
+        marginRight: 12,
     },
     addIconButton: {
         width: 100,
@@ -518,13 +521,20 @@ const styles = StyleSheet.create({
         borderStyle: 'dashed',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
     },
     addPhotoText: { fontSize: 12, fontWeight: '600', color: Colors.primary[600], marginTop: 4 },
     photoCount: { fontSize: 10, color: Colors.primary[400], marginTop: 2 },
     imageWrapper: {
         position: 'relative',
         marginRight: 12,
+    },
+    imageWrapperActive: {
+        transform: [{ scale: 1.04 }],
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 4,
     },
     imagePreview: { width: 100, height: 100, borderRadius: 12 },
     removeBadge: {
