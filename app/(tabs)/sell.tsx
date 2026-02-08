@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,6 @@ import {
     Platform,
     Modal,
 } from 'react-native';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -31,7 +30,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { createListing, uploadProductImages, fetchProductById } from '../../lib/services/productService';
 
 interface ImageFile {
-    id: string;
     uri: string;
     base64?: string;
 }
@@ -80,10 +78,7 @@ const SellScreen = () => {
                         // Images in draft are URLs, we need to handle them differently
                         // since our picker gives us base64/uri for NEW uploads.
                         // For drafts, we'll store existing URLs.
-                        setImages(draft.images.map((url: string, index: number) => ({
-                            id: `draft-${index}-${url}`,
-                            uri: url,
-                        })));
+                        setImages(draft.images.map((url: string) => ({ uri: url })));
                     }
                 } catch (error) {
                     console.error('Error fetching draft:', error);
@@ -126,7 +121,7 @@ const SellScreen = () => {
             });
 
             if (!result.canceled) {
-                const newImages = await Promise.all(result.assets.map(async (asset, index) => {
+                const newImages = await Promise.all(result.assets.map(async (asset) => {
                     // Compress and resize
                     const manipulated = await ImageManipulator.manipulateAsync(
                         asset.uri,
@@ -134,7 +129,6 @@ const SellScreen = () => {
                         { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
                     );
                     return {
-                        id: `new-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
                         uri: manipulated.uri,
                         base64: manipulated.base64
                     };
@@ -153,39 +147,8 @@ const SellScreen = () => {
         }
     };
 
-    const removeImage = useCallback((id: string) => {
-        setImages(prev => prev.filter(img => img.id !== id));
-    }, []);
-
-    const imageKeyExtractor = useCallback((item: ImageFile) => item.id, []);
-
-    const renderImageItem = useCallback(
-        ({ item, index, drag, isActive }: RenderItemParams<ImageFile>) => (
-            <ScaleDecorator>
-                <View style={[styles.imageWrapper, isActive && styles.imageWrapperActive]}>
-                    <TouchableOpacity
-                        activeOpacity={0.9}
-                        onLongPress={drag}
-                        delayLongPress={150}
-                    >
-                        <Image source={{ uri: item.uri }} style={styles.imagePreview} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.removeBadge}
-                        onPress={() => removeImage(item.id)}
-                    >
-                        <XMarkIcon size={14} color="#FFF" />
-                    </TouchableOpacity>
-                    {index === 0 && (
-                        <View style={styles.mainBadge}>
-                            <Text style={styles.mainBadgeText}>Main</Text>
-                        </View>
-                    )}
-                </View>
-            </ScaleDecorator>
-        ),
-        [removeImage]
-    );
+    const removeImage = (index: number) => {
+        setImages(prev => prev.filter((_, i) => i !== index));
     };
 
     const handlePublish = async (status: 'active' | 'draft' = 'active') => {
@@ -303,25 +266,33 @@ const SellScreen = () => {
 
                         {/* Image Collection */}
                         <View style={styles.imageSection}>
-                            <DraggableFlatList
-                                horizontal
-                                data={images}
-                                keyExtractor={imageKeyExtractor}
-                                renderItem={renderImageItem}
-                                onDragEnd={({ data }) => setImages(data)}
-                                contentContainerStyle={styles.imageList}
-                                showsHorizontalScrollIndicator={false}
-                                activationDistance={8}
-                                ListHeaderComponent={() => (
-                                    <TouchableOpacity style={styles.addIconButton} onPress={handlePickImage}>
-                                        <CameraIcon size={32} color={Colors.primary[500]} />
-                                        <Text style={styles.addPhotoText}>Add Photo</Text>
-                                        <Text style={styles.photoCount}>{images.length}/5</Text>
-                                    </TouchableOpacity>
-                                )}
-                                ListHeaderComponentStyle={styles.addHeader}
-                            />
-                            <Text style={styles.helperText}>Press and hold to reorder. First photo is your cover image. Max 5 photos.</Text>
+                            <View style={styles.horizontalScrollContainer}>
+                                <TouchableOpacity style={styles.addIconButton} onPress={handlePickImage}>
+                                    <CameraIcon size={32} color={Colors.primary[500]} />
+                                    <Text style={styles.addPhotoText}>Add Photo</Text>
+                                    <Text style={styles.photoCount}>{images.length}/5</Text>
+                                </TouchableOpacity>
+
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageList}>
+                                    {images.map((item, index) => (
+                                        <View key={index} style={styles.imageWrapper}>
+                                            <Image source={{ uri: item.uri }} style={styles.imagePreview} />
+                                            <TouchableOpacity
+                                                style={styles.removeBadge}
+                                                onPress={() => removeImage(index)}
+                                            >
+                                                <XMarkIcon size={14} color="#FFF" />
+                                            </TouchableOpacity>
+                                            {index === 0 && (
+                                                <View style={styles.mainBadge}>
+                                                    <Text style={styles.mainBadgeText}>Main</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                            <Text style={styles.helperText}>First photo is your cover image. Max 5 photos.</Text>
                         </View>
 
                         {/* Details Section */}
@@ -504,12 +475,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     imageList: {
-        paddingLeft: 16,
+        paddingLeft: 12,
         paddingRight: 16,
         alignItems: 'center',
-    },
-    addHeader: {
-        marginRight: 12,
     },
     addIconButton: {
         width: 100,
@@ -527,14 +495,6 @@ const styles = StyleSheet.create({
     imageWrapper: {
         position: 'relative',
         marginRight: 12,
-    },
-    imageWrapperActive: {
-        transform: [{ scale: 1.04 }],
-        shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 4,
     },
     imagePreview: { width: 100, height: 100, borderRadius: 12 },
     removeBadge: {
