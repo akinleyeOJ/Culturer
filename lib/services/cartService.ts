@@ -49,6 +49,24 @@ export const addToCart = async (
             .eq('product_id', productId)
             .maybeSingle();
 
+        // Stock Check
+        const { data: product } = await supabase
+            .from('products')
+            .select('stock_quantity')
+            .eq('id', productId)
+            .single();
+
+        const currentStock = (product as any)?.stock_quantity || 0;
+        const currentInCart = (existing as any)?.quantity || 0;
+
+        if (currentStock <= 0) {
+            return { success: false, error: new Error('Item is sold out') };
+        }
+
+        if (currentInCart + quantity > currentStock) {
+            return { success: false, error: new Error(`Only ${currentStock} available in total`) };
+        }
+
         if (fetchError) {
             console.error('Error fetching existing cart item:', fetchError);
             return { success: false, error: fetchError };
@@ -280,12 +298,31 @@ export const calculateCartTotals = (groupedCart: GroupedCart) => {
 };
 
 // Fetch complementary products (exclude items already in cart)
-export const fetchComplementaryProducts = async (excludeProductIds: string[]): Promise<any[]> => {
+export const fetchComplementaryProducts = async (
+    excludeProductIds: string[],
+    productId: string | null = null,
+    priceMin: number = 0,
+    priceMax: number = 999999,
+    limit: number = 10
+): Promise<any[]> => {
     try {
         let query = supabase
             .from('products')
             .select('id, name, price, image_url, images, emoji, user_id')
-            .limit(10); // Get 10 suggestions
+            .eq('status', 'active')
+            .gt('stock_quantity', 0);
+
+        if (productId) {
+            query = query.neq('id', productId);
+        }
+        if (priceMin > 0) {
+            query = query.gte('price', priceMin);
+        }
+        if (priceMax < 999999) {
+            query = query.lte('price', priceMax);
+        }
+
+        query = query.limit(limit);
 
         if (excludeProductIds.length > 0) {
             // Supabase 'not' with 'in' expects the value to be the array usually, 

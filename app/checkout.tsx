@@ -197,6 +197,19 @@ const Checkout = () => {
                     }
 
                     const quantity = paramQuantity ? parseInt(paramQuantity as string) : 1;
+
+                    if (p.stock_quantity <= 0) {
+                        Alert.alert('Sold Out', 'Sorry, this item was just sold.');
+                        router.back();
+                        return;
+                    }
+
+                    if (quantity > p.stock_quantity) {
+                        Alert.alert('Limited Stock', `Sorry, only ${p.stock_quantity} available.`);
+                        router.back();
+                        return;
+                    }
+
                     const priceNum = typeof p.price === 'string'
                         ? parseFloat((p.price as string).replace('$', ''))
                         : p.price;

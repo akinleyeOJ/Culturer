@@ -64,9 +64,38 @@ serve(async (req) => {
 
                     if (error) throw error
                     console.log('Order confirmed in database.')
+
+                    // --- NEW: Decrement stock levels ---
+                    try {
+                        const { data: orderItems, error: itemsError } = await supabaseAdmin
+                            .from('order_items')
+                            .select('product_id, quantity')
+                            .eq('order_id', orderId)
+
+                        if (!itemsError && orderItems) {
+                            for (const item of orderItems) {
+                                // Fetch current stock
+                                const { data: product } = await supabaseAdmin
+                                    .from('products')
+                                    .select('stock_quantity')
+                                    .eq('id', item.product_id)
+                                    .single()
+
+                                if (product) {
+                                    const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity)
+                                    await supabaseAdmin
+                                        .from('products')
+                                        .update({ stock_quantity: newStock })
+                                        .eq('id', item.product_id)
+                                    console.log(`Updated stock for ${item.product_id}: ${newStock}`)
+                                }
+                            }
+                        }
+                    } catch (stockErr) {
+                        console.error('Error updating stock in webhook:', stockErr)
+                    }
                 }
-                break
-            }
+                break;
 
             case 'payment_intent.payment_failed': {
                 const paymentIntent = event.data.object

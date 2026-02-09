@@ -153,14 +153,14 @@ const SellScreen = () => {
                 user_id: user.id,
                 name: title,
                 description,
-                price: parseFloat(price) || 0,
+                price: Math.max(0, parseFloat(price) || 0),
                 category,
                 condition,
                 cultural_origin: culturalOrigin,
                 cultural_story: culturalStory,
                 images: uploadedUrls,
                 status,
-                stock_quantity: parseInt(stockQuantity) || 1,
+                stock_quantity: Math.max(0, parseInt(stockQuantity) || 1),
             });
 
             Alert.alert('Success!', status === 'active' ? 'Your listing is live.' : 'Draft saved.', [

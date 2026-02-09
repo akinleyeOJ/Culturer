@@ -347,6 +347,7 @@ export const fetchSimilarProducts = async (
       .select('*')
       .eq('category', category)
       .eq('status', 'active')
+      .gt('stock_quantity', 0)
       .neq('id', productId)
       .gte('price', priceMin)
       .lte('price', priceMax)
