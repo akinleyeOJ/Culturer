@@ -85,7 +85,11 @@ serve(async (req) => {
                                     const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity)
                                     await supabaseAdmin
                                         .from('products')
-                                        .update({ stock_quantity: newStock })
+                                        .update({
+                                            stock_quantity: newStock,
+                                            in_stock: newStock > 0,
+                                            out_of_stock: newStock <= 0
+                                        })
                                         .eq('id', item.product_id)
                                     console.log(`Updated stock for ${item.product_id}: ${newStock}`)
                                 }

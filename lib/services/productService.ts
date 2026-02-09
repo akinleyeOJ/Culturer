@@ -379,9 +379,12 @@ export const createListing = async (listingData: {
   status?: 'active' | 'draft';
   stock_quantity?: number;
 }) => {
+  const hasStock = (listingData.stock_quantity ?? 1) > 0;
+
   const payload = {
     ...listingData,
-    in_stock: true,
+    in_stock: hasStock,
+    out_of_stock: !hasStock,
     updated_at: new Date().toISOString(),
   };
 

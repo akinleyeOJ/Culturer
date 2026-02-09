@@ -144,7 +144,17 @@ export const fetchCart = async (userId: string): Promise<CartItem[]> => {
         const validItems = (data || []).filter((item: any) => item.product != null);
         console.log(`Fetched ${validItems.length} valid cart items`);
 
-        return validItems as CartItem[];
+        return validItems.map((item: any) => {
+            const p = item.product;
+            return {
+                ...item,
+                product: {
+                    ...p,
+                    seller_id: p.user_id,
+                    seller_name: 'Seller ' + (p.user_id ? p.user_id.substr(0, 8) : 'Unknown')
+                }
+            } as CartItem;
+        });
     } catch (error) {
         console.error('Exception fetching cart:', error);
         return [];
@@ -173,7 +183,12 @@ export const groupCartBySeller = (cartItems: CartItem[]): GroupedCart => {
         }
 
         grouped[sellerId].items.push(item);
-        grouped[sellerId].subtotal += (item.product.price || 0) * item.quantity;
+
+        // Only add to subtotal if in stock
+        const isInStock = !item.product.out_of_stock && item.product.stock_quantity > 0;
+        if (isInStock) {
+            grouped[sellerId].subtotal += (item.product.price || 0) * item.quantity;
+        }
 
         // Parse shipping cost (e.g., "Free" or "$5.00")
         let shippingCost = 0;
@@ -195,6 +210,29 @@ export const updateCartQuantity = async (
         if (quantity <= 0) {
             // Remove item if quantity is 0 or negative
             return await removeFromCart(cartItemId);
+        }
+
+        // Check stock before updating quantity
+        const { data: cartItem } = await supabase
+            .from('cart')
+            .select('product_id')
+            .eq('id', cartItemId)
+            .single();
+
+        if (cartItem) {
+            const { data: product } = await supabase
+                .from('products')
+                .select('stock_quantity')
+                .eq('id', cartItem.product_id)
+                .single();
+
+            const currentStock = (product as any)?.stock_quantity || 0;
+            if (quantity > currentStock) {
+                return {
+                    success: false,
+                    error: new Error(`Sorry, only ${currentStock} available in stock.`)
+                };
+            }
         }
 
         const { error } = await (supabase
@@ -256,7 +294,13 @@ export const fetchCartCount = async (userId: string): Promise<number> => {
     try {
         const { data, error } = await supabase
             .from('cart')
-            .select('quantity')
+            .select(`
+                quantity,
+                product:products (
+                    out_of_stock,
+                    stock_quantity
+                )
+            `)
             .eq('user_id', userId);
 
         if (error) {
@@ -264,8 +308,11 @@ export const fetchCartCount = async (userId: string): Promise<number> => {
             return 0;
         }
 
-        // Sum up the quantity of all items
-        const totalCount = (data as any[])?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        // Only count items that are in stock
+        const totalCount = (data as any[])?.reduce((sum, item) => {
+            const isInStock = item.product && !item.product.out_of_stock && item.product.stock_quantity > 0;
+            return isInStock ? sum + (item.quantity || 0) : sum;
+        }, 0) || 0;
         return totalCount;
     } catch (error) {
         console.error('Exception fetching cart count:', error);

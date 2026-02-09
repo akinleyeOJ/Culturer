@@ -168,7 +168,7 @@ const Cart = () => {
                     <Text style={styles.emptySubtitle}>Add items to get started</Text>
                     <CustomButton
                         title="Start Shopping"
-                        onPress={() => router.push('/(tabs)/Browse')}
+                        onPress={() => router.push('/(tabs)/browse' as any)}
                         style={{ marginTop: 20, width: 200 }}
                     />
                 </View>
@@ -349,9 +349,11 @@ const Cart = () => {
                 </View>
 
                 <CustomButton
-                    title="Continue to Checkout"
+                    title={cartItems.some(item => item.product.out_of_stock || item.product.stock_quantity <= 0)
+                        ? "Items out of stock"
+                        : "Continue to Checkout"}
                     onPress={handleCheckout}
-                    disabled={updating}
+                    disabled={updating || cartItems.some(item => item.product.out_of_stock || item.product.stock_quantity <= 0)}
                 />
             </View>
         </SafeAreaView>
