@@ -53,11 +53,12 @@ const Profile = () => {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
 
-      // Fetch Listings count
+      // Fetch Listings count (only active)
       const { count: listingsCount } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
-        .eq('seller_id', user.id);
+        .eq('seller_id', user.id)
+        .eq('status', 'active');
 
       // Fetch Rating (Average of reviews on my products)
       // This is complex in standard SQL without aggregation functions exposed or a view.
@@ -207,7 +208,7 @@ const Profile = () => {
           <MenuItem
             icon={TagIcon}
             label="Your listings"
-            onPress={() => router.push('/sell' as any)}
+            onPress={() => router.push('/profile/listings' as any)}
           />
           <MenuItem
             icon={DocumentTextIcon}
