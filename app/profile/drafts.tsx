@@ -74,7 +74,7 @@ const DraftsScreen = () => {
     const renderDraftItem = ({ item }: { item: any }) => (
         <TouchableOpacity
             style={styles.draftCard}
-            onPress={() => router.push({ pathname: '/sell', params: { draftId: item.id } } as any)}
+            onPress={() => router.push({ pathname: '/profile/edit-listing', params: { draftId: item.id, type: 'draft' } } as any)}
         >
             <View style={styles.imageContainer}>
                 {item.image ? (
@@ -94,15 +94,18 @@ const DraftsScreen = () => {
                     Saved {new Date(item.full_data.created_at).toLocaleDateString()}
                 </Text>
             </View>
-            <View style={styles.resumeBadge}>
-                <Text style={styles.resumeText}>Resume</Text>
+            <View style={styles.draftActions}>
+                <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteDraft(item.id)}
+                >
+                    <TrashIcon size={18} color={Colors.danger[500]} />
+                    <Text style={styles.deleteActionText}>Delete</Text>
+                </TouchableOpacity>
+                <View style={styles.resumeBadge}>
+                    <Text style={styles.resumeText}>Resume</Text>
+                </View>
             </View>
-            <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDeleteDraft(item.id)}
-            >
-                <TrashIcon size={20} color={Colors.danger[500]} />
-            </TouchableOpacity>
         </TouchableOpacity>
     );
 
@@ -119,7 +122,7 @@ const DraftsScreen = () => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.backButton}>
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Drafts</Text>
@@ -248,8 +251,20 @@ const styles = StyleSheet.create({
         color: Colors.primary[600],
     },
     deleteButton: {
-        padding: 8,
-        marginLeft: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 6,
+        marginRight: 8,
+    },
+    deleteActionText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.danger[600],
+        marginLeft: 4,
+    },
+    draftActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     emptyContainer: {
         flex: 1,
