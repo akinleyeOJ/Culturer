@@ -207,7 +207,7 @@ const Profile = () => {
           />
           <MenuItem
             icon={TagIcon}
-            label="Your listings"
+            label="My listings"
             onPress={() => router.push('/profile/listings' as any)}
           />
           <MenuItem
@@ -265,7 +265,7 @@ const Profile = () => {
           />
         </View>
 
-        <Text style={styles.version}>Version 1.0.0 (Build 2024.1)</Text>
+        <Text style={styles.version}>Version 1.0.0 (Build 2026.1)</Text>
       </ScrollView>
     </SafeAreaView>
   );
