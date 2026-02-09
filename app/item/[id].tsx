@@ -45,6 +45,8 @@ const ItemDetail = () => {
     const [loading, setLoading] = useState(true);
     const [quantity, setQuantity] = useState(1);
 
+    const isOwnListing = user?.id && product?.seller_id && user.id === product.seller_id;
+
     useEffect(() => {
         loadProductData();
     }, [id]);
@@ -427,55 +429,67 @@ const ItemDetail = () => {
             </ScrollView>
 
             {/* Bottom Section */}
-            <View style={styles.bottomContainer}>
-                {isInStock && (
-                    <View style={styles.quantityRow}>
-                        <Text style={styles.quantityLabel}>Quantity</Text>
-                        <View style={styles.quantitySelector}>
-                            <TouchableOpacity onPress={decrementQuantity} style={styles.quantityButton}>
-                                <MinusIcon size={16} color={Colors.text.primary} />
-                            </TouchableOpacity>
-                            <Text style={styles.quantityText}>{quantity}</Text>
-                            <TouchableOpacity onPress={incrementQuantity} style={styles.quantityButton}>
-                                <PlusIcon size={16} color={Colors.text.primary} />
-                            </TouchableOpacity>
+            {!isOwnListing ? (
+                <View style={styles.bottomContainer}>
+                    {isInStock && (
+                        <View style={styles.quantityRow}>
+                            <Text style={styles.quantityLabel}>Quantity</Text>
+                            <View style={styles.quantitySelector}>
+                                <TouchableOpacity onPress={decrementQuantity} style={styles.quantityButton}>
+                                    <MinusIcon size={16} color={Colors.text.primary} />
+                                </TouchableOpacity>
+                                <Text style={styles.quantityText}>{quantity}</Text>
+                                <TouchableOpacity onPress={incrementQuantity} style={styles.quantityButton}>
+                                    <PlusIcon size={16} color={Colors.text.primary} />
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                    </View>
-                )}
-
-                <View style={styles.bottomBar}>
-                    <TouchableOpacity
-                        style={styles.messageButton}
-                        onPress={handleMessageSeller}
-                    >
-                        <ChatBubbleLeftIcon size={20} color={Colors.primary[500]} />
-                    </TouchableOpacity>
-                    {isInStock ? (
-                        <>
-                            <CustomButton
-                                title="Add to cart"
-                                onPress={handleAddToCart}
-                                style={styles.addToCartButton}
-                                bgVariant="outline"
-                                textVariant="primary"
-                            />
-                            <CustomButton
-                                title="Buy Now"
-                                onPress={handleBuyNow}
-                                style={styles.buyNowButton}
-                            />
-                        </>
-                    ) : (
-                        <CustomButton
-                            title="Sold Out"
-                            onPress={() => { }}
-                            style={styles.soldOutButton}
-                            bgVariant="secondary"
-                            disabled
-                        />
                     )}
+
+                    <View style={styles.bottomBar}>
+                        <TouchableOpacity
+                            style={styles.messageButton}
+                            onPress={handleMessageSeller}
+                        >
+                            <ChatBubbleLeftIcon size={20} color={Colors.primary[500]} />
+                        </TouchableOpacity>
+                        {isInStock ? (
+                            <>
+                                <CustomButton
+                                    title="Add to cart"
+                                    onPress={handleAddToCart}
+                                    style={styles.addToCartButton}
+                                    bgVariant="outline"
+                                    textVariant="primary"
+                                />
+                                <CustomButton
+                                    title="Buy Now"
+                                    onPress={handleBuyNow}
+                                    style={styles.buyNowButton}
+                                />
+                            </>
+                        ) : (
+                            <CustomButton
+                                title="Sold Out"
+                                onPress={() => { }}
+                                style={styles.soldOutButton}
+                                bgVariant="secondary"
+                                disabled
+                            />
+                        )}
+                    </View>
                 </View>
-            </View>
+            ) : (
+                <View style={styles.bottomContainer}>
+                    <View style={styles.bottomBar}>
+                        <CustomButton
+                            title="Edit Listing"
+                            onPress={() => router.push({ pathname: '/profile/edit-listing', params: { draftId: product.id, type: 'active' } } as any)}
+                            style={{ flex: 1 }}
+                        />
+                    </View>
+                </View>
+            )}
         </SafeAreaView>
     );
 };
