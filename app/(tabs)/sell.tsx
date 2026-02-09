@@ -58,6 +58,7 @@ const SellScreen = () => {
     const [culturalOrigin, setCulturalOrigin] = useState('');
     const [culturalStory, setCulturalStory] = useState('');
     const [description, setDescription] = useState('');
+    const [stockQuantity, setStockQuantity] = useState('1');
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [isPickingImage, setIsPickingImage] = useState(false);
 
@@ -75,6 +76,7 @@ const SellScreen = () => {
                         setCulturalOrigin(draft.cultural_origin);
                         setCulturalStory((draft as any).cultural_story || '');
                         setDescription(draft.description);
+                        setStockQuantity(((draft as any).stock_quantity || 1).toString());
                         // Images in draft are URLs, we need to handle them differently
                         // since our picker gives us base64/uri for NEW uploads.
                         // For drafts, we'll store existing URLs.
@@ -88,7 +90,7 @@ const SellScreen = () => {
                 }
             };
             loadDraft();
-        } else if (!draftId) {
+        } else {
             // Reset form for new listing
             setTitle('');
             setPrice('');
@@ -97,6 +99,7 @@ const SellScreen = () => {
             setCulturalOrigin('');
             setCulturalStory('');
             setDescription('');
+            setStockQuantity('1');
             setImages([]);
             setIsFetchingDraft(false);
         }
@@ -157,12 +160,17 @@ const SellScreen = () => {
             Alert.alert('Missing Photos', 'Please add at least one photo of your item.');
             return;
         }
-        if (!title.trim() || !price || !category) {
-            Alert.alert('Missing Info', 'Please fill in the title, price, and category.');
+        if (status === 'active' && (!title.trim() || !price || !category)) {
+            Alert.alert('Missing Info', 'Please fill in the title, price, and category before publishing.');
             return;
         }
 
-        if (status === 'active' && !description.trim()) {
+        if (!title.trim() && status === 'draft') {
+            Alert.alert('Missing Title', 'Please provide at least a title for your draft.');
+            return;
+        }
+
+        if (!description.trim()) {
             Alert.alert('Missing Description', 'Please provide a general description for your item.');
             return;
         }
@@ -188,22 +196,23 @@ const SellScreen = () => {
                 user_id: user.id,
                 name: title,
                 description,
-                price: parseFloat(price),
+                price: parseFloat(price) || 0,
                 category,
                 condition,
                 cultural_origin: culturalOrigin,
                 cultural_story: culturalStory,
                 images: finalImages,
                 status,
+                stock_quantity: parseInt(stockQuantity) || 1,
             });
 
             Alert.alert('Success!', status === 'active' ? 'Your listing is live.' : 'Draft saved.', [
                 { text: 'OK', onPress: () => router.push('/(tabs)/profile' as any) }
             ]);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error publishing:', error);
-            Alert.alert('Error', 'Failed to publish listing. Please try again.');
+            Alert.alert('Error', `Failed to publish listing: ${error.message || 'Please try again.'}`);
         } finally {
             setLoading(false);
         }
@@ -340,6 +349,17 @@ const SellScreen = () => {
                                         </TouchableOpacity>
                                     ))}
                                 </View>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <FormLabel label="Quantity" />
+                                <TextInput
+                                    style={[styles.input, { width: 100 }]}
+                                    placeholder="1"
+                                    keyboardType="number-pad"
+                                    value={stockQuantity}
+                                    onChangeText={setStockQuantity}
+                                />
                             </View>
                         </View>
 
