@@ -360,15 +360,32 @@ export const createListing = async (listingData: {
   cultural_story?: string;
   images: string[];
   status?: 'active' | 'draft';
+  stock_quantity?: number;
 }) => {
   const payload = {
     ...listingData,
-    seller_id: listingData.user_id,
     in_stock: true,
     updated_at: new Date().toISOString(),
   };
 
-  delete (payload as any).user_id; // Clean up payload
+  // If this is a new listing, remove the ID key so the DB generates it
+  if (!listingData.id) {
+    delete (payload as any).id;
+  }
+
+  // Ensure seller_id is set (fallback for older migrations)
+  (payload as any).seller_id = listingData.user_id;
+
+  // Fetch seller info to satisfy NOT NULL constraints
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, avatar_url')
+    .eq('id', listingData.user_id)
+    .single();
+
+  (payload as any).seller_name = profile?.full_name || 'Culturar Seller';
+  (payload as any).seller_avatar = profile?.avatar_url || '';
+
 
   let query;
   if (listingData.id) {
@@ -415,6 +432,26 @@ export const fetchUserDrafts = async (userId: string) => {
   }));
 };
 
+// Fetch user active listings
+export const fetchUserActiveListings = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('seller_id', userId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching active listings:', error);
+    return [];
+  }
+
+  return (data as Product[]).map(p => ({
+    ...transformProduct(p),
+    full_data: p
+  }));
+};
+
 // Upload multiple images to Supabase Storage
 export const uploadProductImages = async (
   userId: string,
@@ -423,10 +460,10 @@ export const uploadProductImages = async (
   const uploadPromises = images.map(async (img, index) => {
     const { decode } = await import('base64-arraybuffer');
     const fileName = `${userId}/${Date.now()}-${index}.jpg`;
-    const filePath = `product-images/${fileName}`;
+    const filePath = fileName;
 
     const { error: uploadError } = await supabase.storage
-      .from('products') // Ensure this bucket exists
+      .from('product-images') // Ensure this bucket exists
       .upload(filePath, decode(img.base64), {
         contentType: 'image/jpeg',
         upsert: true,
@@ -434,9 +471,23 @@ export const uploadProductImages = async (
 
     if (uploadError) throw uploadError;
 
-    const { data } = supabase.storage.from('products').getPublicUrl(filePath);
+    const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
     return data.publicUrl;
   });
 
   return Promise.all(uploadPromises);
+};
+
+// Delete a listing
+export const deleteListing = async (productId: string) => {
+  const { error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', productId);
+
+  if (error) {
+    console.error('Error deleting listing:', error);
+    throw error;
+  }
+  return true;
 };
