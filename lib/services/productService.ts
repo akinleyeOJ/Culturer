@@ -59,7 +59,8 @@ export const fetchProducts = async (
 ) => {
   let query = supabase
     .from('products')
-    .select('*', { count: 'exact' });
+    .select('*', { count: 'exact' })
+    .eq('status', 'active');
 
   // 1. Categories (multiple)
   if (filters.categories && filters.categories.length > 0) {
@@ -147,7 +148,11 @@ export const fetchRecentlyViewed = async (userId: string) => {
   if (rvError || !recentlyViewedData || recentlyViewedData.length === 0) return [];
 
   const productIds = (recentlyViewedData as any[]).map((rv: any) => rv.product_id);
-  const { data: products } = await supabase.from('products').select('id, name, price, emoji, image_url, images').in('id', productIds);
+  const { data: products } = await supabase
+    .from('products')
+    .select('id, name, price, emoji, image_url, images')
+    .in('id', productIds)
+    .eq('status', 'active');
 
   if (!products) return [];
   const productsMap = new Map((products as any[]).map(p => [p.id, p]));
@@ -229,7 +234,7 @@ export const fetchWishlist = async (userId: string) => {
 
   const productIds = (wishlistData as any[]).map((w: any) => w.product_id);
   const [productsResponse, favoriteIds] = await Promise.all([
-    supabase.from('products').select('*').in('id', productIds),
+    supabase.from('products').select('*').in('id', productIds).eq('status', 'active'),
     getUserFavorites(userId)
   ]);
 
@@ -309,6 +314,7 @@ export const fetchSellerProducts = async (
       .from('products')
       .select('*')
       .eq('seller_id', sellerId)
+      .eq('status', 'active')
       .neq('id', excludeProductId)
       .limit(limit),
     userId ? getUserFavorites(userId) : Promise.resolve([])
@@ -339,6 +345,7 @@ export const fetchSimilarProducts = async (
       .from('products')
       .select('*')
       .eq('category', category)
+      .eq('status', 'active')
       .neq('id', productId)
       .gte('price', priceMin)
       .lte('price', priceMax)
