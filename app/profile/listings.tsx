@@ -12,10 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeftIcon, XMarkIcon, PlusIcon, TagIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, XMarkIcon, PlusIcon, TagIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon, CheckCircleIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchUserActiveListings, deleteListing } from '../../lib/services/productService';
+import { fetchUserActiveListings, deleteListing, createListing } from '../../lib/services/productService';
 import { CATEGORIES } from '../../constants/categories';
 import { SectionList, TextInput as RNTextInput } from 'react-native';
 
@@ -104,6 +104,36 @@ const ListingsScreen = () => {
         );
     };
 
+    const handleMarkAsSold = async (item: any) => {
+        Alert.alert(
+            'Mark as Sold',
+            'This will set the quantity to 0 and hide the item from public search results. You can still reactivate it later by editing the quantity.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Mark as Sold',
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            const productData = item.full_data;
+                            await createListing({
+                                ...productData,
+                                stock_quantity: 0,
+                                status: 'active'
+                            });
+                            await loadListings();
+                        } catch (error) {
+                            console.error('Error marking as sold:', error);
+                            Alert.alert('Error', 'Failed to update listing.');
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const renderListingItem = ({ item }: { item: any }) => (
         <TouchableOpacity
             style={styles.card}
@@ -111,10 +141,15 @@ const ListingsScreen = () => {
         >
             <View style={styles.imageContainer}>
                 {item.image ? (
-                    <Image source={{ uri: item.image }} style={styles.image} />
+                    <Image source={{ uri: item.image }} style={[styles.image, item.full_data.stock_quantity === 0 && { opacity: 0.5 }]} />
                 ) : (
                     <View style={styles.placeholderImage}>
                         <TagIcon size={32} color={Colors.neutral[300]} />
+                    </View>
+                )}
+                {item.full_data.stock_quantity === 0 && (
+                    <View style={styles.soldBadgeOverlay}>
+                        <Text style={styles.soldBadgeText}>SOLD</Text>
                     </View>
                 )}
             </View>
@@ -130,6 +165,14 @@ const ListingsScreen = () => {
                 </View>
             </View>
             <View style={styles.actions}>
+                {item.full_data.stock_quantity > 0 && (
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => handleMarkAsSold(item)}
+                    >
+                        <CheckCircleIcon size={20} color={Colors.success[500]} />
+                    </TouchableOpacity>
+                )}
                 <TouchableOpacity
                     style={styles.actionButton}
                     onPress={() => router.push({ pathname: '/profile/edit-listing', params: { draftId: item.id, type: 'active' } } as any)}
@@ -345,6 +388,22 @@ const styles = StyleSheet.create({
     stockText: {
         fontSize: 12,
         color: '#6B7280',
+    },
+    soldBadgeOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    soldBadgeText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '900',
+        letterSpacing: 1,
     },
     actions: {
         flexDirection: 'row',

@@ -24,7 +24,7 @@ const transformProduct = (product: Product, favoriteIds: string[] = []) => ({
   rating: product.rating,
   reviews: product.reviews_count,
   shipping: product.shipping,
-  outOfStock: product.out_of_stock || !product.in_stock,
+  outOfStock: product.out_of_stock || !product.in_stock || (product as any).stock_quantity === 0,
   category: product.category,
   condition: product.condition,
   description: product.description,
@@ -60,7 +60,8 @@ export const fetchProducts = async (
   let query = supabase
     .from('products')
     .select('*', { count: 'exact' })
-    .eq('status', 'active');
+    .eq('status', 'active')
+    .gt('stock_quantity', 0);
 
   // 1. Categories (multiple)
   if (filters.categories && filters.categories.length > 0) {
@@ -297,7 +298,7 @@ export const fetchProductById = async (productId: string, userId?: string) => {
     express_shipping: (product as any).express_shipping || false,
     shipping_days_min: (product as any).shipping_days_min || 3,
     shipping_days_max: (product as any).shipping_days_max || 5,
-    stock_quantity: (product as any).stock_quantity || 10,
+    stock_quantity: typeof (product as any).stock_quantity === 'number' ? (product as any).stock_quantity : 10,
     cultural_story: (product as any).cultural_story || '',
   };
 };
