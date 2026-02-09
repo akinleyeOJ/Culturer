@@ -18,16 +18,15 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import {
-    ChevronLeftIcon,
     CameraIcon,
     XMarkIcon,
-    PlusIcon,
-    InformationCircleIcon
+    InformationCircleIcon,
+    ChevronLeftIcon
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { CATEGORIES } from '../../constants/categories';
 import { useAuth } from '../../contexts/AuthContext';
-import { createListing, uploadProductImages, fetchProductById } from '../../lib/services/productService';
+import { createListing, uploadProductImages } from '../../lib/services/productService';
 
 interface ImageFile {
     uri: string;
@@ -44,10 +43,9 @@ const CONDITIONS = [
 const SellScreen = () => {
     const router = useRouter();
     const { user } = useAuth();
-    const { draftId } = useLocalSearchParams<{ draftId: string }>();
+    const { from } = useLocalSearchParams<{ from?: string }>();
 
     const [loading, setLoading] = useState(false);
-    const [isFetchingDraft, setIsFetchingDraft] = useState(!!draftId);
 
     // Form State
     const [images, setImages] = useState<ImageFile[]>([]);
@@ -62,48 +60,17 @@ const SellScreen = () => {
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [isPickingImage, setIsPickingImage] = useState(false);
 
-    // Fetch Draft if editing
-    React.useEffect(() => {
-        if (draftId && user) {
-            const loadDraft = async () => {
-                try {
-                    const draft = await fetchProductById(draftId, user.id);
-                    if (draft) {
-                        setTitle(draft.name);
-                        setPrice(draft.price.replace('$', ''));
-                        setCategory(draft.category);
-                        setCondition(draft.condition.toLowerCase().replace(' ', '_'));
-                        setCulturalOrigin(draft.cultural_origin);
-                        setCulturalStory((draft as any).cultural_story || '');
-                        setDescription(draft.description);
-                        setStockQuantity(((draft as any).stock_quantity || 1).toString());
-                        // Images in draft are URLs, we need to handle them differently
-                        // since our picker gives us base64/uri for NEW uploads.
-                        // For drafts, we'll store existing URLs.
-                        setImages(draft.images.map((url: string) => ({ uri: url })));
-                    }
-                } catch (error) {
-                    console.error('Error fetching draft:', error);
-                    Alert.alert('Error', 'Could not load draft.');
-                } finally {
-                    setIsFetchingDraft(false);
-                }
-            };
-            loadDraft();
-        } else {
-            // Reset form for new listing
-            setTitle('');
-            setPrice('');
-            setCategory('');
-            setCondition('new');
-            setCulturalOrigin('');
-            setCulturalStory('');
-            setDescription('');
-            setStockQuantity('1');
-            setImages([]);
-            setIsFetchingDraft(false);
-        }
-    }, [draftId, user]);
+    const resetForm = () => {
+        setTitle('');
+        setPrice('');
+        setCategory('');
+        setCondition('new');
+        setCulturalOrigin('');
+        setCulturalStory('');
+        setDescription('');
+        setStockQuantity('1');
+        setImages([]);
+    };
 
     const handlePickImage = async () => {
         if (isPickingImage) return;
@@ -125,10 +92,9 @@ const SellScreen = () => {
 
             if (!result.canceled) {
                 const newImages = await Promise.all(result.assets.map(async (asset) => {
-                    // Compress and resize
                     const manipulated = await ImageManipulator.manipulateAsync(
                         asset.uri,
-                        [{ resize: { width: 1200 } }], // Reasonable size for marketplace
+                        [{ resize: { width: 1200 } }],
                         { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
                     );
                     return {
@@ -139,7 +105,7 @@ const SellScreen = () => {
 
                 setImages(prev => {
                     const combined = [...prev, ...newImages];
-                    return combined.slice(0, 5); // Safety cap
+                    return combined.slice(0, 5);
                 });
             }
         } catch (error) {
@@ -171,28 +137,19 @@ const SellScreen = () => {
         }
 
         if (!description.trim()) {
-            Alert.alert('Missing Description', 'Please provide a general description for your item.');
+            Alert.alert('Missing Description', 'Please provide a general description.');
             return;
         }
 
         try {
             setLoading(true);
 
-            // 1. Upload NEW Images (only those with base64)
-            const newImagesToUpload = images.filter(img => img.base64);
-            const existingUrls = images.filter(img => !img.base64).map(img => img.uri);
+            // Upload Images
+            const uploadData = images.map(img => ({ base64: img.base64!, uri: img.uri }));
+            const uploadedUrls = await uploadProductImages(user.id, uploadData);
 
-            let uploadedUrls: string[] = [];
-            if (newImagesToUpload.length > 0) {
-                const uploadData = newImagesToUpload.map(img => ({ base64: img.base64!, uri: img.uri }));
-                uploadedUrls = await uploadProductImages(user.id, uploadData);
-            }
-
-            const finalImages = [...existingUrls, ...uploadedUrls];
-
-            // 2. Create or Update Listing in DB
+            // Create Listing
             await createListing({
-                id: draftId,
                 user_id: user.id,
                 name: title,
                 description,
@@ -201,18 +158,24 @@ const SellScreen = () => {
                 condition,
                 cultural_origin: culturalOrigin,
                 cultural_story: culturalStory,
-                images: finalImages,
+                images: uploadedUrls,
                 status,
                 stock_quantity: parseInt(stockQuantity) || 1,
             });
 
             Alert.alert('Success!', status === 'active' ? 'Your listing is live.' : 'Draft saved.', [
-                { text: 'OK', onPress: () => router.push('/(tabs)/profile' as any) }
+                {
+                    text: 'OK',
+                    onPress: () => {
+                        resetForm();
+                        router.push(status === 'active' ? '/profile/listings' : '/profile/drafts' as any);
+                    }
+                }
             ]);
 
         } catch (error: any) {
             console.error('Error publishing:', error);
-            Alert.alert('Error', `Failed to publish listing: ${error.message || 'Please try again.'}`);
+            Alert.alert('Error', `Failed to publish: ${error.message || 'Please try again.'}`);
         } finally {
             setLoading(false);
         }
@@ -235,7 +198,6 @@ const SellScreen = () => {
                 <Text
                     style={[styles.dropdownText, !selectedCat && { color: Colors.neutral[400] }]}
                     numberOfLines={1}
-                    ellipsizeMode="tail"
                 >
                     {selectedCat ? selectedCat.name : 'Select a category'}
                 </Text>
@@ -245,17 +207,26 @@ const SellScreen = () => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (from === 'listings') {
+                                router.push('/profile/listings' as any);
+                            } else {
+                                router.push('/(tabs)/home');
+                            }
+                        }}
+                        style={styles.closeButton}
+                    >
                         <XMarkIcon size={24} color={Colors.text.primary} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>{draftId ? 'Edit Draft' : 'New Listing'}</Text>
+                    <Text style={styles.headerTitle}>New Listing</Text>
                     <TouchableOpacity
                         onPress={() => handlePublish('draft')}
                         disabled={loading}
@@ -265,165 +236,159 @@ const SellScreen = () => {
                     </TouchableOpacity>
                 </View>
 
-                {isFetchingDraft ? (
-                    <View style={styles.center}>
-                        <ActivityIndicator size="large" color={Colors.primary[500]} />
-                        <Text style={styles.loadingText}>Loading draft...</Text>
-                    </View>
-                ) : (
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 24 }}
+                >
+                    {/* Image Collection */}
+                    <View style={styles.imageSection}>
+                        <View style={styles.horizontalScrollContainer}>
+                            <TouchableOpacity style={styles.addIconButton} onPress={handlePickImage}>
+                                <CameraIcon size={32} color={Colors.primary[500]} />
+                                <Text style={styles.addPhotoText}>Add Photo</Text>
+                                <Text style={styles.photoCount}>{images.length}/5</Text>
+                            </TouchableOpacity>
 
-                        {/* Image Collection */}
-                        <View style={styles.imageSection}>
-                            <View style={styles.horizontalScrollContainer}>
-                                <TouchableOpacity style={styles.addIconButton} onPress={handlePickImage}>
-                                    <CameraIcon size={32} color={Colors.primary[500]} />
-                                    <Text style={styles.addPhotoText}>Add Photo</Text>
-                                    <Text style={styles.photoCount}>{images.length}/5</Text>
-                                </TouchableOpacity>
-
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageList}>
-                                    {images.map((item, index) => (
-                                        <View key={index} style={styles.imageWrapper}>
-                                            <Image source={{ uri: item.uri }} style={styles.imagePreview} />
-                                            <TouchableOpacity
-                                                style={styles.removeBadge}
-                                                onPress={() => removeImage(index)}
-                                            >
-                                                <XMarkIcon size={14} color="#FFF" />
-                                            </TouchableOpacity>
-                                            {index === 0 && (
-                                                <View style={styles.mainBadge}>
-                                                    <Text style={styles.mainBadgeText}>Main</Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                            <Text style={styles.helperText}>First photo is your cover image. Max 5 photos.</Text>
-                        </View>
-
-                        {/* Details Section */}
-                        <View style={styles.section}>
-                            <View style={styles.inputGroup}>
-                                <FormLabel label="Item Title" required />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="e.g. Vintage Hand-woven Rug"
-                                    value={title}
-                                    onChangeText={setTitle}
-                                    maxLength={80}
-                                />
-                            </View>
-
-                            <View style={styles.row}>
-                                <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
-                                    <FormLabel label="Price ($)" required />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="0.00"
-                                        keyboardType="decimal-pad"
-                                        value={price}
-                                        onChangeText={setPrice}
-                                    />
-                                </View>
-                                <View style={[styles.inputGroup, { flex: 1 }]}>
-                                    <FormLabel label="Category" required />
-                                    <CategoryPicker />
-                                </View>
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                                <FormLabel label="Condition" required />
-                                <View style={styles.conditionRow}>
-                                    {CONDITIONS.map(c => (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageList}>
+                                {images.map((item, index) => (
+                                    <View key={index} style={styles.imageWrapper}>
+                                        <Image source={{ uri: item.uri }} style={styles.imagePreview} />
                                         <TouchableOpacity
-                                            key={c.id}
-                                            style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
-                                            onPress={() => setCondition(c.id)}
+                                            style={styles.removeBadge}
+                                            onPress={() => removeImage(index)}
                                         >
-                                            <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
-                                                {c.label}
-                                            </Text>
+                                            <XMarkIcon size={14} color="#FFF" />
                                         </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
+                                        {index === 0 && (
+                                            <View style={styles.mainBadge}>
+                                                <Text style={styles.mainBadgeText}>Main</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        </View>
+                        <Text style={styles.helperText}>First photo is your item cover image. Max 5 photos.</Text>
+                    </View>
 
-                            <View style={styles.inputGroup}>
-                                <FormLabel label="Quantity" />
-                                <TextInput
-                                    style={[styles.input, { width: 100 }]}
-                                    placeholder="1"
-                                    keyboardType="number-pad"
-                                    value={stockQuantity}
-                                    onChangeText={setStockQuantity}
-                                />
-                            </View>
+                    {/* Details Section */}
+                    <View style={styles.section}>
+                        <View style={styles.inputGroup}>
+                            <FormLabel label="Item Title" required />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. Vintage Hand-woven Rug"
+                                value={title}
+                                onChangeText={setTitle}
+                                maxLength={80}
+                            />
                         </View>
 
-                        {/* Culture Section */}
-                        <View style={styles.section}>
-                            <View style={styles.sectionHeaderRow}>
-                                <Text style={styles.sectionTitle}>Cultural Story</Text>
-                                <TouchableOpacity>
-                                    <InformationCircleIcon size={20} color={Colors.neutral[400]} />
-                                </TouchableOpacity>
-                            </View>
-                            <Text style={styles.sectionSub}>Sharing the heritage behind your item helps buyers appreciate its value.</Text>
-
-                            <View style={styles.inputGroup}>
-                                <FormLabel label="Origin / Culture" />
+                        <View style={styles.row}>
+                            <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
+                                <FormLabel label="Price ($)" required />
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="e.g. Ottoman Empire, Moroccan Berber"
-                                    value={culturalOrigin}
-                                    onChangeText={setCulturalOrigin}
+                                    placeholder="0.00"
+                                    keyboardType="decimal-pad"
+                                    value={price}
+                                    onChangeText={setPrice}
                                 />
                             </View>
-
-                            <View style={styles.inputGroup}>
-                                <FormLabel label="The Story" />
-                                <TextInput
-                                    style={[styles.input, styles.textArea]}
-                                    placeholder="Tell us how it was made, its significance, or your family connection..."
-                                    multiline
-                                    numberOfLines={4}
-                                    value={culturalStory}
-                                    onChangeText={setCulturalStory}
-                                    textAlignVertical="top"
-                                />
+                            <View style={[styles.inputGroup, { flex: 1 }]}>
+                                <FormLabel label="Category" required />
+                                <CategoryPicker />
                             </View>
                         </View>
 
-                        {/* Description Section */}
-                        <View style={styles.section}>
-                            <View style={styles.inputGroup}>
-                                <FormLabel label="General Description" required />
-                                <TextInput
-                                    style={[styles.input, styles.textArea]}
-                                    placeholder="Brand, size, materials, and any flaws..."
-                                    multiline
-                                    numberOfLines={4}
-                                    value={description}
-                                    onChangeText={setDescription}
-                                    textAlignVertical="top"
-                                />
+                        <View style={styles.inputGroup}>
+                            <FormLabel label="Condition" required />
+                            <View style={styles.conditionRow}>
+                                {CONDITIONS.map(c => (
+                                    <TouchableOpacity
+                                        key={c.id}
+                                        style={[styles.conditionBtn, condition === c.id && styles.conditionBtnActive]}
+                                        onPress={() => setCondition(c.id)}
+                                    >
+                                        <Text style={[styles.conditionText, condition === c.id && styles.conditionTextActive]}>
+                                            {c.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
                             </View>
                         </View>
 
-                        {/* Submit Button */}
-                        <TouchableOpacity
-                            style={[styles.publishButton, loading && styles.publishButtonDisabled]}
-                            onPress={() => handlePublish('active')}
-                            disabled={loading}
-                        >
-                            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.publishButtonText}>{draftId ? 'Save & Publish' : 'Publish Listing'}</Text>}
-                        </TouchableOpacity>
+                        <View style={styles.inputGroup}>
+                            <FormLabel label="Quantity" />
+                            <TextInput
+                                style={[styles.input, { width: 100 }]}
+                                placeholder="1"
+                                keyboardType="number-pad"
+                                value={stockQuantity}
+                                onChangeText={setStockQuantity}
+                            />
+                        </View>
+                    </View>
 
-                    </ScrollView>
-                )}
+                    {/* Culture Section */}
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeaderRow}>
+                            <Text style={styles.sectionTitle}>Cultural Story</Text>
+                            <TouchableOpacity>
+                                <InformationCircleIcon size={20} color={Colors.neutral[400]} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.sectionSub}>Sharing the heritage behind your item helps buyers appreciate its value.</Text>
+
+                        <View style={styles.inputGroup}>
+                            <FormLabel label="Origin / Culture" />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. Ottoman Empire, Moroccan Berber"
+                                value={culturalOrigin}
+                                onChangeText={setCulturalOrigin}
+                            />
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <FormLabel label="The Story" />
+                            <TextInput
+                                style={[styles.input, styles.textArea]}
+                                placeholder="Tell us how it was made, its significance, or your family connection..."
+                                multiline
+                                numberOfLines={4}
+                                value={culturalStory}
+                                onChangeText={setCulturalStory}
+                                textAlignVertical="top"
+                            />
+                        </View>
+                    </View>
+
+                    {/* Description Section */}
+                    <View style={styles.section}>
+                        <View style={styles.inputGroup}>
+                            <FormLabel label="General Description" required />
+                            <TextInput
+                                style={[styles.input, styles.textArea]}
+                                placeholder="Brand, size, materials, and any flaws..."
+                                multiline
+                                numberOfLines={4}
+                                value={description}
+                                onChangeText={setDescription}
+                                textAlignVertical="top"
+                            />
+                        </View>
+                    </View>
+
+                    {/* Submit Button */}
+                    <TouchableOpacity
+                        style={[styles.publishButton, loading && styles.publishButtonDisabled]}
+                        onPress={() => handlePublish('active')}
+                        disabled={loading}
+                    >
+                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.publishButtonText}>Publish Listing</Text>}
+                    </TouchableOpacity>
+                </ScrollView>
             </KeyboardAvoidingView>
 
             {/* Category Modal */}
@@ -469,10 +434,7 @@ const SellScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#FFF',
-    },
+    container: { flex: 1, backgroundColor: '#FFF' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -483,62 +445,29 @@ const styles = StyleSheet.create({
         borderBottomColor: '#F3F4F6',
     },
     closeButton: { padding: 4 },
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    loadingText: { marginTop: 12, color: '#6B7280', fontSize: 14 },
     headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
     draftButton: { paddingHorizontal: 12, paddingVertical: 6 },
     draftText: { fontSize: 15, color: Colors.primary[500], fontWeight: '600' },
-    scrollContent: { paddingBottom: 40 },
     imageSection: { padding: 16, borderBottomWidth: 8, borderBottomColor: '#F9FAFB' },
-    horizontalScrollContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    imageList: {
-        paddingLeft: 12,
-        paddingRight: 16,
-        alignItems: 'center',
-    },
+    horizontalScrollContainer: { flexDirection: 'row', alignItems: 'center' },
+    imageList: { paddingLeft: 12, paddingRight: 16, alignItems: 'center' },
     addIconButton: {
-        width: 100,
-        height: 100,
-        backgroundColor: Colors.primary[50],
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: Colors.primary[100],
-        borderStyle: 'dashed',
-        justifyContent: 'center',
-        alignItems: 'center',
+        width: 100, height: 100, backgroundColor: Colors.primary[50], borderRadius: 12,
+        borderWidth: 2, borderColor: Colors.primary[100], borderStyle: 'dashed',
+        justifyContent: 'center', alignItems: 'center',
     },
     addPhotoText: { fontSize: 12, fontWeight: '600', color: Colors.primary[600], marginTop: 4 },
     photoCount: { fontSize: 10, color: Colors.primary[400], marginTop: 2 },
-    imageWrapper: {
-        position: 'relative',
-        marginRight: 12,
-    },
+    imageWrapper: { position: 'relative', marginRight: 12 },
     imagePreview: { width: 100, height: 100, borderRadius: 12 },
     removeBadge: {
-        position: 'absolute',
-        top: 4,
-        right: 4,
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: '#FFF',
+        position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.7)',
+        width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1.5, borderColor: '#FFF',
     },
     mainBadge: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        borderBottomLeftRadius: 12,
-        borderBottomRightRadius: 12,
-        paddingVertical: 2,
+        position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+        borderBottomLeftRadius: 12, borderBottomRightRadius: 12, paddingVertical: 2,
     },
     mainBadgeText: { color: '#FFF', fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
     helperText: { fontSize: 12, color: '#6B7280', marginTop: 12 },
@@ -548,107 +477,47 @@ const styles = StyleSheet.create({
     required: { color: Colors.danger[500], marginLeft: 2 },
     inputGroup: { marginBottom: 20 },
     input: {
-        backgroundColor: '#F9FAFB',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        padding: 14,
-        fontSize: 16,
-        color: Colors.text.primary,
+        backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB',
+        borderRadius: 12, padding: 14, fontSize: 16, color: Colors.text.primary,
     },
     textArea: { minHeight: 100 },
     row: { flexDirection: 'row' },
     dropdownButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#F9FAFB',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        height: 52,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB',
+        borderRadius: 12, paddingHorizontal: 16, height: 52,
     },
-    dropdownText: {
-        flex: 1,
-        fontSize: 16,
-        color: Colors.text.primary,
-        marginRight: 8,
-    },
-    dropdownIcon: {
-        transform: [{ rotate: '-90deg' }],
-    },
+    dropdownText: { flex: 1, fontSize: 16, color: Colors.text.primary, marginRight: 8 },
+    dropdownIcon: { transform: [{ rotate: '-90deg' }] },
     conditionRow: { flexDirection: 'row', gap: 8 },
     conditionBtn: {
-        flex: 1,
-        paddingVertical: 10,
-        borderRadius: 8,
-        backgroundColor: '#F9FAFB',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        alignItems: 'center',
+        flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#F9FAFB',
+        borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center',
     },
-    conditionBtnActive: {
-        backgroundColor: Colors.primary[50],
-        borderColor: Colors.primary[500],
-    },
+    conditionBtnActive: { backgroundColor: Colors.primary[50], borderColor: Colors.primary[500] },
     conditionText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
     conditionTextActive: { color: Colors.primary[700] },
     sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
     sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-    sectionSub: { fontSize: 13, color: '#6B7280', marginBottom: 16 },
+    sectionSub: { fontSize: 13, color: '#6B7280', marginBottom: 12 },
     publishButton: {
-        backgroundColor: Colors.primary[500],
-        margin: 24,
-        paddingVertical: 16,
-        borderRadius: 14,
-        alignItems: 'center',
+        backgroundColor: Colors.primary[500], marginHorizontal: 24, marginTop: 24,
+        marginBottom: 32, paddingVertical: 16, borderRadius: 14, alignItems: 'center',
     },
     publishButtonDisabled: { opacity: 0.6 },
     publishButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        backgroundColor: '#FFF',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '80%',
-        paddingBottom: 40,
-    },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%', paddingBottom: 40 },
     modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        padding: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
     },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#111827',
-    },
-    modalList: {
-        padding: 10,
-    },
-    modalItem: {
-        padding: 20,
-        borderRadius: 12,
-    },
-    modalItemActive: {
-        backgroundColor: Colors.primary[50],
-    },
-    modalItemText: {
-        fontSize: 16,
-        color: '#4B5563',
-    },
-    modalItemActiveText: {
-        color: Colors.primary[600],
-        fontWeight: '700',
-    },
+    modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+    modalList: { padding: 10 },
+    modalItem: { padding: 20, borderRadius: 12 },
+    modalItemActive: { backgroundColor: Colors.primary[50] },
+    modalItemText: { fontSize: 16, color: '#4B5563' },
+    modalItemActiveText: { color: Colors.primary[600], fontWeight: '700' },
 });
 
 export default SellScreen;
