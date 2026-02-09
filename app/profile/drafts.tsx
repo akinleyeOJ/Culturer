@@ -7,14 +7,15 @@ import {
     TouchableOpacity,
     Image,
     ActivityIndicator,
-    RefreshControl
+    RefreshControl,
+    Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeftIcon, DocumentTextIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, DocumentTextIcon, TrashIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchUserDrafts } from '../../lib/services/productService';
+import { fetchUserDrafts, deleteListing } from '../../lib/services/productService';
 
 const DraftsScreen = () => {
     const router = useRouter();
@@ -47,6 +48,29 @@ const DraftsScreen = () => {
         loadDrafts();
     };
 
+    const handleDeleteDraft = async (id: string) => {
+        Alert.alert(
+            'Delete Draft',
+            'Are you sure you want to delete this draft?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteListing(id);
+                            loadDrafts();
+                        } catch (error) {
+                            console.error('Error deleting draft:', error);
+                            Alert.alert('Error', 'Could not delete draft.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const renderDraftItem = ({ item }: { item: any }) => (
         <TouchableOpacity
             style={styles.draftCard}
@@ -73,6 +97,12 @@ const DraftsScreen = () => {
             <View style={styles.resumeBadge}>
                 <Text style={styles.resumeText}>Resume</Text>
             </View>
+            <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteDraft(item.id)}
+            >
+                <TrashIcon size={20} color={Colors.danger[500]} />
+            </TouchableOpacity>
         </TouchableOpacity>
     );
 
@@ -216,6 +246,10 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         color: Colors.primary[600],
+    },
+    deleteButton: {
+        padding: 8,
+        marginLeft: 8,
     },
     emptyContainer: {
         flex: 1,
