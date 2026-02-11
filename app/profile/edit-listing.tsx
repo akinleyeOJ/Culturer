@@ -17,16 +17,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import {
-    ChevronLeftIcon,
-    CameraIcon,
-    XMarkIcon,
-    InformationCircleIcon
-} from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, CameraIcon, XMarkIcon, ChevronRightIcon, InformationCircleIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { CATEGORIES } from '../../constants/categories';
 import { useAuth } from '../../contexts/AuthContext';
-import { uploadProductImages, fetchProductById, deleteListing, createListing } from '../../lib/services/productService';
+import { uploadProductImages, createListing } from '../../lib/services/productService';
+import { ImageZoomModal } from '../../components/ImageZoomModal';
 
 interface ImageFile {
     uri: string;
@@ -59,6 +55,8 @@ const EditListingScreen = () => {
     const [description, setDescription] = useState('');
     const [stockQuantity, setStockQuantity] = useState('1');
     const [showCategoryModal, setShowCategoryModal] = useState(false);
+    const [zoomVisible, setZoomVisible] = useState(false);
+    const [selectedZoomImage, setSelectedZoomImage] = useState<string | null>(null);
     const [isPickingImage, setIsPickingImage] = useState(false);
     const [originalStatus, setOriginalStatus] = useState<'active' | 'draft' | null>(type || null);
 
@@ -284,7 +282,15 @@ const EditListingScreen = () => {
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageList}>
                                     {images.map((item, index) => (
                                         <View key={index} style={styles.imageWrapper}>
-                                            <Image source={{ uri: item.uri }} style={styles.imagePreview} />
+                                            <TouchableOpacity
+                                                activeOpacity={0.9}
+                                                onPress={() => {
+                                                    setSelectedZoomImage(item.uri);
+                                                    setZoomVisible(true);
+                                                }}
+                                            >
+                                                <Image source={{ uri: item.uri }} style={styles.imagePreview} />
+                                            </TouchableOpacity>
                                             <TouchableOpacity
                                                 style={styles.removeBadge}
                                                 onPress={() => removeImage(index)}
@@ -487,6 +493,12 @@ const EditListingScreen = () => {
                     </View>
                 </TouchableOpacity>
             </Modal>
+
+            <ImageZoomModal
+                visible={zoomVisible}
+                imageUri={selectedZoomImage}
+                onClose={() => setZoomVisible(false)}
+            />
         </SafeAreaView>
     );
 };
