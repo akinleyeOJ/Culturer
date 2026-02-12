@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import {
     View,
     StyleSheet,
@@ -35,7 +35,7 @@ export const ImageZoomModal = ({
     onClose
 }: ImageZoomModalProps) => {
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
-    const scrollRef = React.useRef<ScrollView>(null);
+    const scrollRef = useRef<ScrollView>(null);
     const [scrollEnabled, setScrollEnabled] = useState(true);
 
     // For swipe-to-dismiss
@@ -92,45 +92,47 @@ export const ImageZoomModal = ({
             animationType="fade"
             onRequestClose={onClose}
         >
-            <GestureDetector gesture={dismissGesture}>
-                <Animated.View style={[styles.container, containerStyle]}>
-                    {/* Header with Close Button and Page Indicator */}
-                    <View style={styles.header}>
-                        <View style={styles.pageIndicator}>
-                            <Text style={styles.pageText}>
-                                {currentIndex + 1} / {images.length}
-                            </Text>
-                        </View>
-                        <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={onClose}
-                            activeOpacity={0.8}
-                        >
-                            <XMarkIcon size={24} color="#fff" />
-                        </TouchableOpacity>
+            <View style={styles.container}>
+                {/* Header with Close Button and Page Indicator */}
+                <View style={styles.header}>
+                    <View style={styles.pageIndicator}>
+                        <Text style={styles.pageText}>
+                            {currentIndex + 1} / {images.length}
+                        </Text>
                     </View>
-
-                    <ScrollView
-                        ref={scrollRef}
-                        horizontal
-                        pagingEnabled
-                        showsHorizontalScrollIndicator={false}
-                        onScroll={handleScroll}
-                        scrollEventThrottle={16}
-                        contentOffset={{ x: initialIndex * SCREEN_WIDTH, y: 0 }}
-                        scrollEnabled={scrollEnabled}
-                        decelerationRate="fast"
+                    <TouchableOpacity
+                        style={styles.closeButton}
+                        onPress={onClose}
+                        activeOpacity={0.8}
                     >
-                        {images.map((uri, index) => (
-                            <ZoomableImage
-                                key={`${uri}-${index}`}
-                                imageUri={uri}
-                                onZoomChange={setScrollEnabled}
-                            />
-                        ))}
-                    </ScrollView>
-                </Animated.View>
-            </GestureDetector>
+                        <XMarkIcon size={24} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+
+                <GestureDetector gesture={dismissGesture}>
+                    <Animated.View style={[{ flex: 1 }, containerStyle]}>
+                        <ScrollView
+                            ref={scrollRef}
+                            horizontal
+                            pagingEnabled
+                            showsHorizontalScrollIndicator={false}
+                            onScroll={handleScroll}
+                            scrollEventThrottle={16}
+                            contentOffset={{ x: initialIndex * SCREEN_WIDTH, y: 0 }}
+                            scrollEnabled={scrollEnabled}
+                            decelerationRate="fast"
+                        >
+                            {images.map((uri, index) => (
+                                <ZoomableImage
+                                    key={`${uri}-${index}`}
+                                    imageUri={uri}
+                                    onZoomChange={setScrollEnabled}
+                                />
+                            ))}
+                        </ScrollView>
+                    </Animated.View>
+                </GestureDetector>
+            </View>
         </Modal>
     );
 };
@@ -140,7 +142,7 @@ interface ZoomableImageProps {
     onZoomChange: (scrollEnabled: boolean) => void;
 }
 
-const ZoomableImage = ({ imageUri, onZoomChange }: ZoomableImageProps) => {
+const ZoomableImageComponent = ({ imageUri, onZoomChange }: ZoomableImageProps) => {
     const scale = useSharedValue(1);
     const savedScale = useSharedValue(1);
     const translateX = useSharedValue(0);
@@ -151,6 +153,18 @@ const ZoomableImage = ({ imageUri, onZoomChange }: ZoomableImageProps) => {
     const updateScrollEnabled = (enabled: boolean) => {
         onZoomChange(enabled);
     };
+
+    const panGesture = Gesture.Pan()
+        .onUpdate((event) => {
+            if (scale.value > 1.05) {
+                translateX.value = savedTranslateX.value + event.translationX;
+                translateY.value = savedTranslateY.value + event.translationY;
+            }
+        })
+        .onEnd(() => {
+            savedTranslateX.value = translateX.value;
+            savedTranslateY.value = translateY.value;
+        });
 
     const pinchGesture = Gesture.Pinch()
         .onUpdate((event) => {
@@ -197,11 +211,10 @@ const ZoomableImage = ({ imageUri, onZoomChange }: ZoomableImageProps) => {
             }
         });
 
-    // Don't add pan to the gesture - it interferes with ScrollView
-    // User can pinch to zoom, then drag. Or double-tap to zoom.
-    const composedGesture = Gesture.Exclusive(
+    // Combine gestures: pan is now active only when zoomed
+    const composedGesture = Gesture.Race(
         doubleTapGesture,
-        pinchGesture
+        Gesture.Simultaneous(pinchGesture, panGesture)
     );
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -224,6 +237,8 @@ const ZoomableImage = ({ imageUri, onZoomChange }: ZoomableImageProps) => {
         </View>
     );
 };
+
+const ZoomableImage = memo(ZoomableImageComponent);
 
 const styles = StyleSheet.create({
     container: {
