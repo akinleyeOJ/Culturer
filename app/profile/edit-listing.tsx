@@ -21,7 +21,7 @@ import { ChevronLeftIcon, CameraIcon, XMarkIcon, ChevronRightIcon, InformationCi
 import { Colors } from '../../constants/color';
 import { CATEGORIES } from '../../constants/categories';
 import { useAuth } from '../../contexts/AuthContext';
-import { uploadProductImages, createListing } from '../../lib/services/productService';
+import { uploadProductImages, createListing, fetchProductById, deleteListing } from '../../lib/services/productService';
 import { ImageZoomModal } from '../../components/ImageZoomModal';
 
 interface ImageFile {
@@ -56,7 +56,7 @@ const EditListingScreen = () => {
     const [stockQuantity, setStockQuantity] = useState('1');
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [zoomVisible, setZoomVisible] = useState(false);
-    const [selectedZoomImage, setSelectedZoomImage] = useState<string | null>(null);
+    const [selectedZoomIndex, setSelectedZoomIndex] = useState(0);
     const [isPickingImage, setIsPickingImage] = useState(false);
     const [originalStatus, setOriginalStatus] = useState<'active' | 'draft' | null>(type || null);
 
@@ -285,7 +285,7 @@ const EditListingScreen = () => {
                                             <TouchableOpacity
                                                 activeOpacity={0.9}
                                                 onPress={() => {
-                                                    setSelectedZoomImage(item.uri);
+                                                    setSelectedZoomIndex(index);
                                                     setZoomVisible(true);
                                                 }}
                                             >
@@ -496,7 +496,8 @@ const EditListingScreen = () => {
 
             <ImageZoomModal
                 visible={zoomVisible}
-                imageUri={selectedZoomImage}
+                images={images.map(img => img.uri)}
+                initialIndex={selectedZoomIndex}
                 onClose={() => setZoomVisible(false)}
             />
         </SafeAreaView>
