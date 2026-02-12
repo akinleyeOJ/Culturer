@@ -38,10 +38,16 @@ export const ImageZoomModal = ({
     const scrollRef = React.useRef<ScrollView>(null);
     const [scrollEnabled, setScrollEnabled] = useState(true);
 
+    // For swipe-to-dismiss
+    const translateY = useSharedValue(0);
+    const opacity = useSharedValue(1);
+
     useEffect(() => {
         if (visible) {
             setCurrentIndex(initialIndex);
             setScrollEnabled(true);
+            translateY.value = 0;
+            opacity.value = 1;
         }
     }, [visible, initialIndex]);
 
@@ -55,6 +61,30 @@ export const ImageZoomModal = ({
         }
     };
 
+    // Swipe-to-dismiss gesture
+    const dismissGesture = Gesture.Pan()
+        .activeOffsetY([-10, 10])
+        .onUpdate((event) => {
+            translateY.value = event.translationY;
+            // Reduce opacity as user swipes
+            opacity.value = Math.max(0.3, 1 - Math.abs(event.translationY) / 500);
+        })
+        .onEnd((event) => {
+            if (Math.abs(event.translationY) > 100 || Math.abs(event.velocityY) > 500) {
+                // Close the modal
+                runOnJS(onClose)();
+            } else {
+                // Snap back
+                translateY.value = withSpring(0);
+                opacity.value = withSpring(1);
+            }
+        });
+
+    const containerStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: translateY.value }],
+        opacity: opacity.value,
+    }));
+
     return (
         <Modal
             visible={visible}
@@ -62,43 +92,45 @@ export const ImageZoomModal = ({
             animationType="fade"
             onRequestClose={onClose}
         >
-            <View style={styles.container}>
-                {/* Header with Close Button and Page Indicator */}
-                <View style={styles.header}>
-                    <View style={styles.pageIndicator}>
-                        <Text style={styles.pageText}>
-                            {currentIndex + 1} / {images.length}
-                        </Text>
+            <GestureDetector gesture={dismissGesture}>
+                <Animated.View style={[styles.container, containerStyle]}>
+                    {/* Header with Close Button and Page Indicator */}
+                    <View style={styles.header}>
+                        <View style={styles.pageIndicator}>
+                            <Text style={styles.pageText}>
+                                {currentIndex + 1} / {images.length}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            style={styles.closeButton}
+                            onPress={onClose}
+                            activeOpacity={0.8}
+                        >
+                            <XMarkIcon size={24} color="#fff" />
+                        </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                        style={styles.closeButton}
-                        onPress={onClose}
-                        activeOpacity={0.8}
-                    >
-                        <XMarkIcon size={24} color="#fff" />
-                    </TouchableOpacity>
-                </View>
 
-                <ScrollView
-                    ref={scrollRef}
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    onScroll={handleScroll}
-                    scrollEventThrottle={16}
-                    contentOffset={{ x: initialIndex * SCREEN_WIDTH, y: 0 }}
-                    scrollEnabled={scrollEnabled}
-                    decelerationRate="fast"
-                >
-                    {images.map((uri, index) => (
-                        <ZoomableImage
-                            key={`${uri}-${index}`}
-                            imageUri={uri}
-                            onZoomChange={setScrollEnabled}
-                        />
-                    ))}
-                </ScrollView>
-            </View>
+                    <ScrollView
+                        ref={scrollRef}
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        onScroll={handleScroll}
+                        scrollEventThrottle={16}
+                        contentOffset={{ x: initialIndex * SCREEN_WIDTH, y: 0 }}
+                        scrollEnabled={scrollEnabled}
+                        decelerationRate="fast"
+                    >
+                        {images.map((uri, index) => (
+                            <ZoomableImage
+                                key={`${uri}-${index}`}
+                                imageUri={uri}
+                                onZoomChange={setScrollEnabled}
+                            />
+                        ))}
+                    </ScrollView>
+                </Animated.View>
+            </GestureDetector>
         </Modal>
     );
 };
