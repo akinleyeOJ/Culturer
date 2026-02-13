@@ -181,7 +181,7 @@ const Cart = () => {
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Cart ({totals.itemCount})</Text>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.circleBtn}>
                     <XMarkIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
             </View>
@@ -384,6 +384,14 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '700',
         color: Colors.text.primary,
+    },
+    circleBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     scrollView: {
         flex: 1,

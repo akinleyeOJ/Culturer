@@ -38,6 +38,7 @@ import { supabase } from '../../lib/supabase';
 interface SellerStats {
     totalItems: number;
     activeItems: number;
+    totalOrders: number;
     followers: number;
     rating: number;
 }
@@ -48,8 +49,9 @@ const SellerHubScreen = () => {
     const [stats, setStats] = useState<SellerStats>({
         totalItems: 0,
         activeItems: 0,
-        followers: 243, // Mocked for design
-        rating: 4.9
+        totalOrders: 0,
+        followers: 5, // Mocked for design
+        rating: 4.9 // Mocked for design
     });
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -65,9 +67,15 @@ const SellerHubScreen = () => {
                 .eq('seller_id', user.id)
                 .eq('status', 'active');
 
-            // Count total items (active + drafts + sold)
+            // Count total items
             const { count: totalCount } = await supabase
                 .from('products')
+                .select('*', { count: 'exact', head: true })
+                .eq('seller_id', user.id);
+
+            // Fetch real order count
+            const { count: orderCount } = await supabase
+                .from('orders')
                 .select('*', { count: 'exact', head: true })
                 .eq('seller_id', user.id);
 
@@ -75,6 +83,7 @@ const SellerHubScreen = () => {
                 ...prev,
                 activeItems: activeCount || 0,
                 totalItems: totalCount || 0,
+                totalOrders: orderCount || 0,
             }));
         } catch (error) {
             console.error('Error fetching seller stats:', error);
@@ -95,10 +104,32 @@ const SellerHubScreen = () => {
         fetchSellerStats();
     };
 
-    const StatCard = ({ label, value }: { label: string; value: string | number }) => (
-        <View style={styles.statCard}>
-            <Text style={styles.statValue}>{value}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
+    const StatsSection = () => (
+        <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.totalItems}</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Total</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.activeItems}</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Active</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.totalOrders}</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Orders</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.followers}</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Followers</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.rating}</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Rating</Text>
+            </View>
         </View>
     );
 
@@ -195,12 +226,7 @@ const SellerHubScreen = () => {
                 </View>
 
                 {/* Stats Row */}
-                <View style={styles.statsRow}>
-                    <StatCard label="Total items" value={stats.totalItems} />
-                    <StatCard label="Active items" value={stats.activeItems} />
-                    <StatCard label="Followers" value={stats.followers} />
-                    <StatCard label="Shop rating" value={stats.rating} />
-                </View>
+                <StatsSection />
 
                 {/* Sections */}
                 <MenuSection
@@ -233,7 +259,7 @@ const SellerHubScreen = () => {
                         icon={TagIcon}
                         title="Listings manager"
                         subtitle="Edit prices, availability, and cultural tags"
-                        badge={`${stats.activeItems} active · ${stats.totalItems} total`}
+                        badge={`${stats.activeItems} active`}
                         onPress={() => router.push('/profile/listings')}
                     />
                     <MenuItem
@@ -397,36 +423,45 @@ const styles = StyleSheet.create({
         bottom: 8,
         right: 16,
     },
-    statsRow: {
+    statsContainer: {
         flexDirection: 'row',
-        paddingHorizontal: 16,
-        gap: 12,
+        backgroundColor: '#FFF',
+        marginHorizontal: 16,
         marginBottom: 24,
-    },
-    statCard: {
-        flex: 1,
-        backgroundColor: Colors.primary[50],
-        borderRadius: 8,
-        padding: 12,
+        paddingVertical: 16,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: '#FFECCF',
         alignItems: 'center',
+    },
+    statItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    statDivider: {
+        width: 1,
+        height: '40%',
+        backgroundColor: '#FFECCF',
     },
     statValue: {
         fontSize: 18,
-        fontWeight: '800',
-        color: Colors.primary[700],
+        fontWeight: '900',
+        color: '#111827',
         marginBottom: 2,
     },
     statLabel: {
-        fontSize: 10,
-        color: Colors.primary[400],
+        fontSize: 9,
+        color: '#6B7280',
+        fontWeight: '700',
+        textTransform: 'uppercase',
         textAlign: 'center',
     },
     section: {
         marginBottom: 24,
     },
     sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: '800',
         color: '#111827',
         paddingHorizontal: 16,
         marginBottom: 4,

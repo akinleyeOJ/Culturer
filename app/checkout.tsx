@@ -569,7 +569,7 @@ const Checkout = () => {
         >
             <View style={styles.modalContainer}>
                 <View style={styles.modalHeader}>
-                    <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                    <TouchableOpacity onPress={() => setShowCountryPicker(false)} style={styles.circleBtn}>
                         <ChevronLeftIcon size={24} color={Colors.text.primary} />
                     </TouchableOpacity>
                     <Text style={styles.modalTitle}>Select country</Text>
@@ -921,7 +921,7 @@ const Checkout = () => {
     // Render Components 
     const renderHeader = () => (
         <View style={styles.header}>
-            <TouchableOpacity onPress={() => step > 1 ? setStep((s) => s - 1 as CheckoutStep) : router.back()} style={styles.backButton}>
+            <TouchableOpacity onPress={() => step > 1 ? setStep((s) => s - 1 as CheckoutStep) : router.back()} style={styles.circleBtn}>
                 <ChevronLeftIcon size={24} color={Colors.text.primary} />
             </TouchableOpacity>
             <View style={styles.headerTitleContainer}>
@@ -1566,8 +1566,13 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: Colors.neutral[200],
     },
-    backButton: {
-        padding: 4,
+    circleBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitleContainer: {
         flexDirection: 'row',

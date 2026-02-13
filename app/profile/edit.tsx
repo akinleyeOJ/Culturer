@@ -21,6 +21,16 @@ import { ChevronLeftIcon, CameraIcon, CheckIcon } from 'react-native-heroicons/o
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 
+interface Profile {
+    id: string;
+    full_name: string | null;
+    username: string | null;
+    bio: string | null;
+    location: string | null;
+    avatar_url: string | null;
+    updated_at?: string;
+}
+
 const EditProfileScreen = () => {
     const router = useRouter();
     const { user } = useAuth();
@@ -43,21 +53,22 @@ const EditProfileScreen = () => {
     }, [user]);
 
     const loadProfile = async () => {
+        if (!user) return;
         try {
             setLoading(true);
 
             // 1. Load from Profiles table
-            const { data: profile, error } = await supabase
+            const { data, error } = await supabase
                 .from('profiles')
-                .select('*')
-                .eq('id', user?.id)
+                .select('*') // using * to avoid specific column linting if they are missing from types
+                .eq('id', user.id)
                 .single();
 
-            if (profile) {
+            if (data) {
+                const profile = data as any;
                 setFullName(profile.full_name || user?.user_metadata?.full_name || '');
                 setUsername(profile.username || '');
                 setAvatarUrl(profile.avatar_url || user?.user_metadata?.avatar_url || '');
-                // Assuming these columns exist, otherwise we fallback to metadata or empty
                 setBio(profile.bio || '');
                 setLocation(profile.location || user?.user_metadata?.location || '');
             } else {
@@ -91,9 +102,10 @@ const EditProfileScreen = () => {
     };
 
     const uploadAvatar = async (base64Image: string) => {
+        if (!user) return;
         try {
             setSaving(true);
-            const fileName = `${user?.id}-${Date.now()}.jpg`;
+            const fileName = `${user.id}-${Date.now()}.jpg`;
             const filePath = `avatars/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
@@ -118,7 +130,7 @@ const EditProfileScreen = () => {
     const handleSave = async () => {
         if (!user) return;
         if (!fullName.trim()) {
-            Alert.alert('Required', 'Dimensions name is required.');
+            Alert.alert('Required', 'Full name is required.');
             return;
         }
 
@@ -126,19 +138,19 @@ const EditProfileScreen = () => {
             setSaving(true);
 
             // 1. Update Profile Table
-            const updates = {
+            const updates: Profile = {
                 id: user.id,
                 full_name: fullName,
                 username,
                 bio,
                 location,
                 avatar_url: avatarUrl,
-                updated_at: new Date(),
+                updated_at: new Date().toISOString(),
             };
 
             const { error } = await supabase
                 .from('profiles')
-                .upsert(updates);
+                .upsert(updates as any);
 
             if (error) throw error;
 
@@ -179,11 +191,11 @@ const EditProfileScreen = () => {
             >
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.circleBtn}>
                         <ChevronLeftIcon size={24} color={Colors.text.primary} />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Edit Profile</Text>
-                    <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.saveButton}>
+                    <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.circleBtn}>
                         {saving ? <ActivityIndicator color={Colors.primary[500]} size="small" /> : <CheckIcon size={24} color={Colors.primary[500]} />}
                     </TouchableOpacity>
                 </View>
@@ -282,11 +294,13 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
-    backButton: {
-        padding: 8,
-    },
-    saveButton: {
-        padding: 8,
+    circleBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
         fontSize: 18,

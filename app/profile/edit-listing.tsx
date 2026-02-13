@@ -239,7 +239,7 @@ const EditListingScreen = () => {
                         onPress={() => {
                             router.back();
                         }}
-                        style={styles.closeButton}
+                        style={styles.circleBtn}
                     >
                         <XMarkIcon size={24} color={Colors.text.primary} />
                     </TouchableOpacity>
@@ -514,7 +514,14 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
-    closeButton: { padding: 4 },
+    circleBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     loadingText: { marginTop: 12, color: '#6B7280', fontSize: 14 },
     headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },

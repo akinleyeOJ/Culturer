@@ -225,13 +225,13 @@ const ListingsScreen = () => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.circleBtn}>
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Listings</Text>
                 <TouchableOpacity
                     onPress={() => router.push('/profile/create-listing' as any)}
-                    style={styles.addButton}
+                    style={styles.circleBtn}
                 >
                     <PlusIcon size={24} color={Colors.primary[500]} />
                 </TouchableOpacity>
@@ -421,17 +421,18 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
-    backButton: {
-        padding: 8,
-        marginLeft: -8,
+    circleBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
         fontSize: 18,
         fontWeight: '700',
         color: '#111827',
-    },
-    addButton: {
-        padding: 8,
     },
     center: {
         flex: 1,

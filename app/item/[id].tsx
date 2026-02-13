@@ -257,15 +257,15 @@ const ItemDetail = () => {
             />
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ChevronLeftIcon size={20} color={Colors.text.primary} />
+                <TouchableOpacity onPress={() => router.back()} style={styles.circleBtn}>
+                    <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
-                    <TouchableOpacity onPress={handleShare} style={styles.iconButton}>
-                        <ShareIcon size={20} color={Colors.text.primary} />
+                    <TouchableOpacity onPress={handleShare} style={styles.circleBtn}>
+                        <ShareIcon size={22} color={Colors.text.primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => router.push('/cart')} style={[styles.iconButton, { marginLeft: 8 }]}>
-                        <ShoppingBagIcon size={20} color={Colors.text.primary} />
+                    <TouchableOpacity onPress={() => router.push('/cart')} style={[styles.circleBtn, { marginLeft: 8 }]}>
+                        <ShoppingBagIcon size={22} color={Colors.text.primary} />
                         {cartCount > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{cartCount}</Text>
@@ -512,15 +512,17 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         backgroundColor: '#fff',
     },
-    backButton: {
-        padding: 8,
+    circleBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerActions: {
         flexDirection: 'row',
         gap: 12,
-    },
-    iconButton: {
-        padding: 8,
     },
     content: {
         paddingHorizontal: 16,

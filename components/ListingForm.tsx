@@ -221,7 +221,7 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
                     {onClose && (
-                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                        <TouchableOpacity onPress={onClose} style={styles.circleBtn}>
                             <XMarkIcon size={24} color={Colors.text.primary} />
                         </TouchableOpacity>
                     )}
@@ -462,7 +462,14 @@ const styles = StyleSheet.create({
         width: 40,
         alignItems: 'flex-start',
     },
-    closeButton: { padding: 4 },
+    circleBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
     draftButton: { width: 60, alignItems: 'flex-end', paddingVertical: 6 },
     draftText: { fontSize: 15, color: Colors.primary[500], fontWeight: '600' },
