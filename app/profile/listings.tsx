@@ -209,12 +209,12 @@ const ListingsScreen = () => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Listings</Text>
                 <TouchableOpacity
-                    onPress={() => router.push({ pathname: '/(tabs)/sell', params: { from: 'listings' } } as any)}
+                    onPress={() => router.push('/profile/create-listing' as any)}
                     style={styles.addButton}
                 >
                     <PlusIcon size={24} color={Colors.primary[500]} />

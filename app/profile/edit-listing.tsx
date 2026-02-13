@@ -189,7 +189,7 @@ const EditListingScreen = () => {
                 {
                     text: 'OK',
                     onPress: () => {
-                        router.navigate(status === 'active' ? '/profile/listings' : '/profile/drafts' as any);
+                        router.back();
                     }
                 }
             ]);
@@ -237,8 +237,7 @@ const EditListingScreen = () => {
                 <View style={styles.header}>
                     <TouchableOpacity
                         onPress={() => {
-                            const isDraft = originalStatus === 'draft';
-                            router.navigate(isDraft ? '/profile/drafts' : '/profile/listings');
+                            router.back();
                         }}
                         style={styles.closeButton}
                     >
@@ -438,7 +437,7 @@ const EditListingScreen = () => {
                                             onPress: async () => {
                                                 try {
                                                     await deleteListing(draftId!);
-                                                    router.navigate(isDraft ? '/profile/drafts' : '/profile/listings');
+                                                    router.back();
                                                 } catch (error) {
                                                     console.error("Failed to delete listing:", error);
                                                 }

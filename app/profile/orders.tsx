@@ -191,7 +191,7 @@ const OrdersScreen = () => {
                 </Text>
                 <TouchableOpacity
                     style={styles.shopButton}
-                    onPress={() => router.push(isSelling ? '/sell' as any : '/browse' as any)}
+                    onPress={() => router.push(isSelling ? '/profile/create-listing' as any : '/browse' as any)}
                 >
                     <Text style={styles.shopButtonText}>
                         {isSelling ? "List an Item" : "Start Shopping"}

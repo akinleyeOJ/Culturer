@@ -122,7 +122,7 @@ const DraftsScreen = () => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Drafts</Text>
@@ -144,7 +144,7 @@ const DraftsScreen = () => {
                         <Text style={styles.emptySub}>Start a new listing and save it as a draft to see it here.</Text>
                         <TouchableOpacity
                             style={styles.createBtn}
-                            onPress={() => router.push('/sell')}
+                            onPress={() => router.push('/profile/create-listing' as any)}
                         >
                             <Text style={styles.createBtnText}>Create Listing</Text>
                         </TouchableOpacity>
