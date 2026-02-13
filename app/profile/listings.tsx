@@ -8,16 +8,20 @@ import {
     Image,
     ActivityIndicator,
     RefreshControl,
-    Alert
+    Alert,
+    ScrollView,
+    SectionList,
+    Modal,
+    TextInput as RNTextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeftIcon, XMarkIcon, PlusIcon, TagIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon, CheckCircleIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, XMarkIcon, PlusIcon, TagIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon, CheckCircleIcon, AdjustmentsHorizontalIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchUserActiveListings, deleteListing, createListing } from '../../lib/services/productService';
 import { CATEGORIES } from '../../constants/categories';
-import { SectionList, TextInput as RNTextInput } from 'react-native';
+
 
 const ListingsScreen = () => {
     const router = useRouter();
@@ -27,13 +31,23 @@ const ListingsScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+    const [selectedStatus, setSelectedStatus] = useState('all');
+    const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+    const STATUS_OPTIONS = [
+        { id: 'all', label: 'All Status' },
+        { id: 'active', label: 'Active' },
+        { id: 'sold', label: 'Sold' },
+        { id: 'out_of_stock', label: 'Out of Stock' },
+    ];
 
     const loadListings = async () => {
         if (!user) return;
         try {
             const data = await fetchUserActiveListings(user.id);
             setAllListings(data);
-            groupAndSetSections(data, searchQuery);
+            groupAndSetSections(data, searchQuery, selectedCategories, selectedStatus);
         } catch (error) {
             console.error('Error loading listings:', error);
         } finally {
@@ -42,24 +56,34 @@ const ListingsScreen = () => {
         }
     };
 
-    const groupAndSetSections = (data: any[], query: string) => {
-        const filtered = data.filter(item =>
+    const groupAndSetSections = (data: any[], query: string, categoryIds: string[], status: string) => {
+        let filtered = data.filter(item =>
             item.name.toLowerCase().includes(query.toLowerCase())
         );
+
+        if (categoryIds.length > 0) {
+            filtered = filtered.filter(item => categoryIds.includes(item.category));
+        }
+
+        if (status === 'active') {
+            filtered = filtered.filter(item => item.full_data.stock_quantity > 0);
+        } else if (status === 'sold' || status === 'out_of_stock') {
+            filtered = filtered.filter(item => item.full_data.stock_quantity === 0);
+        }
 
         // Group by category
         const groups: { [key: string]: any[] } = {};
         filtered.forEach(item => {
-            const categoryId = item.category || 'other';
-            if (!groups[categoryId]) groups[categoryId] = [];
-            groups[categoryId].push(item);
+            const catId = item.category || 'other';
+            if (!groups[catId]) groups[catId] = [];
+            groups[catId].push(item);
         });
 
         const sectionData = Object.keys(groups).map(catId => {
             const category = CATEGORIES.find(c => c.id === catId);
             return {
                 title: category ? category.name : catId.charAt(0).toUpperCase() + catId.slice(1),
-                data: groups[catId]
+                data: groups[catId].sort((a, b) => new Date(b.full_data.created_at).getTime() - new Date(a.full_data.created_at).getTime())
             };
         }).sort((a, b) => a.title.localeCompare(b.title));
 
@@ -67,8 +91,8 @@ const ListingsScreen = () => {
     };
 
     React.useEffect(() => {
-        groupAndSetSections(allListings, searchQuery);
-    }, [searchQuery, allListings]);
+        groupAndSetSections(allListings, searchQuery, selectedCategories, selectedStatus);
+    }, [searchQuery, allListings, selectedCategories, selectedStatus]);
 
     useFocusEffect(
         useCallback(() => {
@@ -222,20 +246,50 @@ const ListingsScreen = () => {
             </View>
 
             <View style={styles.searchContainer}>
-                <View style={styles.searchBar}>
-                    <MagnifyingGlassIcon size={20} color={Colors.neutral[400]} />
-                    <RNTextInput
-                        style={styles.searchInput}
-                        placeholder="Search your listings..."
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        placeholderTextColor={Colors.neutral[400]}
-                    />
-                    {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => setSearchQuery('')}>
-                            <Text style={{ color: Colors.primary[500], fontWeight: '600' }}>Clear</Text>
-                        </TouchableOpacity>
-                    )}
+                <View style={styles.searchRow}>
+                    <View style={styles.searchBar}>
+                        <MagnifyingGlassIcon size={20} color={Colors.neutral[400]} />
+                        <RNTextInput
+                            style={styles.searchInput}
+                            placeholder="Search your listings..."
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            placeholderTextColor={Colors.neutral[400]}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                <Text style={{ color: Colors.primary[500], fontWeight: '600' }}>Clear</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    <TouchableOpacity
+                        style={[styles.filterIconButton, selectedCategories.length > 0 && styles.filterIconButtonActive]}
+                        onPress={() => setShowCategoryModal(true)}
+                    >
+                        <AdjustmentsHorizontalIcon size={20} color={selectedCategories.length > 0 ? '#FFF' : Colors.text.primary} />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.filterBarContainer}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.filterBar}
+                    >
+                        <View style={styles.filterSection}>
+                            {STATUS_OPTIONS.map(status => (
+                                <TouchableOpacity
+                                    key={status.id}
+                                    style={[styles.filterChip, selectedStatus === status.id && styles.filterChipActive]}
+                                    onPress={() => setSelectedStatus(status.id)}
+                                >
+                                    <Text style={[styles.filterText, selectedStatus === status.id && styles.filterTextActive]}>
+                                        {status.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </ScrollView>
                 </View>
             </View>
 
@@ -253,10 +307,12 @@ const ListingsScreen = () => {
                     <View style={styles.emptyContainer}>
                         <TagIcon size={64} color={Colors.neutral[200]} />
                         <Text style={styles.emptyTitle}>
-                            {searchQuery ? 'No matching listings' : 'No active listings'}
+                            {searchQuery || selectedCategories.length > 0 || selectedStatus !== 'all' ? 'No matching listings' : 'No active listings'}
                         </Text>
                         <Text style={styles.emptySub}>
-                            {searchQuery ? `We couldn't find any listings matching "${searchQuery}"` : 'List an item to start selling on Culturar.'}
+                            {searchQuery || selectedCategories.length > 0 || selectedStatus !== 'all'
+                                ? "We couldn't find any listings matching your current filters"
+                                : 'List an item to start selling on Culturar.'}
                         </Text>
 
                         {!searchQuery && (
@@ -278,6 +334,82 @@ const ListingsScreen = () => {
                     </View>
                 }
             />
+
+            {/* Category Modal */}
+            <Modal
+                visible={showCategoryModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowCategoryModal(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowCategoryModal(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <View>
+                                <Text style={styles.modalTitle}>Categories</Text>
+                                <Text style={styles.modalSub}>Filter your listings by category</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
+                                <XMarkIcon size={24} color={Colors.text.primary} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView contentContainerStyle={styles.modalList}>
+                            <TouchableOpacity
+                                style={[styles.modalItem, selectedCategories.length === 0 && styles.modalItemActive]}
+                                onPress={() => {
+                                    setSelectedCategories([]);
+                                }}
+                            >
+                                <View style={styles.modalItemContent}>
+                                    <Text style={[styles.modalItemText, selectedCategories.length === 0 && styles.modalItemActiveText]}>
+                                        All Categories
+                                    </Text>
+                                    {selectedCategories.length === 0 && (
+                                        <CheckCircleIcon size={20} color={Colors.primary[600]} />
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+                            {CATEGORIES.map(item => {
+                                const isSelected = selectedCategories.includes(item.id);
+                                return (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        style={[styles.modalItem, isSelected && styles.modalItemActive]}
+                                        onPress={() => {
+                                            if (isSelected) {
+                                                setSelectedCategories(prev => prev.filter(id => id !== item.id));
+                                            } else {
+                                                setSelectedCategories(prev => [...prev, item.id]);
+                                            }
+                                        }}
+                                    >
+                                        <View style={styles.modalItemContent}>
+                                            <Text style={[styles.modalItemText, isSelected && styles.modalItemActiveText]}>
+                                                {item.name}
+                                            </Text>
+                                            {isSelected && (
+                                                <CheckCircleIcon size={20} color={Colors.primary[600]} />
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                        <View style={styles.modalFooter}>
+                            <TouchableOpacity
+                                style={styles.applyButton}
+                                onPress={() => setShowCategoryModal(false)}
+                            >
+                                <Text style={styles.applyButtonText}>Apply Filters</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -452,6 +584,7 @@ const styles = StyleSheet.create({
         borderBottomColor: '#F3F4F6',
     },
     searchBar: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#F3F4F6',
@@ -482,6 +615,142 @@ const styles = StyleSheet.create({
         color: Colors.neutral[700],
         fontSize: 16,
         fontWeight: '600',
+    },
+    filterBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingRight: 24,
+    },
+    filterBarContainer: {
+        width: '100%',
+    },
+    filterSection: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    divider: {
+        width: 1,
+        height: 24,
+        backgroundColor: '#E5E7EB',
+        marginHorizontal: 12,
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    filterChipActive: {
+        backgroundColor: Colors.primary[500],
+        borderColor: Colors.primary[500],
+    },
+    filterText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6B7280',
+    },
+    filterTextActive: {
+        color: '#FFF',
+    },
+    searchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    filterIconButton: {
+        width: 40,
+        height: 40,
+        backgroundColor: '#F3F4F6',
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    filterIconButtonActive: {
+        backgroundColor: Colors.primary[500],
+        borderColor: Colors.primary[500],
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: '#FFF',
+        borderRadius: 24,
+        width: '100%',
+        maxHeight: '70%',
+        paddingBottom: 20,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    modalSub: {
+        fontSize: 13,
+        color: '#6B7280',
+        marginTop: 2,
+    },
+    modalList: {
+        padding: 16,
+    },
+    modalItem: {
+        paddingVertical: 16,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        marginBottom: 4,
+    },
+    modalItemActive: {
+        backgroundColor: Colors.primary[50],
+    },
+    modalItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    modalItemText: {
+        fontSize: 16,
+        color: '#374151',
+    },
+    modalItemActiveText: {
+        color: Colors.primary[700],
+        fontWeight: '700',
+    },
+    modalFooter: {
+        padding: 20,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+    },
+    applyButton: {
+        backgroundColor: Colors.primary[500],
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    applyButtonText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '700',
     },
 });
 
