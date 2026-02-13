@@ -26,8 +26,10 @@ import {
     ReceiptPercentIcon,
     StarIcon,
     LanguageIcon,
+    ChartBarIcon,
     InformationCircleIcon,
-    MapPinIcon
+    MapPinIcon,
+    TagIcon
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
@@ -226,13 +228,19 @@ const SellerHubScreen = () => {
                     />
                 </MenuSection>
 
-                <MenuSection title="Selling tools">
+                <MenuSection title="Selling tools" subtitle="Manage listings, pricing, and how you get paid.">
                     <MenuItem
                         icon={TagIcon}
                         title="Listings manager"
                         subtitle="Edit prices, availability, and cultural tags"
                         badge={`${stats.activeItems} active · ${stats.totalItems} total`}
                         onPress={() => router.push('/profile/listings')}
+                    />
+                    <MenuItem
+                        icon={ChartBarIcon}
+                        title="Listings analytics"
+                        subtitle="Track views, saves and conversion rates"
+                        onPress={() => { }}
                     />
                     <MenuItem
                         icon={BanknotesIcon}
@@ -332,6 +340,7 @@ const styles = StyleSheet.create({
     },
     profileOverview: {
         padding: 16,
+        paddingBottom: 24,
         backgroundColor: '#FFF',
     },
     profileRow: {
@@ -384,7 +393,9 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#9CA3AF',
         textAlign: 'right',
-        marginTop: 4,
+        position: 'absolute',
+        bottom: 8,
+        right: 16,
     },
     statsRow: {
         flexDirection: 'row',
@@ -394,7 +405,7 @@ const styles = StyleSheet.create({
     },
     statCard: {
         flex: 1,
-        backgroundColor: '#EFF6FF',
+        backgroundColor: Colors.primary[50],
         borderRadius: 8,
         padding: 12,
         alignItems: 'center',
@@ -402,12 +413,12 @@ const styles = StyleSheet.create({
     statValue: {
         fontSize: 18,
         fontWeight: '800',
-        color: '#1E3A8A',
+        color: Colors.primary[700],
         marginBottom: 2,
     },
     statLabel: {
         fontSize: 10,
-        color: '#60A5FA',
+        color: Colors.primary[400],
         textAlign: 'center',
     },
     section: {
@@ -469,7 +480,7 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
     badge: {
-        backgroundColor: '#EEF2FF',
+        backgroundColor: Colors.primary[50],
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
@@ -478,7 +489,7 @@ const styles = StyleSheet.create({
     badgeText: {
         fontSize: 10,
         fontWeight: '600',
-        color: '#4F46E5',
+        color: Colors.primary[600],
     },
     previewCard: {
         margin: 16,
@@ -514,7 +525,7 @@ const styles = StyleSheet.create({
         borderTopColor: '#F3F4F6',
     },
     viewShopBtn: {
-        flex: 1,
+        flex: 1.2,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -523,20 +534,21 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
         borderColor: '#E5E7EB',
-        gap: 8,
+        gap: 4,
+        paddingHorizontal: 4,
     },
     addListingBtn: {
-        flex: 1.5,
+        flex: 1.3,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#4F46E5',
+        backgroundColor: Colors.primary[500],
         height: 52,
         borderRadius: 12,
         gap: 8,
     },
     btnText: {
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '700',
     },
 });
