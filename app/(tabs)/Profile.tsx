@@ -28,7 +28,8 @@ import {
   QuestionMarkCircleIcon,
   DocumentTextIcon,
   ChevronRightIcon,
-  ArrowLeftOnRectangleIcon
+  ArrowLeftOnRectangleIcon,
+  BuildingStorefrontIcon
 } from "react-native-heroicons/outline";
 import { supabase } from "../../lib/supabase";
 
@@ -116,16 +117,19 @@ const Profile = () => {
     }
   };
 
-  const MenuItem = ({ icon: Icon, label, onPress, showBorder = true }: any) => (
+  const MenuItem = ({ icon: Icon, label, subtitle, onPress, showBorder = true }: any) => (
     <TouchableOpacity
       style={[styles.menuItem, !showBorder && { borderBottomWidth: 0 }]}
       onPress={onPress}
     >
-      <View style={styles.menuIconContainer}>
-        <Icon size={24} color={Colors.text.primary} />
+      <View style={styles.menuIconBox}>
+        <Icon size={22} color={Colors.text.primary} />
       </View>
-      <Text style={styles.menuText}>{label}</Text>
-      <ChevronRightIcon size={20} color={Colors.neutral[400]} />
+      <View style={styles.menuTextContent}>
+        <Text style={styles.menuLabel}>{label}</Text>
+        {subtitle && <Text style={styles.menuSubtitle} numberOfLines={1}>{subtitle}</Text>}
+      </View>
+      <ChevronRightIcon size={18} color={Colors.neutral[400]} />
     </TouchableOpacity>
   );
 
@@ -213,22 +217,38 @@ const Profile = () => {
           <MenuItem
             icon={ShoppingBagIcon}
             label="Order history"
+            subtitle="View purchases, receipts and returns"
             onPress={() => router.push('/profile/orders' as any)}
+          />
+          <MenuItem
+            icon={HeartIcon}
+            label="Wishlists"
+            subtitle="Saved items and cultural collections"
+            onPress={() => router.push('/wishlist' as any)}
+            showBorder={false}
+          />
+        </View>
+
+        {/* Seller Section */}
+        <View style={styles.section}>
+          <SectionHeader title="Seller profile" />
+          <MenuItem
+            icon={BuildingStorefrontIcon}
+            label="Seller profile"
+            subtitle="Manage your public shop page and selling details"
+            onPress={() => router.push('/profile/seller-hub')}
           />
           <MenuItem
             icon={TagIcon}
             label="My listings"
+            subtitle="Manage prices, stock and active items"
             onPress={() => router.push('/profile/listings' as any)}
           />
           <MenuItem
             icon={DocumentTextIcon}
             label="My drafts"
+            subtitle="Resume and publish saved listings"
             onPress={() => router.push('/profile/drafts' as any)}
-          />
-          <MenuItem
-            icon={HeartIcon}
-            label="Wishlists"
-            onPress={() => router.push('/wishlist' as any)}
             showBorder={false}
           />
         </View>
@@ -239,21 +259,25 @@ const Profile = () => {
           <MenuItem
             icon={GlobeAltIcon}
             label="Culture & Interests"
+            subtitle="Personalize your discovery experience"
             onPress={() => router.push('/profile/settings' as any)}
           />
           <MenuItem
             icon={MapPinIcon}
             label="Location & Shipping"
+            subtitle="Default addresses and delivery methods"
             onPress={() => router.push('/profile/settings' as any)}
           />
           <MenuItem
             icon={BellIcon}
             label="Notifications"
+            subtitle="Push messages and email alerts"
             onPress={() => router.push('/profile/settings' as any)}
           />
           <MenuItem
             icon={CreditCardIcon}
             label="Payments"
+            subtitle="Manage your saved payment methods"
             onPress={() => router.push('/profile/settings' as any)}
             showBorder={false}
           />
@@ -265,12 +289,15 @@ const Profile = () => {
           <MenuItem
             icon={QuestionMarkCircleIcon}
             label="Help Center"
+            subtitle="FAQs and customer support"
             onPress={() => { }}
           />
           <MenuItem
             icon={DocumentTextIcon}
             label="Terms & Privacy"
+            subtitle="Rules and safety information"
             onPress={() => { }}
+            showBorder={false}
           />
         </View>
 
@@ -403,20 +430,32 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
-  menuIconContainer: {
-    width: 24,
-    marginRight: 16,
+  menuIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC', // Neutral greyish background from design
+    justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 16,
   },
-  menuText: {
+  menuTextContent: {
     flex: 1,
+  },
+  menuLabel: {
     fontSize: 16,
-    color: '#374151',
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  menuSubtitle: {
+    fontSize: 13,
+    color: '#9CA3AF',
   },
   version: {
     textAlign: 'center',
