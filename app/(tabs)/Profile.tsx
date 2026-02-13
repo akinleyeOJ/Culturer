@@ -138,7 +138,7 @@ const Profile = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerBar}>
         <View style={{ width: 24 }} />
         <Text style={styles.headerTitle}>Profile</Text>
