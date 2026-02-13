@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -27,7 +27,6 @@ const ListingsScreen = () => {
     const router = useRouter();
     const { user } = useAuth();
     const [allListings, setAllListings] = useState<any[]>([]);
-    const [sections, setSections] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -47,7 +46,6 @@ const ListingsScreen = () => {
         try {
             const data = await fetchUserActiveListings(user.id);
             setAllListings(data);
-            groupAndSetSections(data, searchQuery, selectedCategories, selectedStatus);
         } catch (error) {
             console.error('Error loading listings:', error);
         } finally {
@@ -56,18 +54,18 @@ const ListingsScreen = () => {
         }
     };
 
-    const groupAndSetSections = (data: any[], query: string, categoryIds: string[], status: string) => {
-        let filtered = data.filter(item =>
-            item.name.toLowerCase().includes(query.toLowerCase())
+    const sections = useMemo(() => {
+        let filtered = allListings.filter(item =>
+            item.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
 
-        if (categoryIds.length > 0) {
-            filtered = filtered.filter(item => categoryIds.includes(item.category));
+        if (selectedCategories.length > 0) {
+            filtered = filtered.filter(item => selectedCategories.includes(item.category));
         }
 
-        if (status === 'active') {
+        if (selectedStatus === 'active') {
             filtered = filtered.filter(item => item.full_data.stock_quantity > 0);
-        } else if (status === 'sold' || status === 'out_of_stock') {
+        } else if (selectedStatus === 'sold' || selectedStatus === 'out_of_stock') {
             filtered = filtered.filter(item => item.full_data.stock_quantity === 0);
         }
 
@@ -79,20 +77,14 @@ const ListingsScreen = () => {
             groups[catId].push(item);
         });
 
-        const sectionData = Object.keys(groups).map(catId => {
+        return Object.keys(groups).map(catId => {
             const category = CATEGORIES.find(c => c.id === catId);
             return {
                 title: category ? category.name : catId.charAt(0).toUpperCase() + catId.slice(1),
                 data: groups[catId].sort((a, b) => new Date(b.full_data.created_at).getTime() - new Date(a.full_data.created_at).getTime())
             };
         }).sort((a, b) => a.title.localeCompare(b.title));
-
-        setSections(sectionData);
-    };
-
-    React.useEffect(() => {
-        groupAndSetSections(allListings, searchQuery, selectedCategories, selectedStatus);
-    }, [searchQuery, allListings, selectedCategories, selectedStatus]);
+    }, [allListings, searchQuery, selectedCategories, selectedStatus]);
 
     useFocusEffect(
         useCallback(() => {
@@ -629,12 +621,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 8,
     },
-    divider: {
-        width: 1,
-        height: 24,
-        backgroundColor: '#E5E7EB',
-        marginHorizontal: 12,
-    },
+
     filterChip: {
         paddingHorizontal: 16,
         paddingVertical: 8,
