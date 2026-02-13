@@ -51,8 +51,6 @@ export const ImageZoomModal = ({
         }
     }, [visible, initialIndex]);
 
-    if (!images || images.length === 0) return null;
-
     const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
         const contentOffset = event.nativeEvent.contentOffset.x;
         const index = Math.round(contentOffset / SCREEN_WIDTH);
@@ -65,16 +63,16 @@ export const ImageZoomModal = ({
     const dismissGesture = Gesture.Pan()
         .activeOffsetY([-10, 10])
         .onUpdate((event) => {
-            translateY.value = event.translationY;
-            // Reduce opacity as user swipes
-            opacity.value = Math.max(0.3, 1 - Math.abs(event.translationY) / 500);
+            // Only allow dismissal if not zoomed
+            if (scrollEnabled) {
+                translateY.value = event.translationY;
+                opacity.value = Math.max(0.3, 1 - Math.abs(event.translationY) / 500);
+            }
         })
         .onEnd((event) => {
-            if (Math.abs(event.translationY) > 100 || Math.abs(event.velocityY) > 500) {
-                // Close the modal
+            if (scrollEnabled && (Math.abs(event.translationY) > 100 || Math.abs(event.velocityY) > 500)) {
                 runOnJS(onClose)();
             } else {
-                // Snap back
                 translateY.value = withSpring(0);
                 opacity.value = withSpring(1);
             }
@@ -83,7 +81,10 @@ export const ImageZoomModal = ({
     const containerStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: translateY.value }],
         opacity: opacity.value,
+        flex: 1,
     }));
+
+    if (!images || images.length === 0) return null;
 
     return (
         <Modal
@@ -93,7 +94,7 @@ export const ImageZoomModal = ({
             onRequestClose={onClose}
         >
             <View style={styles.container}>
-                {/* Header with Close Button and Page Indicator */}
+                {/* Header stays fixed and outside the dismissal view if we want it to stay put */}
                 <View style={styles.header}>
                     <View style={styles.pageIndicator}>
                         <Text style={styles.pageText}>
@@ -110,7 +111,7 @@ export const ImageZoomModal = ({
                 </View>
 
                 <GestureDetector gesture={dismissGesture}>
-                    <Animated.View style={[{ flex: 1 }, containerStyle]}>
+                    <Animated.View style={containerStyle}>
                         <ScrollView
                             ref={scrollRef}
                             horizontal
@@ -154,12 +155,20 @@ const ZoomableImageComponent = ({ imageUri, onZoomChange }: ZoomableImageProps) 
         onZoomChange(enabled);
     };
 
+    // Panning gesture: IMPORTANT - manual activation to only trigger when zoomed
     const panGesture = Gesture.Pan()
-        .onUpdate((event) => {
-            if (scale.value > 1.05) {
-                translateX.value = savedTranslateX.value + event.translationX;
-                translateY.value = savedTranslateY.value + event.translationY;
+        .manualActivation(true)
+        .onTouchesMove((evt, state) => {
+            // Only activate pan if the image is actually zoomed
+            if (scale.value > 1.1) {
+                state.activate();
+            } else {
+                state.fail();
             }
+        })
+        .onUpdate((event) => {
+            translateX.value = savedTranslateX.value + event.translationX;
+            translateY.value = savedTranslateY.value + event.translationY;
         })
         .onEnd(() => {
             savedTranslateX.value = translateX.value;
@@ -171,7 +180,7 @@ const ZoomableImageComponent = ({ imageUri, onZoomChange }: ZoomableImageProps) 
             scale.value = savedScale.value * event.scale;
         })
         .onEnd(() => {
-            if (scale.value < 1) {
+            if (scale.value < 1.05) {
                 scale.value = withSpring(1);
                 savedScale.value = 1;
                 translateX.value = withSpring(0);
@@ -196,7 +205,7 @@ const ZoomableImageComponent = ({ imageUri, onZoomChange }: ZoomableImageProps) 
     const doubleTapGesture = Gesture.Tap()
         .numberOfTaps(2)
         .onEnd(() => {
-            if (scale.value > 1) {
+            if (scale.value > 1.05) {
                 scale.value = withSpring(1);
                 savedScale.value = 1;
                 translateX.value = withSpring(0);
@@ -211,7 +220,7 @@ const ZoomableImageComponent = ({ imageUri, onZoomChange }: ZoomableImageProps) 
             }
         });
 
-    // Combine gestures: pan is now active only when zoomed
+    // Combine gestures: Simultaneous allows both pinching and panning when zoomed
     const composedGesture = Gesture.Race(
         doubleTapGesture,
         Gesture.Simultaneous(pinchGesture, panGesture)
