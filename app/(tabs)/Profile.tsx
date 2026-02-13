@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFF9F5', // Light orange background from design
+    backgroundColor: '#FFF9F5',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,

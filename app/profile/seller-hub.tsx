@@ -425,14 +425,13 @@ const styles = StyleSheet.create({
     },
     statsContainer: {
         flexDirection: 'row',
-        backgroundColor: '#FFF',
+        backgroundColor: '#FFF9F5',
         marginHorizontal: 16,
         marginBottom: 24,
         paddingVertical: 16,
         borderRadius: 20,
-        borderWidth: 1.5,
-        borderColor: '#FFECCF',
-        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#FED7AA',
     },
     statItem: {
         flex: 1,
@@ -440,12 +439,12 @@ const styles = StyleSheet.create({
     },
     statDivider: {
         width: 1,
-        height: '40%',
-        backgroundColor: '#FFECCF',
+        backgroundColor: '#FED7AA',
+        marginHorizontal: 8,
     },
     statValue: {
         fontSize: 18,
-        fontWeight: '900',
+        fontWeight: '800',
         color: '#111827',
         marginBottom: 2,
     },
