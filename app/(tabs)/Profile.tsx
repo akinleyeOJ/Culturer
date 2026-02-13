@@ -27,7 +27,8 @@ import {
   CreditCardIcon,
   QuestionMarkCircleIcon,
   DocumentTextIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  ArrowLeftOnRectangleIcon
 } from "react-native-heroicons/outline";
 import { supabase } from "../../lib/supabase";
 
@@ -39,7 +40,7 @@ interface UserStats {
 
 const Profile = () => {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [stats, setStats] = useState<UserStats>({ listings: 0, orders: 0, rating: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [memberSince, setMemberSince] = useState("2024");
@@ -103,6 +104,15 @@ const Profile = () => {
       });
     } catch (error) {
       console.log(error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/auth' as any);
+    } catch (error) {
+      console.error("Error signing out:", error);
     }
   };
 
@@ -261,9 +271,16 @@ const Profile = () => {
             icon={DocumentTextIcon}
             label="Terms & Privacy"
             onPress={() => { }}
-            showBorder={false}
           />
         </View>
+
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+          <ArrowLeftOnRectangleIcon size={24} color={Colors.danger[600]} />
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
 
         <Text style={styles.version}>Version 1.0.0 (Build 2026.1)</Text>
       </ScrollView>
@@ -290,7 +307,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 0,
   },
   profileCard: {
     backgroundColor: '#FFF',
@@ -406,6 +423,24 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontSize: 12,
     marginBottom: 20,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginBottom: 24,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.danger[100],
+    gap: 8,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.danger[600],
   }
 });
 
