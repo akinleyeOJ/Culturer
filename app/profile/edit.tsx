@@ -17,9 +17,10 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ChevronLeftIcon, CameraIcon, CheckIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon } from 'react-native-heroicons/outline';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import { Colors as ThemeColors } from '../../constants/color';
 
 interface Profile {
     id: string;
@@ -28,6 +29,8 @@ interface Profile {
     bio: string | null;
     location: string | null;
     avatar_url: string | null;
+    cover_url: string | null;
+    cultures: string[] | null;
     updated_at?: string;
 }
 
@@ -44,6 +47,9 @@ const EditProfileScreen = () => {
     const [location, setLocation] = useState('');
     const [bio, setBio] = useState('');
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    const [coverUrl, setCoverUrl] = useState<string | null>(null);
+    const [cultures, setCultures] = useState<string[]>([]);
+    const [newCulture, setNewCulture] = useState('');
 
     // Initial Data Loading
     useEffect(() => {
@@ -69,8 +75,10 @@ const EditProfileScreen = () => {
                 setFullName(profile.full_name || user?.user_metadata?.full_name || '');
                 setUsername(profile.username || '');
                 setAvatarUrl(profile.avatar_url || user?.user_metadata?.avatar_url || '');
+                setCoverUrl(profile.cover_url || '');
                 setBio(profile.bio || '');
                 setLocation(profile.location || user?.user_metadata?.location || '');
+                setCultures(profile.cultures || []);
             } else {
                 // Fallback to Auth Metadata if profile row missing/error
                 setFullName(user?.user_metadata?.full_name || '');
@@ -83,33 +91,33 @@ const EditProfileScreen = () => {
         }
     };
 
-    const handlePickImage = async () => {
+    const handlePickImage = async (type: 'avatar' | 'cover') => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
-                aspect: [1, 1],
+                aspect: type === 'avatar' ? [1, 1] : [16, 9],
                 quality: 0.5,
                 base64: true,
             });
 
             if (!result.canceled && result.assets[0].base64) {
-                uploadAvatar(result.assets[0].base64);
+                uploadImage(result.assets[0].base64, type);
             }
         } catch (error) {
             Alert.alert('Error', 'Failed to pick image');
         }
     };
 
-    const uploadAvatar = async (base64Image: string) => {
+    const uploadImage = async (base64Image: string, type: 'avatar' | 'cover') => {
         if (!user) return;
         try {
             setSaving(true);
-            const fileName = `${user.id}-${Date.now()}.jpg`;
-            const filePath = `avatars/${fileName}`;
+            const fileName = `${user.id}-${type}-${Date.now()}.jpg`;
+            const filePath = `${type === 'avatar' ? 'avatars' : 'covers'}/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
-                .from('avatars') // Ensure this bucket exists
+                .from(type === 'avatar' ? 'avatars' : 'covers')
                 .upload(filePath, decode(base64Image), {
                     contentType: 'image/jpeg',
                     upsert: true,
@@ -117,12 +125,16 @@ const EditProfileScreen = () => {
 
             if (uploadError) throw uploadError;
 
-            const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-            setAvatarUrl(data.publicUrl);
+            const { data } = supabase.storage.from(type === 'avatar' ? 'avatars' : 'covers').getPublicUrl(filePath);
+            if (type === 'avatar') {
+                setAvatarUrl(data.publicUrl);
+            } else {
+                setCoverUrl(data.publicUrl);
+            }
             setSaving(false);
-        } catch (error) {
-            console.error('Error uploading avatar:', error);
-            Alert.alert('Error', 'Failed to upload image. Please try again.');
+        } catch (error: any) {
+            console.error(`Error uploading ${type}:`, error);
+            Alert.alert('Error', `Failed to upload ${type}. ${error.message}`);
             setSaving(false);
         }
     };
@@ -145,6 +157,8 @@ const EditProfileScreen = () => {
                 bio,
                 location,
                 avatar_url: avatarUrl,
+                cover_url: coverUrl,
+                cultures: cultures,
                 updated_at: new Date().toISOString(),
             };
 
@@ -159,6 +173,7 @@ const EditProfileScreen = () => {
                 data: {
                     full_name: fullName,
                     avatar_url: avatarUrl,
+                    cover_url: coverUrl,
                     location: location,
                 }
             });
@@ -201,71 +216,131 @@ const EditProfileScreen = () => {
                 </View>
 
                 <ScrollView contentContainerStyle={styles.content}>
+                    {/* Cover Section */}
+                    <View style={styles.coverSection}>
+                        <Image
+                            source={{ uri: coverUrl || 'https://via.placeholder.com/800x450' }}
+                            style={styles.coverImage}
+                        />
+                        <TouchableOpacity
+                            style={styles.editCoverBtn}
+                            onPress={() => handlePickImage('cover')}
+                        >
+                            <CameraIcon size={20} color="#FFF" />
+                            <Text style={styles.editCoverText}>Edit cover</Text>
+                        </TouchableOpacity>
+                    </View>
+
                     {/* Avatar Section */}
-                    <View style={styles.avatarSection}>
+                    <View style={styles.avatarRow}>
                         <View style={styles.avatarContainer}>
                             <Image
                                 source={{ uri: avatarUrl || 'https://via.placeholder.com/150' }}
                                 style={styles.avatar}
                             />
-                            <TouchableOpacity style={styles.editBadge} onPress={handlePickImage}>
+                            <TouchableOpacity style={styles.editBadge} onPress={() => handlePickImage('avatar')}>
                                 <CameraIcon size={16} color="#FFF" />
                             </TouchableOpacity>
                         </View>
-                        <Text style={styles.avatarHelperText}>{username ? `@${username}` : 'Set a username'}</Text>
-                    </View>
-
-                    {/* Basic Info */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Basic Info</Text>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Full Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={fullName}
-                                onChangeText={setFullName}
-                                placeholder="Enter your full name"
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Username</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={username}
-                                onChangeText={setUsername}
-                                placeholder="@username"
-                                autoCapitalize="none"
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Location</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={location}
-                                onChangeText={setLocation}
-                                placeholder="City, Country"
-                            />
+                        <View style={styles.avatarMain}>
+                            <Text style={styles.usernameId}>{username ? `@${username}` : 'Set a username'}</Text>
                         </View>
                     </View>
 
-                    {/* About */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>About</Text>
+                    <View style={styles.formContainer}>
+                        {/* Basic Info */}
+                        <View style={styles.section}>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Name</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={fullName}
+                                    onChangeText={setFullName}
+                                    placeholder="Your name or shop name"
+                                />
+                            </View>
 
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Bio</Text>
-                            <TextInput
-                                style={[styles.input, styles.textArea]}
-                                value={bio}
-                                onChangeText={setBio}
-                                placeholder="Tell us about yourself..."
-                                multiline
-                                numberOfLines={4}
-                                textAlignVertical="top"
-                            />
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Username</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={username}
+                                    onChangeText={setUsername}
+                                    placeholder="@username"
+                                    autoCapitalize="none"
+                                />
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Bio</Text>
+                                <View style={styles.textAreaContainer}>
+                                    <TextInput
+                                        style={[styles.input, styles.textArea]}
+                                        value={bio}
+                                        onChangeText={setBio}
+                                        placeholder="Tell buyers about yourself, your shop, or cultural focus..."
+                                        multiline
+                                        maxLength={150}
+                                        numberOfLines={4}
+                                        textAlignVertical="top"
+                                    />
+                                    <Text style={styles.charCount}>{bio.length}/150</Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Location</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={location}
+                                    onChangeText={setLocation}
+                                    placeholder="City, Country"
+                                />
+                            </View>
+                        </View>
+
+                        {/* Cultures Represented */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Cultures Represented</Text>
+                            <Text style={styles.sectionHelper}>Helps buyers find you by cultural heritage</Text>
+
+                            <View style={styles.culturesList}>
+                                {cultures.map((culture, index) => (
+                                    <View key={index} style={styles.cultureTag}>
+                                        <Text style={styles.cultureTagText}>{culture}</Text>
+                                        <TouchableOpacity
+                                            onPress={() => setCultures(cultures.filter((_, i) => i !== index))}
+                                            style={styles.removeCulture}
+                                        >
+                                            <XMarkIcon size={14} color="#4F46E5" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.addCultureBtn}
+                                onPress={() => {
+                                    Alert.prompt(
+                                        "Add Culture",
+                                        "Enter a culture you represent",
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Add",
+                                                onPress: (val) => {
+                                                    if (val && !cultures.includes(val)) {
+                                                        setCultures([...cultures, val]);
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    );
+                                }}
+                            >
+                                <PlusIcon size={18} color="#9CA3AF" />
+                                <Text style={styles.addCultureText}>Add culture</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
 
@@ -308,27 +383,57 @@ const styles = StyleSheet.create({
         color: '#111827',
     },
     content: {
-        padding: 24,
+        flexGrow: 1,
     },
-    avatarSection: {
+    coverSection: {
+        height: 180,
+        backgroundColor: '#F3F4F6',
+        position: 'relative',
+    },
+    coverImage: {
+        width: '100%',
+        height: '100%',
+    },
+    editCoverBtn: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 32,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        gap: 6,
+    },
+    editCoverText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    avatarRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        paddingHorizontal: 16,
+        marginTop: -30,
+        marginBottom: 20,
     },
     avatarContainer: {
         position: 'relative',
-        marginBottom: 12,
     },
     avatar: {
         width: 100,
         height: 100,
         borderRadius: 50,
-        backgroundColor: Colors.primary[100],
+        backgroundColor: '#F3F4F6',
+        borderWidth: 4,
+        borderColor: '#FFF',
     },
     editBadge: {
         position: 'absolute',
         bottom: 0,
         right: 0,
-        backgroundColor: Colors.primary[500],
+        backgroundColor: ThemeColors.primary[500],
         width: 32,
         height: 32,
         borderRadius: 16,
@@ -337,26 +442,38 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#FFF',
     },
-    avatarHelperText: {
+    avatarMain: {
+        marginLeft: 12,
+        marginBottom: 10,
+    },
+    usernameId: {
         fontSize: 16,
-        fontWeight: '600',
-        color: '#6B7280',
+        fontWeight: '700',
+        color: '#111827',
+    },
+    formContainer: {
+        padding: 16,
     },
     section: {
-        marginBottom: 32,
+        marginBottom: 24,
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: '700',
+        fontWeight: '800',
         color: '#111827',
+        marginBottom: 8,
+    },
+    sectionHelper: {
+        fontSize: 14,
+        color: '#6B7280',
         marginBottom: 16,
     },
     inputGroup: {
-        marginBottom: 16,
+        marginBottom: 20,
     },
     label: {
         fontSize: 14,
-        fontWeight: '600',
+        fontWeight: '700',
         color: '#374151',
         marginBottom: 8,
     },
@@ -370,8 +487,58 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#111827',
     },
+    textAreaContainer: {
+        position: 'relative',
+    },
     textArea: {
         minHeight: 100,
+        paddingBottom: 24,
+    },
+    charCount: {
+        position: 'absolute',
+        bottom: 12,
+        right: 12,
+        fontSize: 12,
+        color: '#9CA3AF',
+    },
+    culturesList: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 12,
+    },
+    cultureTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#EEF2FF',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        gap: 6,
+    },
+    cultureTagText: {
+        color: '#4F46E5',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    removeCulture: {
+        padding: 2,
+    },
+    addCultureBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderStyle: 'dashed',
+        gap: 8,
+    },
+    addCultureText: {
+        color: '#6B7280',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
 
