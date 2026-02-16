@@ -18,7 +18,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon, UserCircleIcon, LinkIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon, UserCircleIcon } from 'react-native-heroicons/outline';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { Colors as ThemeColors } from '../../constants/color';
@@ -35,7 +35,6 @@ interface Profile {
     cultures: string[] | null;
     instagram_handle: string | null;
     facebook_handle: string | null;
-    website_url: string | null;
     updated_at?: string;
 }
 
@@ -59,7 +58,6 @@ const EditProfileScreen = () => {
     // Socials
     const [instagramHandle, setInstagramHandle] = useState('');
     const [facebookHandle, setFacebookHandle] = useState('');
-    const [websiteUrl, setWebsiteUrl] = useState('');
 
     // Username Check
     const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
@@ -99,7 +97,6 @@ const EditProfileScreen = () => {
                 setCultures(profile.cultures || []);
                 setInstagramHandle(profile.instagram_handle || '');
                 setFacebookHandle(profile.facebook_handle || '');
-                setWebsiteUrl(profile.website_url || '');
 
                 setInitialData({
                     fullName: profile.full_name || user?.user_metadata?.full_name || '',
@@ -111,7 +108,6 @@ const EditProfileScreen = () => {
                     coverUrl: profile.cover_url || '',
                     instagramHandle: profile.instagram_handle || '',
                     facebookHandle: profile.facebook_handle || '',
-                    websiteUrl: profile.website_url || '',
                 });
             } else {
                 // Fallback to Auth Metadata if profile row missing/error
@@ -175,7 +171,6 @@ const EditProfileScreen = () => {
             coverUrl !== initialData.coverUrl ||
             instagramHandle !== initialData.instagramHandle ||
             facebookHandle !== initialData.facebookHandle ||
-            websiteUrl !== initialData.websiteUrl ||
             JSON.stringify(cultures) !== JSON.stringify(initialData.cultures)
         );
     };
@@ -205,7 +200,7 @@ const EditProfileScreen = () => {
         });
 
         return unsubscribe;
-    }, [navigation, fullName, username, bio, location, avatarUrl, coverUrl, cultures, instagramHandle, websiteUrl, initialData, saving]);
+    }, [navigation, fullName, username, bio, location, avatarUrl, coverUrl, cultures, instagramHandle, facebookHandle, initialData, saving]);
 
     const handlePickImage = async (type: 'avatar' | 'cover') => {
         try {
@@ -316,7 +311,6 @@ const EditProfileScreen = () => {
                 cultures: cultures,
                 instagram_handle: instagramHandle,
                 facebook_handle: facebookHandle,
-                website_url: websiteUrl,
                 updated_at: new Date().toISOString(),
             };
 
@@ -325,6 +319,19 @@ const EditProfileScreen = () => {
                 .upsert(updates as any);
 
             if (error) throw error;
+
+            // Sync initialData so hasChanges() returns false for navigation
+            setInitialData({
+                fullName,
+                username,
+                bio,
+                location,
+                cultures: [...cultures],
+                avatarUrl,
+                coverUrl,
+                instagramHandle,
+                facebookHandle,
+            });
 
             // 2. Sync with Auth Metadata (Optional but good for fallback)
             await supabase.auth.updateUser({
@@ -555,7 +562,7 @@ const EditProfileScreen = () => {
                                         <Text style={styles.prefix}>@</Text>
                                     </View>
                                     <TextInput
-                                        style={[styles.input, { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 }]}
+                                        style={styles.plainInput}
                                         value={instagramHandle}
                                         onChangeText={setInstagramHandle}
                                         placeholder="username"
@@ -571,7 +578,7 @@ const EditProfileScreen = () => {
                                         <Text style={styles.prefixText}>facebook.com/</Text>
                                     </View>
                                     <TextInput
-                                        style={[styles.input, { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 }]}
+                                        style={styles.plainInput}
                                         value={facebookHandle}
                                         onChangeText={setFacebookHandle}
                                         placeholder="username"
@@ -580,20 +587,6 @@ const EditProfileScreen = () => {
                                 </View>
                             </View>
 
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Website</Text>
-                                <View style={styles.inputWithLeftIcon}>
-                                    <LinkIcon size={18} color="#9CA3AF" style={{ marginLeft: 12 }} />
-                                    <TextInput
-                                        style={[styles.input, { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 }]}
-                                        value={websiteUrl}
-                                        onChangeText={setWebsiteUrl}
-                                        placeholder="https://yourshop.com"
-                                        autoCapitalize="none"
-                                        keyboardType="url"
-                                    />
-                                </View>
-                            </View>
                         </View>
                     </View>
 
@@ -848,10 +841,18 @@ const styles = StyleSheet.create({
     prefixContainer: {
         backgroundColor: '#F3F4F6',
         paddingHorizontal: 12,
-        height: '100%',
+        height: 48,
         justifyContent: 'center',
         borderRightWidth: 1,
         borderRightColor: '#E5E7EB',
+    },
+    plainInput: {
+        flex: 1,
+        height: 48,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        color: '#111827',
+        backgroundColor: 'transparent',
     },
     prefix: {
         fontSize: 16,

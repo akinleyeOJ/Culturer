@@ -223,6 +223,21 @@ const SellerHubScreen = () => {
                         )}
                         <View style={styles.profileMain}>
                             <Text style={styles.shopName}>{profile?.full_name || user?.user_metadata?.full_name || 'Your Shop'}</Text>
+                            <View style={styles.locationRow}>
+                                <MapPinIcon size={14} color="#6B7280" />
+                                <Text style={styles.locationText}>{profile?.location || 'Location not set'}</Text>
+                            </View>
+
+                            {profile?.cultures && profile.cultures.length > 0 && (
+                                <View style={styles.headerCultures}>
+                                    {profile.cultures.map((c: string) => (
+                                        <View key={c} style={styles.headerCultureBadge}>
+                                            <Text style={styles.headerCultureText}>{c}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+
                             <Text style={styles.shopDescription} numberOfLines={2}>
                                 {profile?.bio || user?.user_metadata?.bio || 'Add Profile Bio Here.'}
                             </Text>
@@ -414,6 +429,34 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#6B7280',
         lineHeight: 18,
+        marginTop: 4,
+    },
+    locationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginBottom: 6,
+    },
+    locationText: {
+        fontSize: 12,
+        color: '#6B7280',
+    },
+    headerCultures: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginBottom: 8,
+    },
+    headerCultureBadge: {
+        backgroundColor: '#F3F4F6',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    headerCultureText: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: '#4B5563',
     },
     shopStatusBox: {
         alignItems: 'center',
