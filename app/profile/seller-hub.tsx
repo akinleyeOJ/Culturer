@@ -278,7 +278,7 @@ const SellerHubScreen = () => {
                         icon={ClipboardDocumentListIcon}
                         title="Shop policies"
                         subtitle="Returns, exchanges, and communication rules"
-                        onPress={() => { }}
+                        onPress={() => router.push('/profile/shop-policies')}
                     />
                     <MenuItem
                         icon={TruckIcon}
