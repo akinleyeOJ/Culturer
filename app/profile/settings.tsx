@@ -142,10 +142,6 @@ const SettingsScreen = () => {
                             ]
                         )}
                     />
-                </SettingsSection>
-
-                {/* Location & Shipping */}
-                <SettingsSection title="Location and Shipping">
                     <SettingsItem
                         icon={LanguageIcon}
                         label="Region & currency"
@@ -153,42 +149,15 @@ const SettingsScreen = () => {
                         onPress={() => Alert.alert("Coming Soon", "Regional settings will be available in the next update.")}
                     />
                     <SettingsItem
-                        icon={TruckIcon}
-                        label="Saved Addresses"
-                        onPress={() => Alert.alert("Coming Soon", "Address management will be available soon.")}
-                    />
-                </SettingsSection>
-
-                {/* App Preferences */}
-                <SettingsSection title="Preferences">
-                    <SettingsItem
                         icon={BellIcon}
                         label="Notifications"
+                        subtitle="Push messages and email alerts"
                         onPress={() => router.push('/profile/notifications' as any)}
                     />
                     <SettingsItem
                         icon={SwatchIcon}
                         label="Theme"
                         value="System"
-                        onPress={() => { }}
-                    />
-                </SettingsSection>
-
-                {/* Legal & Support */}
-                <SettingsSection title="Legal & Support">
-                    <SettingsItem
-                        icon={QuestionMarkCircleIcon}
-                        label="Help Center"
-                        onPress={() => { }}
-                    />
-                    <SettingsItem
-                        icon={DocumentTextIcon}
-                        label="Terms of Service"
-                        onPress={() => { }}
-                    />
-                    <SettingsItem
-                        icon={DocumentTextIcon}
-                        label="Privacy Policy"
                         onPress={() => { }}
                     />
                 </SettingsSection>

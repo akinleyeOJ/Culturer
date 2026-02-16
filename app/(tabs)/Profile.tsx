@@ -274,6 +274,12 @@ const Profile = () => {
             onPress={() => router.push('/wishlist' as any)}
             showBorder={false}
           />
+          <MenuItem
+            icon={MapPinIcon}
+            label="Location & Shipping"
+            subtitle="Default addresses and delivery methods"
+            onPress={() => router.push('/profile/location-shipping' as any)}
+          />
         </View>
 
         {/* Seller Section */}
@@ -310,18 +316,6 @@ const Profile = () => {
             onPress={() => router.push('/profile/settings' as any)}
           />
           <MenuItem
-            icon={MapPinIcon}
-            label="Location & Shipping"
-            subtitle="Default addresses and delivery methods"
-            onPress={() => router.push('/profile/settings' as any)}
-          />
-          <MenuItem
-            icon={BellIcon}
-            label="Notifications"
-            subtitle="Push messages and email alerts"
-            onPress={() => router.push('/profile/settings' as any)}
-          />
-          <MenuItem
             icon={CreditCardIcon}
             label="Payments"
             subtitle="Manage your saved payment methods"
@@ -341,7 +335,7 @@ const Profile = () => {
           />
           <MenuItem
             icon={DocumentTextIcon}
-            label="Terms & Privacy"
+            label="Terms & Privacy Policy"
             subtitle="Rules and safety information"
             onPress={() => { }}
             showBorder={false}
