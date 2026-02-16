@@ -11,13 +11,14 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
+    AlertButton,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon, UserCircleIcon, LinkIcon, TrashIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon, UserCircleIcon, LinkIcon } from 'react-native-heroicons/outline';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { Colors as ThemeColors } from '../../constants/color';
@@ -148,7 +149,7 @@ const EditProfileScreen = () => {
                     .from('profiles')
                     .select('id')
                     .eq('username', username)
-                    .neq('id', user?.id)
+                    .neq('id', user?.id || '')
                     .maybeSingle();
 
                 setIsUsernameAvailable(!data);
@@ -222,6 +223,39 @@ const EditProfileScreen = () => {
         } catch (error) {
             Alert.alert('Error', 'Failed to pick image');
         }
+    };
+
+    const showImageOptions = (type: 'avatar' | 'cover') => {
+        const hasImage = type === 'avatar' ? !!avatarUrl : !!coverUrl;
+
+        const options: AlertButton[] = [
+            { text: 'Choose from Library', onPress: () => { handlePickImage(type); } },
+        ];
+
+        if (hasImage) {
+            options.push({
+                text: 'Remove Current Photo',
+                style: 'destructive',
+                onPress: () => {
+                    Alert.alert(
+                        `Remove ${type === 'avatar' ? 'Profile' : 'Cover'} Photo`,
+                        `Are you sure you want to remove your ${type === 'avatar' ? 'profile' : 'cover'} photo?`,
+                        [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Remove', style: 'destructive', onPress: () => type === 'avatar' ? setAvatarUrl(null) : setCoverUrl(null) }
+                        ]
+                    );
+                }
+            });
+        }
+
+        options.push({ text: 'Cancel', style: 'cancel' });
+
+        Alert.alert(
+            `Edit ${type === 'avatar' ? 'Profile' : 'Cover'} Photo`,
+            undefined,
+            options
+        );
     };
 
     const uploadImage = async (base64Image: string, type: 'avatar' | 'cover') => {
@@ -370,20 +404,11 @@ const EditProfileScreen = () => {
                         )}
                         <TouchableOpacity
                             style={styles.editCoverBtn}
-                            onPress={() => handlePickImage('cover')}
+                            onPress={() => showImageOptions('cover')}
                         >
                             <CameraIcon size={20} color="#FFF" />
                             <Text style={styles.editCoverText}>Edit cover</Text>
                         </TouchableOpacity>
-
-                        {coverUrl ? (
-                            <TouchableOpacity
-                                style={styles.removeCoverBtn}
-                                onPress={() => setCoverUrl(null)}
-                            >
-                                <TrashIcon size={18} color="#FFF" />
-                            </TouchableOpacity>
-                        ) : null}
                     </View>
 
                     {/* Avatar Section */}
@@ -399,14 +424,9 @@ const EditProfileScreen = () => {
                                     <UserCircleIcon size={80} color="#9CA3AF" />
                                 </View>
                             )}
-                            <TouchableOpacity style={styles.editBadge} onPress={() => handlePickImage('avatar')}>
+                            <TouchableOpacity style={styles.editBadge} onPress={() => showImageOptions('avatar')}>
                                 <CameraIcon size={16} color="#FFF" />
                             </TouchableOpacity>
-                            {avatarUrl ? (
-                                <TouchableOpacity style={styles.removeAvatarBadge} onPress={() => setAvatarUrl(null)}>
-                                    <XMarkIcon size={14} color="#FFF" />
-                                </TouchableOpacity>
-                            ) : null}
                         </View>
                         <View style={styles.avatarMain}>
                             <Text style={styles.usernameId}>{username ? `@${username}` : 'Set a username'}</Text>
@@ -648,10 +668,10 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 16,
         left: 16,
-        backgroundColor: 'rgba(239, 68, 68, 0.8)',
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -689,19 +709,29 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 2,
         borderColor: '#FFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 3,
     },
     removeAvatarBadge: {
         position: 'absolute',
         top: 0,
         right: 0,
         backgroundColor: '#EF4444',
-        width: 24,
-        height: 24,
-        borderRadius: 12,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
         borderColor: '#FFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 3,
     },
     avatarMain: {
         marginLeft: 12,
