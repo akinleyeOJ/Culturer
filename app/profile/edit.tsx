@@ -17,10 +17,11 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon, UserCircleIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon, UserCircleIcon, LinkIcon, TrashIcon } from 'react-native-heroicons/outline';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { Colors as ThemeColors } from '../../constants/color';
+import { useNavigation } from '@react-navigation/native';
 
 interface Profile {
     id: string;
@@ -31,6 +32,9 @@ interface Profile {
     avatar_url: string | null;
     cover_url: string | null;
     cultures: string[] | null;
+    instagram_handle: string | null;
+    facebook_handle: string | null;
+    website_url: string | null;
     updated_at?: string;
 }
 
@@ -50,6 +54,19 @@ const EditProfileScreen = () => {
     const [coverUrl, setCoverUrl] = useState<string | null>(null);
     const [cultures, setCultures] = useState<string[]>([]);
     const [newCulture, setNewCulture] = useState('');
+
+    // Socials
+    const [instagramHandle, setInstagramHandle] = useState('');
+    const [facebookHandle, setFacebookHandle] = useState('');
+    const [websiteUrl, setWebsiteUrl] = useState('');
+
+    // Username Check
+    const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
+    const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+
+    // Track original data for "Unsaved Changes"
+    const [initialData, setInitialData] = useState<any>(null);
+    const navigation = useNavigation();
 
     // Initial Data Loading
     useEffect(() => {
@@ -79,10 +96,30 @@ const EditProfileScreen = () => {
                 setBio(profile.bio || '');
                 setLocation(profile.location || user?.user_metadata?.location || '');
                 setCultures(profile.cultures || []);
+                setInstagramHandle(profile.instagram_handle || '');
+                setFacebookHandle(profile.facebook_handle || '');
+                setWebsiteUrl(profile.website_url || '');
+
+                setInitialData({
+                    fullName: profile.full_name || user?.user_metadata?.full_name || '',
+                    username: profile.username || '',
+                    bio: profile.bio || '',
+                    location: profile.location || user?.user_metadata?.location || '',
+                    cultures: profile.cultures || [],
+                    avatarUrl: profile.avatar_url || user?.user_metadata?.avatar_url || '',
+                    coverUrl: profile.cover_url || '',
+                    instagramHandle: profile.instagram_handle || '',
+                    facebookHandle: profile.facebook_handle || '',
+                    websiteUrl: profile.website_url || '',
+                });
             } else {
                 // Fallback to Auth Metadata if profile row missing/error
                 setFullName(user?.user_metadata?.full_name || '');
                 setAvatarUrl(user?.user_metadata?.avatar_url || '');
+                setInitialData({
+                    fullName: user?.user_metadata?.full_name || '',
+                    avatarUrl: user?.user_metadata?.avatar_url || '',
+                });
             }
         } catch (e) {
             console.error('Error loading profile:', e);
@@ -90,6 +127,84 @@ const EditProfileScreen = () => {
             setLoading(false);
         }
     };
+
+    // 2. Live Username Check
+    useEffect(() => {
+        if (!username || username === initialData?.username) {
+            setIsUsernameAvailable(null);
+            setIsCheckingUsername(false);
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+                setIsUsernameAvailable(false);
+                return;
+            }
+
+            setIsCheckingUsername(true);
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('username', username)
+                    .neq('id', user?.id)
+                    .maybeSingle();
+
+                setIsUsernameAvailable(!data);
+            } catch (err) {
+                console.error('Check username error:', err);
+            } finally {
+                setIsCheckingUsername(false);
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [username, initialData?.username]);
+
+    // 3. Unsaved Changes Prevention
+    const hasChanges = () => {
+        if (!initialData) return false;
+        return (
+            fullName !== initialData.fullName ||
+            username !== initialData.username ||
+            bio !== initialData.bio ||
+            location !== initialData.location ||
+            avatarUrl !== initialData.avatarUrl ||
+            coverUrl !== initialData.coverUrl ||
+            instagramHandle !== initialData.instagramHandle ||
+            facebookHandle !== initialData.facebookHandle ||
+            websiteUrl !== initialData.websiteUrl ||
+            JSON.stringify(cultures) !== JSON.stringify(initialData.cultures)
+        );
+    };
+
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+            if (!hasChanges() || saving) {
+                return;
+            }
+
+            // Prevent default behavior of leaving the screen
+            e.preventDefault();
+
+            // Prompt the user before leaving
+            Alert.alert(
+                'Unsaved Changes',
+                'You have unsaved changes. Are you sure you want to leave and discard them?',
+                [
+                    { text: "Don't leave", style: 'cancel', onPress: () => { } },
+                    {
+                        text: 'Discard',
+                        style: 'destructive',
+                        onPress: () => navigation.dispatch(e.data.action),
+                    },
+                ]
+            );
+        });
+
+        return unsubscribe;
+    }, [navigation, fullName, username, bio, location, avatarUrl, coverUrl, cultures, instagramHandle, websiteUrl, initialData, saving]);
 
     const handlePickImage = async (type: 'avatar' | 'cover') => {
         try {
@@ -140,7 +255,8 @@ const EditProfileScreen = () => {
     };
 
     const handleSave = async () => {
-        if (!fullName.trim()) {
+        const nameToSave = fullName || '';
+        if (!nameToSave.trim()) {
             Alert.alert('Required', 'Name is required.');
             return;
         }
@@ -164,6 +280,9 @@ const EditProfileScreen = () => {
                 avatar_url: avatarUrl,
                 cover_url: coverUrl,
                 cultures: cultures,
+                instagram_handle: instagramHandle,
+                facebook_handle: facebookHandle,
+                website_url: websiteUrl,
                 updated_at: new Date().toISOString(),
             };
 
@@ -256,6 +375,15 @@ const EditProfileScreen = () => {
                             <CameraIcon size={20} color="#FFF" />
                             <Text style={styles.editCoverText}>Edit cover</Text>
                         </TouchableOpacity>
+
+                        {coverUrl ? (
+                            <TouchableOpacity
+                                style={styles.removeCoverBtn}
+                                onPress={() => setCoverUrl(null)}
+                            >
+                                <TrashIcon size={18} color="#FFF" />
+                            </TouchableOpacity>
+                        ) : null}
                     </View>
 
                     {/* Avatar Section */}
@@ -274,6 +402,11 @@ const EditProfileScreen = () => {
                             <TouchableOpacity style={styles.editBadge} onPress={() => handlePickImage('avatar')}>
                                 <CameraIcon size={16} color="#FFF" />
                             </TouchableOpacity>
+                            {avatarUrl ? (
+                                <TouchableOpacity style={styles.removeAvatarBadge} onPress={() => setAvatarUrl(null)}>
+                                    <XMarkIcon size={14} color="#FFF" />
+                                </TouchableOpacity>
+                            ) : null}
                         </View>
                         <View style={styles.avatarMain}>
                             <Text style={styles.usernameId}>{username ? `@${username}` : 'Set a username'}</Text>
@@ -295,13 +428,27 @@ const EditProfileScreen = () => {
 
                             <View style={styles.inputGroup}>
                                 <Text style={styles.label}>Username</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={username}
-                                    onChangeText={setUsername}
-                                    placeholder="@username"
-                                    autoCapitalize="none"
-                                />
+                                <View style={styles.inputWithIcon}>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1 }]}
+                                        value={username}
+                                        onChangeText={setUsername}
+                                        placeholder="@username"
+                                        autoCapitalize="none"
+                                    />
+                                    <View style={styles.availabilityIndicator}>
+                                        {isCheckingUsername ? (
+                                            <ActivityIndicator size="small" color={Colors.primary[500]} />
+                                        ) : isUsernameAvailable === true ? (
+                                            <CheckIcon size={20} color="#10B981" />
+                                        ) : isUsernameAvailable === false ? (
+                                            <XMarkIcon size={20} color="#EF4444" />
+                                        ) : null}
+                                    </View>
+                                </View>
+                                {isUsernameAvailable === false && (
+                                    <Text style={styles.errorText}>Username is taken or invalid</Text>
+                                )}
                             </View>
 
                             <View style={styles.inputGroup}>
@@ -375,6 +522,59 @@ const EditProfileScreen = () => {
                                 <Text style={styles.addCultureText}>Add culture</Text>
                             </TouchableOpacity>
                         </View>
+
+                        {/* Social Links */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Social Links</Text>
+                            <Text style={styles.sectionHelper}>Connect your other profiles</Text>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Instagram</Text>
+                                <View style={styles.inputWithLeftIcon}>
+                                    <View style={styles.prefixContainer}>
+                                        <Text style={styles.prefix}>@</Text>
+                                    </View>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 }]}
+                                        value={instagramHandle}
+                                        onChangeText={setInstagramHandle}
+                                        placeholder="username"
+                                        autoCapitalize="none"
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Facebook</Text>
+                                <View style={styles.inputWithLeftIcon}>
+                                    <View style={styles.prefixContainer}>
+                                        <Text style={styles.prefixText}>facebook.com/</Text>
+                                    </View>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 }]}
+                                        value={facebookHandle}
+                                        onChangeText={setFacebookHandle}
+                                        placeholder="username"
+                                        autoCapitalize="none"
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Website</Text>
+                                <View style={styles.inputWithLeftIcon}>
+                                    <LinkIcon size={18} color="#9CA3AF" style={{ marginLeft: 12 }} />
+                                    <TextInput
+                                        style={[styles.input, { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 }]}
+                                        value={websiteUrl}
+                                        onChangeText={setWebsiteUrl}
+                                        placeholder="https://yourshop.com"
+                                        autoCapitalize="none"
+                                        keyboardType="url"
+                                    />
+                                </View>
+                            </View>
+                        </View>
                     </View>
 
                 </ScrollView>
@@ -444,6 +644,17 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
     },
+    removeCoverBtn: {
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     avatarRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',
@@ -474,6 +685,19 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#FFF',
+    },
+    removeAvatarBadge: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        backgroundColor: '#EF4444',
+        width: 24,
+        height: 24,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
@@ -576,6 +800,48 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         fontSize: 14,
         fontWeight: '600',
+    },
+    inputWithIcon: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    inputWithLeftIcon: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    prefixContainer: {
+        backgroundColor: '#F3F4F6',
+        paddingHorizontal: 12,
+        height: '100%',
+        justifyContent: 'center',
+        borderRightWidth: 1,
+        borderRightColor: '#E5E7EB',
+    },
+    prefix: {
+        fontSize: 16,
+        color: '#6B7280',
+        fontWeight: '600',
+    },
+    prefixText: {
+        fontSize: 14,
+        color: '#6B7280',
+        fontWeight: '600',
+    },
+    availabilityIndicator: {
+        width: 30,
+        alignItems: 'center',
+    },
+    errorText: {
+        color: '#EF4444',
+        fontSize: 12,
+        marginTop: 4,
+        marginLeft: 4,
     },
 });
 
