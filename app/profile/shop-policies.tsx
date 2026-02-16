@@ -9,6 +9,7 @@ import {
     Alert,
     ActivityIndicator,
     Switch,
+    Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -27,10 +28,12 @@ import {
     PlusIcon,
     InformationCircleIcon,
     SparklesIcon,
-    TrashIcon
+    TrashIcon,
+    XMarkIcon
 } from 'react-native-heroicons/outline';
 
 interface FAQ {
+    id?: string;
     question: string;
     answer: string;
 }
@@ -39,9 +42,9 @@ interface ShopPolicies {
     accepts_returns: boolean;
     accepts_exchanges: boolean;
     accepts_cancellations: boolean;
-    accepts_custom_returns: boolean; // New field
+    accepts_custom_returns: boolean;
     return_window_days: string;
-    return_shipping_payer: 'buyer' | 'seller'; // Changed from string to toggle
+    return_shipping_payer: 'buyer' | 'seller';
     processing_time: string;
     response_time: string;
     additional_terms: string;
@@ -58,16 +61,13 @@ export default function ShopPoliciesScreen() {
         accepts_returns: true,
         accepts_exchanges: false,
         accepts_cancellations: true,
-        accepts_custom_returns: false, // Default to No (Industry standard)
+        accepts_custom_returns: false,
         return_window_days: '14',
         return_shipping_payer: 'buyer',
-        processing_time: '1-3 business days',
-        response_time: 'Within 24 hours',
+        processing_time: '1-3 days',
+        response_time: 'Few hrs',
         additional_terms: '',
-        faqs: [
-            { question: "Do you offer bulk discounts?", answer: "Yes, please message me for orders of 5+ items." },
-            { question: "Is gift wrapping available?", answer: "Yes, I can include a hand-written note and cultural wrapping for a small fee." }
-        ]
+        faqs: []
     });
 
     // state for the FAQ Modal
@@ -121,35 +121,48 @@ export default function ShopPoliciesScreen() {
     };
 
     const handleSaveFaq = () => {
-    if (!faqQuestion || !faqAnswer) return;
-
-    setPolicies(prev => {
-        const newFaqs = [...prev.faqs];
-        if (editingFaqId) {
-            // Update existing
-            const index = newFaqs.findIndex(f => f.id === editingFaqId);
-            newFaqs[index] = { ...newFaqs[index], question: faqQuestion, answer: faqAnswer };
-        } else {
-            // Add new
-            newFaqs.push({ id: Date.now().toString(), question: faqQuestion, answer: faqAnswer });
+        if (!faqQuestion.trim() || !faqAnswer.trim()) {
+            Alert.alert('Required', 'Please fill in both question and answer.');
+            return;
         }
-        return { ...prev, faqs: newFaqs };
-    });
 
-    // Reset and Close
-    setFaqQuestion('');
-    setFaqAnswer('');
-    setEditingFaqId(null);
-    setIsFaqModalVisible(false);
+        setPolicies(prev => {
+            const newFaqs = [...prev.faqs];
+            if (editingFaqId) {
+                // Update existing
+                const index = newFaqs.findIndex(f => f.id === editingFaqId);
+                if (index !== -1) {
+                    newFaqs[index] = { ...newFaqs[index], question: faqQuestion, answer: faqAnswer };
+                }
+            } else {
+                // Add new
+                newFaqs.push({ id: Date.now().toString(), question: faqQuestion, answer: faqAnswer });
+            }
+            return { ...prev, faqs: newFaqs };
+        });
+
+        // Reset and Close
+        closeFaqModal();
     };
 
     const deleteFaq = (id: string) => {
-        setPolicies(prev => ({ ...prev, faqs: prev.faqs.filter(f => f.id !== id) }));
+        Alert.alert(
+            'Delete FAQ',
+            'Are you sure you want to delete this FAQ?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => setPolicies(prev => ({ ...prev, faqs: prev.faqs.filter(f => f.id !== id) }))
+                }
+            ]
+        );
     };
 
     const openFaqModal = (faq?: FAQ) => {
         if (faq) {
-            setEditingFaqId(faq.id);
+            setEditingFaqId(faq.id || null);
             setFaqQuestion(faq.question);
             setFaqAnswer(faq.answer);
         } else {
@@ -166,14 +179,6 @@ export default function ShopPoliciesScreen() {
         setFaqQuestion('');
         setFaqAnswer('');
     };
-
-    if (loading) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary[500]} /></View>
-            </SafeAreaView>
-        );
-    }
 
     if (loading) {
         return (
@@ -361,29 +366,36 @@ export default function ShopPoliciesScreen() {
                 </View>
 
                 {/* FAQ SECTION */}
-               <View style={styles.sectionContainer}>
+                <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>SHOP FAQ</Text>
-                    {policies.faqs.map((faq, index) => (
-                        <View key={faq.id} style={[styles.faqItem, index === policies.faqs.length - 1 && { borderBottomWidth: 0 }]}>
-                            <TouchableOpacity style={styles.faqHeader} onPress={() => openFaqModal(faq)}>
-                                <QuestionMarkCircleIcon size={18} color={Colors.primary[500]} />
-                                <Text style={styles.faqQuestion}>{faq.question}</Text>
-                            </TouchableOpacity>
-                            <Text style={styles.faqAnswer}>{faq.answer}</Text>
-                            <TouchableOpacity style={styles.deleteFaqBtn} onPress={() => deleteFaq(faq.id)}>
-                                <TrashIcon size={18} color="#9CA3AF" />
-                            </TouchableOpacity>
+                    {policies.faqs.length === 0 ? (
+                        <View style={styles.emptyFaqState}>
+                            <QuestionMarkCircleIcon size={40} color="#D1D5DB" />
+                            <Text style={styles.emptyFaqText}>No FAQs yet</Text>
+                            <Text style={styles.emptyFaqSubtext}>Add frequently asked questions to help your buyers</Text>
                         </View>
-                    ))}
+                    ) : (
+                        policies.faqs.map((faq, index) => (
+                            <View key={faq.id} style={[styles.faqItem, index === policies.faqs.length - 1 && { borderBottomWidth: 0 }]}>
+                                <TouchableOpacity style={styles.faqHeader} onPress={() => openFaqModal(faq)}>
+                                    <QuestionMarkCircleIcon size={18} color={Colors.primary[500]} />
+                                    <Text style={styles.faqQuestion}>{faq.question}</Text>
+                                </TouchableOpacity>
+                                <Text style={styles.faqAnswer}>{faq.answer}</Text>
+                                <TouchableOpacity style={styles.deleteFaqBtn} onPress={() => deleteFaq(faq.id!)}>
+                                    <TrashIcon size={18} color="#9CA3AF" />
+                                </TouchableOpacity>
+                            </View>
+                        ))
+                    )}
                     <TouchableOpacity style={styles.addNewButton} onPress={() => openFaqModal()}>
                         <View style={styles.plusIconBg}><PlusIcon size={16} color="#FFF" /></View>
                         <Text style={styles.addNewText}>Add New FAQ</Text>
                     </TouchableOpacity>
                 </View>
-            </ScrollView>
 
-            {/* ADDITIONAL TERMS SECTION */}
-            <View style={styles.sectionContainer}>
+                {/* ADDITIONAL TERMS SECTION */}
+                <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>ADDITIONAL TERMS</Text>
                     <View style={styles.textAreaContainer}>
                         <View style={styles.labelRow}>
@@ -408,6 +420,86 @@ export default function ShopPoliciesScreen() {
                         Your policies are displayed on every item listing to help buyers shop with confidence.
                     </Text>
                 </View>
+            </ScrollView>
+
+            {/* FAQ Modal - Bottom Sheet Style */}
+            <Modal
+                visible={isFaqModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={closeFaqModal}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={closeFaqModal}
+                >
+                    {/* Bottom sheet content */}
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        style={styles.modalBottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        {/* Drag handle */}
+                        <View style={styles.modalHandle} />
+
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>{editingFaqId ? 'Edit FAQ' : 'New FAQ'}</Text>
+                            <TouchableOpacity onPress={closeFaqModal}>
+                                <XMarkIcon size={24} color={Colors.text.primary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView
+                            style={styles.modalBody}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.modalLabel}>QUESTION</Text>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    placeholder="e.g. Do you ship internationally?"
+                                    value={faqQuestion}
+                                    onChangeText={setFaqQuestion}
+                                    multiline
+                                    numberOfLines={2}
+                                />
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.modalLabel}>ANSWER</Text>
+                                <TextInput
+                                    style={[styles.modalInput, styles.modalTextArea]}
+                                    placeholder="Provide a clear answer..."
+                                    value={faqAnswer}
+                                    onChangeText={setFaqAnswer}
+                                    multiline
+                                    numberOfLines={4}
+                                    textAlignVertical="top"
+                                />
+                            </View>
+
+                            <View style={styles.modalFooter}>
+                                <TouchableOpacity
+                                    style={styles.cancelBtn}
+                                    onPress={closeFaqModal}
+                                >
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.saveFaqBtn}
+                                    onPress={handleSaveFaq}
+                                >
+                                    <Text style={styles.saveFaqBtnText}>
+                                        {editingFaqId ? 'Update FAQ' : 'Save FAQ'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -478,6 +570,8 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#111827',
     },
+    textArea: { minHeight: 100, textAlignVertical: 'top' },
+    textAreaContainer: { padding: 16 },
     presetsRow: { flexDirection: 'row', gap: 10 },
     presetBtn: {
         flex: 1,
@@ -491,7 +585,38 @@ const styles = StyleSheet.create({
     presetBtnActive: { backgroundColor: Colors.primary[50], borderColor: Colors.primary[500] },
     presetText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
     presetTextActive: { color: Colors.primary[700] },
-    faqItem: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', position: 'relative' },
+    policyNotice: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#F9FAFB',
+    },
+    noticeText: { flex: 1, fontSize: 12, color: '#6B7280', lineHeight: 18 },
+    emptyFaqState: {
+        alignItems: 'center',
+        paddingVertical: 40,
+        paddingHorizontal: 20,
+    },
+    emptyFaqText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#9CA3AF',
+        marginTop: 12,
+    },
+    emptyFaqSubtext: {
+        fontSize: 13,
+        color: '#D1D5DB',
+        marginTop: 4,
+        textAlign: 'center',
+    },
+    faqItem: { 
+        padding: 16, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#F3F4F6', 
+        position: 'relative' 
+    },
     faqHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingRight: 32 },
     faqQuestion: { fontSize: 15, fontWeight: '700', color: '#111827', flex: 1 },
     faqAnswer: { fontSize: 14, color: '#6B7280', marginTop: 6, marginLeft: 28, lineHeight: 22 },
@@ -507,16 +632,98 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     addNewText: { fontSize: 16, fontWeight: '600', color: Colors.primary[600] },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40 },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-    modalTitle: { fontSize: 18, fontWeight: '800' },
-    modalLabel: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 8, textTransform: 'uppercase' },
-    modalInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, marginBottom: 20 },
+    infoBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: Colors.primary[50],
+        padding: 16,
+        marginHorizontal: 16,
+        marginTop: 24,
+        borderRadius: 12,
+    },
+    infoText: {
+        flex: 1,
+        fontSize: 13,
+        color: Colors.primary[800],
+        lineHeight: 20,
+    },
+    // Modal Styles - Bottom Sheet
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    modalBottomSheet: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        height: 470, // Increased from 420 to fit buttons
+        paddingBottom: 20, // Reduced from 40
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    modalHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: Colors.neutral[300],
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginTop: 12,
+        marginBottom: 8,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    modalTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
+    modalBody: {
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        maxHeight: 340, // Ensure scrolling works if content is tall
+    },
+    inputGroup: { marginBottom: 20 },
+    modalLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#6B7280',
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    modalInput: {
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 16,
+        color: '#111827',
+    },
     modalTextArea: { minHeight: 120, textAlignVertical: 'top' },
-    modalFooter: { flexDirection: 'row', gap: 12 },
-    cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center' },
-    cancelBtnText: { fontWeight: '700', color: '#4B5563' },
-    saveFaqBtn: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: Colors.primary[500], alignItems: 'center' },
-    saveFaqBtnText: { fontWeight: '700', color: '#FFF' },
+    modalFooter: { flexDirection: 'row', gap: 12, marginTop: 10 },
+    cancelBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#F3F4F6',
+        alignItems: 'center',
+    },
+    cancelBtnText: { fontWeight: '700', color: '#4B5563', fontSize: 16 },
+    saveFaqBtn: {
+        flex: 2,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: Colors.primary[500],
+        alignItems: 'center',
+    },
+    saveFaqBtnText: { fontWeight: '700', color: '#FFF', fontSize: 16 },
 });
