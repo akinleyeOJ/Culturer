@@ -292,142 +292,11 @@ const AuthScreen = () => {
         console.log("=====================");
 
         if (error) {
-          if (
-            error.message.toLowerCase().includes("already") ||
-            error.message.toLowerCase().includes("exist") ||
-            error.message.toLowerCase().includes("registered")
-          ) {
-            Alert.alert(
-              "Account Exists",
-              "This email is already registered. Please sign in instead or use 'Continue with Google' if you signed up with Google.",
-            );
-            return;
-          }
           throw error;
         }
 
-        // Check if user was created recently (within last 5 seconds)
-        // If user exists but was created long ago, it's an existing account
-        if (data.user && data.user.created_at) {
-          const createdDate = new Date(data.user.created_at);
-          const now = new Date();
-          const ageInSeconds = (now.getTime() - createdDate.getTime()) / 1000;
-
-          console.log("User age:", ageInSeconds, "seconds");
-
-          // If user was created more than 5 seconds ago, it's an existing account
-          if (ageInSeconds > 5) {
-            console.log(
-              "User account is old - this is account linking, not new signup",
-            );
-            Alert.alert(
-              "Account Exists",
-              "This email is already registered. Please sign in or use 'Continue with Google' if you signed up with Google.",
-            );
-            return;
-          }
-        }
-
-        // CRITICAL CHECK: If session is returned, user already exists
-        // For new signups with email confirmation enabled, session should be null
-        if (data.session) {
-          console.log("Session returned - this indicates existing account");
-
-          // Check if user has Google OAuth
-          const hasOAuthIdentity = data.user?.identities?.some(
-            (identity) =>
-              identity.provider === "google" || identity.provider === "apple",
-          );
-
-          if (hasOAuthIdentity) {
-            Alert.alert(
-              "Account Exists",
-              "This email is already registered with Google. Please use 'Continue with Google' to sign in.",
-            );
-          } else {
-            Alert.alert(
-              "Account Exists",
-              "This email is already registered. Please sign in instead.",
-            );
-          }
-          return;
-        }
-
-        // Check if user has no identities or only non-email identities
-        // This catches the case where signup silently fails for existing OAuth accounts
-        if (data.user) {
-          const identities = data.user.identities || [];
-          console.log("Checking identities. Count:", identities.length);
-
-          // If user returned but NO identities at all, it's suspicious
-          if (identities.length === 0) {
-            console.log("No identities returned - likely existing account");
-            Alert.alert(
-              "Account Exists",
-              "This email is already registered. Please sign in or use 'Continue with Google' if you signed up with Google.",
-            );
-            return;
-          }
-
-          const hasEmailIdentity = identities.some(
-            (identity) => identity.provider === "email",
-          );
-
-          const hasOAuthIdentity = identities.some(
-            (identity) =>
-              identity.provider === "google" || identity.provider === "apple",
-          );
-
-          console.log("Has Email Identity:", hasEmailIdentity);
-          console.log("Has OAuth Identity:", hasOAuthIdentity);
-
-          // If user has OAuth but NO email identity, account linking happened
-          if (hasOAuthIdentity && !hasEmailIdentity) {
-            console.log(
-              "OAuth exists but no email identity - account linking detected",
-            );
-            Alert.alert(
-              "Account Exists",
-              "This email is already registered with Google. Please use 'Continue with Google' to sign in.",
-            );
-            return;
-          }
-        }
-
-        // Additional check: Look at identity creation times
-        if (
-          data.user &&
-          data.user.identities &&
-          data.user.identities.length > 1
-        ) {
-          // If user has multiple identities, check if email identity is newest
-          const emailIdentity = data.user.identities.find(
-            (i) => i.provider === "email",
-          );
-          const oauthIdentity = data.user.identities.find(
-            (i) => i.provider === "google" || i.provider === "apple",
-          );
-
-          if (
-            emailIdentity &&
-            oauthIdentity &&
-            emailIdentity.created_at &&
-            oauthIdentity.created_at
-          ) {
-            const emailCreated = new Date(emailIdentity.created_at);
-            const oauthCreated = new Date(oauthIdentity.created_at);
-
-            // If OAuth identity is older, user had Google account first
-            if (oauthCreated < emailCreated) {
-              console.log("OAuth identity existed first - blocking signup");
-              Alert.alert(
-                "Account Exists",
-                "This email is already registered with Google. Please use 'Continue with Google' to sign in.",
-              );
-              return;
-            }
-          }
-        }
+        // Supabase handles account linking automatically if the same email is used.
+        // If we reach this point without error, the signup/linking was successful.
 
         Alert.alert(
           "Success! 📧",
@@ -579,34 +448,6 @@ const AuthScreen = () => {
           const refresh_token = params.get("refresh_token");
 
           if (access_token && refresh_token) {
-            // FIX: Check user identities BEFORE setting session to prevent "Home screen flash"
-            const {
-              data: { user },
-            } = await supabase.auth.getUser(access_token);
-
-            if (user && user.identities) {
-              const hasEmailProvider = user.identities.some(
-                (identity) => identity.provider === "email",
-              );
-              const hasOAuthProvider = user.identities.some(
-                (identity) =>
-                  identity.provider === "google" ||
-                  identity.provider === "apple",
-              );
-
-              // Check if we have conflicting providers (Email + Social)
-              // This means an account exists with email, but they are trying to login with Social
-              if (hasEmailProvider && hasOAuthProvider) {
-                // DO NOT set the session here. Just show the alert.
-                Alert.alert(
-                  "Account Exists",
-                  "This email is already registered. Please sign in with your email and password instead.",
-                );
-                return; // Stop execution here
-              }
-            }
-
-            // Only set session if no conflict found
             await supabase.auth.setSession({
               access_token,
               refresh_token,
