@@ -313,13 +313,13 @@ const Profile = () => {
             icon={GlobeAltIcon}
             label="Culture & Interests"
             subtitle="Personalize your discovery experience"
-            onPress={() => router.push('/profile/settings' as any)}
+            onPress={() => router.push('/profile/culture-interests' as any)}
           />
           <MenuItem
             icon={CreditCardIcon}
             label="Payments"
             subtitle="Manage your saved payment methods"
-            onPress={() => router.push('/profile/settings' as any)}
+            onPress={() => router.push('/profile/payments' as any)}
             showBorder={false}
           />
         </View>
