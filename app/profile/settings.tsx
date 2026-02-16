@@ -13,30 +13,29 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import {
     ChevronLeftIcon,
     ChevronRightIcon,
-    UserCircleIcon,
     BuildingStorefrontIcon,
     EnvelopeIcon,
-    PhoneIcon,
     LockClosedIcon,
-    LanguageIcon,
-    GlobeAmericasIcon,
     SwatchIcon,
-    MapPinIcon,
     BellIcon,
     CreditCardIcon,
-    TruckIcon
+    TruckIcon,
+    QuestionMarkCircleIcon,
+    DocumentTextIcon,
+    ArrowLeftOnRectangleIcon,
+    LanguageIcon
 } from 'react-native-heroicons/outline';
 
 const SettingsScreen = () => {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, signOut } = useAuth();
 
     // Toggles state
-    const [locationEnabled, setLocationEnabled] = useState(true);
-    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
 
     const SettingsSection = ({ title, children }: { title?: string, children: React.ReactNode }) => (
         <View style={styles.section}>
@@ -114,37 +113,58 @@ const SettingsScreen = () => {
                         label="Email"
                         value={user?.email}
                         showArrow={true}
-                        onPress={() => { }}
-                    />
-                    <SettingsItem
-                        icon={PhoneIcon}
-                        label="Phone number"
-                        value="+1 •••• 88"
-                        showArrow={true}
-                        onPress={() => { }}
+                        onPress={() => Alert.alert(
+                            "Email Address",
+                            "For security, email addresses can only be changed by contacting support.",
+                            [{ text: "OK" }, { text: "Contact Support", onPress: () => { } }]
+                        )}
                     />
                     <SettingsItem
                         icon={LockClosedIcon}
                         label="Password"
-                        value="Last changed 3mo ago"
+                        value="••••••••"
                         showArrow={true}
-                        onPress={() => { }}
+                        onPress={() => Alert.alert(
+                            "Reset Password",
+                            "We will send a password reset link to your email.",
+                            [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                    text: "Send Link",
+                                    onPress: async () => {
+                                        if (user?.email) {
+                                            const { error } = await supabase.auth.resetPasswordForEmail(user.email);
+                                            if (error) Alert.alert("Error", error.message);
+                                            else Alert.alert("Success", "Reset link sent to your email!");
+                                        }
+                                    }
+                                }
+                            ]
+                        )}
                     />
                 </SettingsSection>
 
-                {/* Preferences */}
-                <SettingsSection title="Preferences">
+                {/* Location & Shipping */}
+                <SettingsSection title="Location and Shipping">
                     <SettingsItem
                         icon={LanguageIcon}
-                        label="Language"
-                        value="English"
-                        onPress={() => { }}
+                        label="Region & currency"
+                        value="Europe / EUR"
+                        onPress={() => Alert.alert("Coming Soon", "Regional settings will be available in the next update.")}
                     />
                     <SettingsItem
-                        icon={GlobeAmericasIcon}
-                        label="Region & currency"
-                        value="Global • USD"
-                        onPress={() => { }}
+                        icon={TruckIcon}
+                        label="Saved Addresses"
+                        onPress={() => Alert.alert("Coming Soon", "Address management will be available soon.")}
+                    />
+                </SettingsSection>
+
+                {/* App Preferences */}
+                <SettingsSection title="Preferences">
+                    <SettingsItem
+                        icon={BellIcon}
+                        label="Notifications"
+                        onPress={() => router.push('/profile/notifications' as any)}
                     />
                     <SettingsItem
                         icon={SwatchIcon}
@@ -152,50 +172,60 @@ const SettingsScreen = () => {
                         value="System"
                         onPress={() => { }}
                     />
-                    <SettingsItem
-                        icon={MapPinIcon}
-                        label="Location services"
-                        showArrow={false}
-                        rightElement={
-                            <Switch
-                                value={locationEnabled}
-                                onValueChange={setLocationEnabled}
-                                trackColor={{ true: Colors.primary[500] }}
-                            />
-                        }
-                    />
-                    <SettingsItem
-                        icon={BellIcon}
-                        label="Notifications"
-                        showArrow={false}
-                        rightElement={
-                            <Switch
-                                value={notificationsEnabled}
-                                onValueChange={setNotificationsEnabled}
-                                trackColor={{ true: Colors.primary[500] }}
-                            />
-                        }
-                    />
                 </SettingsSection>
 
-                {/* Buying */}
-                <SettingsSection title="Buying">
+                {/* Legal & Support */}
+                <SettingsSection title="Legal & Support">
                     <SettingsItem
-                        icon={CreditCardIcon}
-                        label="Payment methods"
-                        value="Visa •••• 4242"
+                        icon={QuestionMarkCircleIcon}
+                        label="Help Center"
                         onPress={() => { }}
                     />
                     <SettingsItem
-                        icon={TruckIcon}
-                        label="Shipping address"
-                        value="Add or edit"
+                        icon={DocumentTextIcon}
+                        label="Terms of Service"
+                        onPress={() => { }}
+                    />
+                    <SettingsItem
+                        icon={DocumentTextIcon}
+                        label="Privacy Policy"
                         onPress={() => { }}
                     />
                 </SettingsSection>
 
-                <TouchableOpacity style={styles.deleteButton} onPress={() => Alert.alert("Delete Account", "This action cannot be undone.")}>
-                    <Text style={styles.deleteButtonText}>Delete account</Text>
+                <TouchableOpacity
+                    style={styles.logoutButton}
+                    onPress={() => {
+                        Alert.alert(
+                            "Logout",
+                            "Are you sure you want to logout?",
+                            [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                    text: "Logout",
+                                    style: "destructive",
+                                    onPress: async () => {
+                                        try {
+                                            await signOut();
+                                            router.replace('/(auth)/auth' as any);
+                                        } catch (error) {
+                                            console.error("Error signing out:", error);
+                                        }
+                                    }
+                                }
+                            ]
+                        );
+                    }}
+                >
+                    <ArrowLeftOnRectangleIcon size={24} color={Colors.danger[600]} />
+                    <Text style={styles.logoutText}>Log Out</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={{ padding: 16, alignItems: 'center' }}
+                    onPress={() => Alert.alert("Delete Account", "This action cannot be undone. Please contact support to initiate account deletion.")}
+                >
+                    <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Delete account</Text>
                 </TouchableOpacity>
 
                 <Text style={styles.version}>Version 1.0.0 (2024)</Text>
@@ -332,6 +362,24 @@ const styles = StyleSheet.create({
     itemValue: {
         fontSize: 14,
         color: '#6B7280',
+    },
+    logoutButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFF',
+        marginHorizontal: 16,
+        marginBottom: 24,
+        paddingVertical: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.danger[100],
+        gap: 8,
+    },
+    logoutText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: Colors.danger[600],
     },
     deleteButton: {
         padding: 16,

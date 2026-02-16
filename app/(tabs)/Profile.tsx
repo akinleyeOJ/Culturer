@@ -9,6 +9,7 @@ import {
   Image,
   RefreshControl,
   Share,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
@@ -29,7 +30,8 @@ import {
   DocumentTextIcon,
   ChevronRightIcon,
   ArrowLeftOnRectangleIcon,
-  BuildingStorefrontIcon
+  BuildingStorefrontIcon,
+  ShareIcon
 } from "react-native-heroicons/outline";
 import { supabase } from "../../lib/supabase";
 import { FontAwesome } from "@expo/vector-icons";
@@ -43,8 +45,9 @@ interface UserStats {
 const Profile = () => {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const [stats, setStats] = useState<UserStats>({ listings: 0, orders: 0, rating: 0 });
+  const [stats, setStats] = useState<UserStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [memberSince, setMemberSince] = useState("2024");
 
   const [profile, setProfile] = useState<any>(null);
@@ -90,6 +93,8 @@ const Profile = () => {
 
     } catch (e) {
       console.error("Error fetching stats", e);
+    } finally {
+      setIsInitialLoading(false);
     }
   };
 
@@ -116,12 +121,24 @@ const Profile = () => {
   };
 
   const handleLogout = async () => {
-    try {
-      await signOut();
-      router.replace('/(auth)/auth' as any);
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await signOut();
+            } catch (error) {
+              console.error("Error signing out:", error);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const MenuItem = ({ icon: Icon, label, subtitle, onPress, showBorder = true }: any) => (
@@ -150,7 +167,7 @@ const Profile = () => {
         <View style={{ width: 24 }} />
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity onPress={handleShareProfile}>
-          <UserCircleIcon size={24} color={Colors.text.primary} />
+          <ShareIcon size={24} color={Colors.text.primary} />
         </TouchableOpacity>
       </View>
 
@@ -173,9 +190,12 @@ const Profile = () => {
               </View>
             )}
             <View style={styles.profileText}>
-              <Text style={styles.name}>{profile?.full_name || user?.user_metadata?.full_name || 'User'}</Text>
-              <Text style={styles.subText}>Member since {memberSince} • {profile?.location || user?.user_metadata?.location || 'Earth'}</Text>
-
+              <Text style={styles.name}>
+                {profile?.full_name || (isInitialLoading ? ' ' : (user?.user_metadata?.full_name || 'User'))}
+              </Text>
+              <Text style={styles.subText}>
+                Member since {memberSince} • {profile?.location || (isInitialLoading ? ' ' : (user?.user_metadata?.location || 'Earth'))}
+              </Text>
               {/* Social Links Row */}
               <View style={styles.socialsRow}>
                 {profile?.instagram_handle && (
@@ -198,41 +218,41 @@ const Profile = () => {
               style={styles.actionBtn}
               onPress={() => router.push('/profile/edit' as any)}
             >
-              <PencilSquareIcon size={20} color={Colors.text.primary} />
+              <PencilSquareIcon size={16} color={Colors.text.primary} />
               <Text style={styles.actionBtnText}>Edit profile</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.actionBtn}
-              onPress={() => router.push('/profile/settings' as any)}
+              onPress={handleShareProfile}
             >
-              <GlobeAltIcon size={20} color={Colors.text.primary} />
-              <Text style={styles.actionBtnText}>Preferences</Text>
+              <ShareIcon size={16} color={Colors.text.primary} />
+              <Text style={styles.actionBtnText}>Share profile</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => router.push('/profile/settings' as any)}
             >
-              <Cog6ToothIcon size={20} color={Colors.text.primary} />
-              <Text style={styles.actionBtnText}>App account</Text>
+              <Cog6ToothIcon size={16} color={Colors.text.primary} />
+              <Text style={styles.actionBtnText}>Settings</Text>
             </TouchableOpacity>
           </View>
 
           {/* Stats */}
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.listings}</Text>
+              <Text style={styles.statNumber}>{stats ? stats.listings : '--'}</Text>
               <Text style={styles.statLabel}>Active listings</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.orders}</Text>
+              <Text style={styles.statNumber}>{stats ? stats.orders : '--'}</Text>
               <Text style={styles.statLabel}>Orders</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.rating}</Text>
+              <Text style={styles.statNumber}>{stats ? stats.rating.toFixed(1) : '--'}</Text>
               <Text style={styles.statLabel}>Rating</Text>
             </View>
           </View>
@@ -419,12 +439,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F3F4F6',
     paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     borderRadius: 8,
-    gap: 6,
+    gap: 4,
   },
   actionBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#374151',
   },
