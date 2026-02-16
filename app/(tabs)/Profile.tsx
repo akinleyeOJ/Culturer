@@ -32,6 +32,7 @@ import {
   BuildingStorefrontIcon
 } from "react-native-heroicons/outline";
 import { supabase } from "../../lib/supabase";
+import { FontAwesome } from "@expo/vector-icons";
 
 interface UserStats {
   listings: number;
@@ -174,6 +175,20 @@ const Profile = () => {
             <View style={styles.profileText}>
               <Text style={styles.name}>{profile?.full_name || user?.user_metadata?.full_name || 'User'}</Text>
               <Text style={styles.subText}>Member since {memberSince} • {profile?.location || user?.user_metadata?.location || 'Earth'}</Text>
+
+              {/* Social Links Row */}
+              <View style={styles.socialsRow}>
+                {profile?.instagram_handle && (
+                  <TouchableOpacity style={styles.socialIcon}>
+                    <FontAwesome name="instagram" size={18} color="#E1306C" />
+                  </TouchableOpacity>
+                )}
+                {profile?.facebook_handle && (
+                  <TouchableOpacity style={styles.socialIcon}>
+                    <FontAwesome name="facebook" size={18} color="#1877F2" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
 
@@ -377,6 +392,20 @@ const styles = StyleSheet.create({
   subText: {
     fontSize: 14,
     color: '#6B7280',
+    marginBottom: 8,
+  },
+  socialsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  socialIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionButtons: {
     flexDirection: 'row',
