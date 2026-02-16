@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, CameraIcon, CheckIcon, XMarkIcon, PlusIcon, UserCircleIcon } from 'react-native-heroicons/outline';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { Colors as ThemeColors } from '../../constants/color';
@@ -113,8 +113,8 @@ const EditProfileScreen = () => {
         if (!user) return;
         try {
             setSaving(true);
-            const fileName = `${user.id}-${type}-${Date.now()}.jpg`;
-            const filePath = `${type === 'avatar' ? 'avatars' : 'covers'}/${fileName}`;
+            const fileName = `${Date.now()}.jpg`;
+            const filePath = `${user.id}/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
                 .from(type === 'avatar' ? 'avatars' : 'covers')
@@ -140,9 +140,14 @@ const EditProfileScreen = () => {
     };
 
     const handleSave = async () => {
-        if (!user) return;
         if (!fullName.trim()) {
-            Alert.alert('Required', 'Full name is required.');
+            Alert.alert('Required', 'Name is required.');
+            return;
+        }
+
+        // Basic username validation
+        if (username && !/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+            Alert.alert('Invalid Username', 'Username must be 3-20 characters long and can only contain letters, numbers, and underscores.');
             return;
         }
 
@@ -182,9 +187,27 @@ const EditProfileScreen = () => {
                 { text: 'OK', onPress: () => router.back() }
             ]);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating profile:', error);
-            Alert.alert('Error', 'Failed to update profile.');
+
+            // Log detailed error for developers
+            if (__DEV__) {
+                console.warn('Profile sync failed. Details:', error.message || error);
+            }
+
+            // Provide professional user-facing error message
+            if (error?.message?.includes('column') || error?.code === '42703') {
+                const devHint = __DEV__ ? ' (Dev Hint: Run update_profiles_v2.sql)' : '';
+                Alert.alert(
+                    'Profile Update Unavailable',
+                    `We encountered a technical issue updating your profile features.${devHint}`,
+                    [{ text: 'OK' }]
+                );
+            } else if (error?.message?.includes('profiles_username_key') || error?.code === '23505') {
+                Alert.alert('Username Taken', 'This username is already in use. Please choose another one.');
+            } else {
+                Alert.alert('Error', 'We could not save your changes right now. Please try again.');
+            }
         } finally {
             setSaving(false);
         }
@@ -218,10 +241,14 @@ const EditProfileScreen = () => {
                 <ScrollView contentContainerStyle={styles.content}>
                     {/* Cover Section */}
                     <View style={styles.coverSection}>
-                        <Image
-                            source={{ uri: coverUrl || 'https://via.placeholder.com/800x450' }}
-                            style={styles.coverImage}
-                        />
+                        {coverUrl ? (
+                            <Image
+                                source={{ uri: coverUrl }}
+                                style={styles.coverImage}
+                            />
+                        ) : (
+                            <View style={[styles.coverImage, { backgroundColor: ThemeColors.primary[50] }]} />
+                        )}
                         <TouchableOpacity
                             style={styles.editCoverBtn}
                             onPress={() => handlePickImage('cover')}
@@ -234,10 +261,16 @@ const EditProfileScreen = () => {
                     {/* Avatar Section */}
                     <View style={styles.avatarRow}>
                         <View style={styles.avatarContainer}>
-                            <Image
-                                source={{ uri: avatarUrl || 'https://via.placeholder.com/150' }}
-                                style={styles.avatar}
-                            />
+                            {avatarUrl ? (
+                                <Image
+                                    source={{ uri: avatarUrl }}
+                                    style={styles.avatar}
+                                />
+                            ) : (
+                                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                    <UserCircleIcon size={80} color="#9CA3AF" />
+                                </View>
+                            )}
                             <TouchableOpacity style={styles.editBadge} onPress={() => handlePickImage('avatar')}>
                                 <CameraIcon size={16} color="#FFF" />
                             </TouchableOpacity>
@@ -428,6 +461,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#F3F4F6',
         borderWidth: 4,
         borderColor: '#FFF',
+    },
+    avatarPlaceholder: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     editBadge: {
         position: 'absolute',

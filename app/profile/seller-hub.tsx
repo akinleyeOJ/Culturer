@@ -29,7 +29,8 @@ import {
     ChartBarIcon,
     InformationCircleIcon,
     MapPinIcon,
-    TagIcon
+    TagIcon,
+    UserCircleIcon
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
@@ -57,23 +58,36 @@ const SellerHubScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [isShopLive, setIsShopLive] = useState(true);
 
+    const [profile, setProfile] = useState<any>(null);
+
     const fetchSellerStats = async () => {
         if (!user) return;
         try {
-            // Count active items
+            // 1. Fetch Profile Details
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+
+            if (profileData) {
+                setProfile(profileData);
+            }
+
+            // 2. Count active items
             const { count: activeCount } = await supabase
                 .from('products')
                 .select('*', { count: 'exact', head: true })
                 .eq('seller_id', user.id)
                 .eq('status', 'active');
 
-            // Count total items
+            // 3. Count total items
             const { count: totalCount } = await supabase
                 .from('products')
                 .select('*', { count: 'exact', head: true })
                 .eq('seller_id', user.id);
 
-            // Fetch real order count
+            // 4. Fetch real order count
             const { count: orderCount } = await supabase
                 .from('orders')
                 .select('*', { count: 'exact', head: true })
@@ -197,14 +211,20 @@ const SellerHubScreen = () => {
                 {/* Profile Overview */}
                 <View style={styles.profileOverview}>
                     <View style={styles.profileRow}>
-                        <Image
-                            source={{ uri: user?.user_metadata?.avatar_url || 'https://via.placeholder.com/150' }}
-                            style={styles.avatar}
-                        />
+                        {profile?.avatar_url || user?.user_metadata?.avatar_url ? (
+                            <Image
+                                source={{ uri: profile?.avatar_url || user?.user_metadata?.avatar_url }}
+                                style={styles.avatar}
+                            />
+                        ) : (
+                            <View style={[styles.avatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }]}>
+                                <UserCircleIcon size={50} color="#9CA3AF" />
+                            </View>
+                        )}
                         <View style={styles.profileMain}>
-                            <Text style={styles.shopName}>{user?.user_metadata?.full_name || 'Your Shop'}</Text>
+                            <Text style={styles.shopName}>{profile?.full_name || user?.user_metadata?.full_name || 'Your Shop'}</Text>
                             <Text style={styles.shopDescription} numberOfLines={2}>
-                                {user?.user_metadata?.bio || 'Cultural artifacts and handmade treasures.'}
+                                {profile?.bio || user?.user_metadata?.bio || 'Add Profile Bio Here.'}
                             </Text>
                         </View>
                         <View style={styles.shopStatusBox}>

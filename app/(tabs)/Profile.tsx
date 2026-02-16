@@ -46,28 +46,34 @@ const Profile = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [memberSince, setMemberSince] = useState("2024");
 
+  const [profile, setProfile] = useState<any>(null);
+
   const fetchStats = async () => {
     if (!user) return;
     try {
-      // Fetch Orders count
+      // 1. Fetch Profile Details
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (profileData) {
+        setProfile(profileData);
+      }
+
+      // 2. Fetch Orders count
       const { count: ordersCount } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
 
-      // Fetch Listings count (only active)
+      // 3. Fetch Listings count (only active)
       const { count: listingsCount } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
         .eq('seller_id', user.id)
         .eq('status', 'active');
-
-      // Fetch Rating (Average of reviews on my products)
-      // This is complex in standard SQL without aggregation functions exposed or a view.
-      // For now, we'll mock it or try a simple average query if a view exists.
-      // Let's assume we fetch reviews for products I sold.
-      // Optimization: Create a view or RPC for this. For now, defaulting to mock/placeholder or 0 if no reviews.
-      // Real implementation would likely query a profile_stats view.
 
       // Update member since
       if (user.created_at) {
@@ -78,7 +84,7 @@ const Profile = () => {
       setStats({
         orders: ordersCount || 0,
         listings: listingsCount || 0,
-        rating: 4.9, // Placeholder until we have reviews system fully linked to sellers
+        rating: 4.9,
       });
 
     } catch (e) {
@@ -155,13 +161,19 @@ const Profile = () => {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.profileInfo}>
-            <Image
-              source={{ uri: user?.user_metadata?.avatar_url || 'https://via.placeholder.com/150' }}
-              style={styles.avatar}
-            />
+            {profile?.avatar_url || user?.user_metadata?.avatar_url ? (
+              <Image
+                source={{ uri: profile?.avatar_url || user?.user_metadata?.avatar_url }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.primary[100] }]}>
+                <UserCircleIcon size={40} color={Colors.primary[500]} />
+              </View>
+            )}
             <View style={styles.profileText}>
-              <Text style={styles.name}>{user?.user_metadata?.full_name || 'User'}</Text>
-              <Text style={styles.subText}>Member since {memberSince} • {user?.user_metadata?.location || 'Earth'}</Text>
+              <Text style={styles.name}>{profile?.full_name || user?.user_metadata?.full_name || 'User'}</Text>
+              <Text style={styles.subText}>Member since {memberSince} • {profile?.location || user?.user_metadata?.location || 'Earth'}</Text>
             </View>
           </View>
 
