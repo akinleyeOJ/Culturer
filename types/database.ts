@@ -13,32 +13,56 @@ export interface Database {
         Row: {
           id: string
           full_name: string | null
+          username: string | null
           avatar_url: string | null
+          cover_url: string | null
           bio: string | null
+          location: string | null
+          cultures: Json | null
+          instagram_handle: string | null
+          facebook_handle: string | null
+          website_url: string | null
           created_at: string
           updated_at: string
           saved_address: Json | null
           payment_methods: Json | null
+          shop_policies: Json | null
         }
         Insert: {
           id: string
           full_name?: string | null
+          username?: string | null
           avatar_url?: string | null
+          cover_url?: string | null
           bio?: string | null
+          location?: string | null
+          cultures?: Json | null
+          instagram_handle?: string | null
+          facebook_handle?: string | null
+          website_url?: string | null
           created_at?: string
           updated_at?: string
           saved_address?: Json | null
           payment_methods?: Json | null
+          shop_policies?: Json | null
         }
         Update: {
           id?: string
           full_name?: string | null
+          username?: string | null
           avatar_url?: string | null
+          cover_url?: string | null
           bio?: string | null
+          location?: string | null
+          cultures?: Json | null
+          instagram_handle?: string | null
+          facebook_handle?: string | null
+          website_url?: string | null
           created_at?: string
           updated_at?: string
           saved_address?: Json | null
           payment_methods?: Json | null
+          shop_policies?: Json | null
         }
         Relationships: [
           {

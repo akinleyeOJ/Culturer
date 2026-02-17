@@ -88,8 +88,8 @@ export default function ShopPoliciesScreen() {
                 .eq('id', user!.id)
                 .single();
 
-            if (data?.shop_policies) {
-                setPolicies(data.shop_policies as ShopPolicies);
+            if (data && (data as any).shop_policies) {
+                setPolicies((data as any).shop_policies as ShopPolicies);
             }
         } catch (e) {
             console.error('Error fetching policies:', e);
@@ -206,7 +206,7 @@ export default function ShopPoliciesScreen() {
                 {/* RETURN & EXCHANGE SECTION */}
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>RETURNS & EXCHANGES</Text>
-                    
+
                     <View style={styles.preferenceItem}>
                         <View style={styles.prefTextContainer}>
                             <Text style={styles.prefTitle}>Accept Returns</Text>
@@ -303,7 +303,7 @@ export default function ShopPoliciesScreen() {
                 {/* ORDER HANDLING SECTION */}
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>ORDER HANDLING</Text>
-                    
+
                     <View style={styles.preferenceItem}>
                         <View style={styles.prefTextContainer}>
                             <Text style={styles.prefTitle}>Allow Cancellations</Text>
@@ -611,11 +611,11 @@ const styles = StyleSheet.create({
         marginTop: 4,
         textAlign: 'center',
     },
-    faqItem: { 
-        padding: 16, 
-        borderBottomWidth: 1, 
-        borderBottomColor: '#F3F4F6', 
-        position: 'relative' 
+    faqItem: {
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+        position: 'relative'
     },
     faqHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingRight: 32 },
     faqQuestion: { fontSize: 15, fontWeight: '700', color: '#111827', flex: 1 },
@@ -690,7 +690,9 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         maxHeight: 340, // Ensure scrolling works if content is tall
     },
-    inputGroup: { marginBottom: 20 },
+    inputGroup: {
+        marginBottom: 20
+    },
     modalLabel: {
         fontSize: 12,
         fontWeight: '700',

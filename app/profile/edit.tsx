@@ -284,6 +284,8 @@ const EditProfileScreen = () => {
     };
 
     const handleSave = async () => {
+        if (!user) return;
+
         const nameToSave = fullName || '';
         if (!nameToSave.trim()) {
             Alert.alert('Required', 'Name is required.');
@@ -535,7 +537,7 @@ const EditProfileScreen = () => {
                                             { text: "Cancel", style: "cancel" },
                                             {
                                                 text: "Add",
-                                                onPress: (val) => {
+                                                onPress: (val?: string) => {
                                                     if (val && !cultures.includes(val)) {
                                                         setCultures([...cultures, val]);
                                                     }
