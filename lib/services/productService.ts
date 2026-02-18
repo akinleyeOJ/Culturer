@@ -121,7 +121,38 @@ export const fetchProducts = async (
 
 // Specific fetchers for Home screen (reusing fetchProducts)
 export const fetchForYouProducts = async (userId?: string) => {
-  return (await fetchProducts(0, 10, { sortBy: 'newest' }, userId)).products;
+  const filters: FilterOptions = { sortBy: 'newest' };
+
+  if (userId) {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('shipping_preferences')
+        .eq('id', userId)
+        .single();
+
+      if (profile?.shipping_preferences) {
+        const prefs = profile.shipping_preferences as any;
+        
+        // If they prefer express, prioritize showing express items
+        if (prefs.delivery_speed === 'express') {
+          filters.shipping = 'Express Available';
+        }
+        
+        // If they prefer local pickup, that takes precedence
+        if (prefs.local_pickup) {
+          filters.shipping = 'Pickup Available';
+        }
+
+        // If 'any' is selected or nothing is set, we don't apply a strict shipping filter
+        // which allows 'both' standard and express items to show up.
+      }
+    } catch (error) {
+      console.error('Error fetching profile for personalization:', error);
+    }
+  }
+
+  return (await fetchProducts(0, 10, filters, userId)).products;
 };
 
 export const fetchHotProducts = async (userId?: string) => {

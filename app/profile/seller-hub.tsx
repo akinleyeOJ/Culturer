@@ -284,7 +284,7 @@ const SellerHubScreen = () => {
                         icon={TruckIcon}
                         title="Shipping & pickup"
                         subtitle="Regions, delivery times, and local pickup options"
-                        onPress={() => { }}
+                        onPress={() => router.push('/profile/seller-shipping')}
                         isLast
                     />
                 </MenuSection>

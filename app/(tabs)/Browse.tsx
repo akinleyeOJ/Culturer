@@ -19,6 +19,7 @@ import { ProductCard, ProductCardSkeleton } from "../../components/Card";
 import BrowseHeader from "../../components/BrowseHeader";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
+import { supabase } from "../../lib/supabase";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { fetchProducts, toggleFavorite, fetchWishlistCount, trackProductView } from "../../lib/services/productService";
 import { CATEGORIES } from "../../constants/categories";
@@ -146,6 +147,36 @@ const Browse = () => {
     setWishlistCount(count);
   };
 
+  // Load default shipping preferences from profile if not set in params
+  const loadDefaultShippingPrefs = async () => {
+    if (user && !params.shipping) {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('shipping_preferences')
+          .eq('id', user.id)
+          .single();
+
+        if (data?.shipping_preferences) {
+          const prefs = data.shipping_preferences as any;
+          if (prefs.local_pickup) {
+            setShipping('Pickup Available');
+          } else if (prefs.delivery_speed === 'express') {
+            setShipping('Express Available');
+          } else if (prefs.delivery_speed === 'any') {
+            setShipping(undefined);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading default shipping prefs:', e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadDefaultShippingPrefs();
+  }, [user, params.shipping]);
+
   const loadProducts = async (reset = false) => {
     if (!reset && (isLoading || !hasMore)) return;
 
@@ -202,11 +233,12 @@ const Browse = () => {
   useFocusEffect(
     React.useCallback(() => {
       loadWishlistCount();
-      refreshCartCount(); // Refresh cart count on focus
-      if (products.length > 0) {
+      refreshCartCount();
+      loadDefaultShippingPrefs(); // Refresh prefs on focus
+      if (hasLoadedOnce) {
         loadProducts(true);
       }
-    }, [user, refreshCartCount])
+    }, [user, refreshCartCount, hasLoadedOnce, params.shipping])
   );
 
   const handleToggleFavorite = async (productId: string) => {

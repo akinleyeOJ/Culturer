@@ -1,0 +1,12 @@
+-- Add missing shipping columns to products table
+ALTER TABLE products 
+ADD COLUMN IF NOT EXISTS pickup_available BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS free_shipping BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS express_shipping BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS shipping_days_min INTEGER DEFAULT 3,
+ADD COLUMN IF NOT EXISTS shipping_days_max INTEGER DEFAULT 5;
+
+-- Update existing items to have these columns if they were null
+UPDATE products SET pickup_available = false WHERE pickup_available IS NULL;
+UPDATE products SET free_shipping = false WHERE free_shipping IS NULL;
+UPDATE products SET express_shipping = false WHERE express_shipping IS NULL;

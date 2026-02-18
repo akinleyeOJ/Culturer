@@ -250,13 +250,11 @@ const Home = () => {
     loadWishlistCount();
   }, [user]);
 
-  // Reload wishlist count and recently viewed when screen comes into focus
+  // Reload profile-dependent data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       loadWishlistCount();
-      if (user) {
-        fetchRecentlyViewed(user.id).then(setRecentlyViewed);
-      }
+      loadData(); // Re-fetch products to pick up potential preference changes
     }, [user])
   );
 

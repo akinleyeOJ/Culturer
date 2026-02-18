@@ -27,6 +27,8 @@ export interface Database {
           saved_address: Json | null
           payment_methods: Json | null
           shop_policies: Json | null
+          shipping_preferences: Json | null
+          shop_shipping: Json | null
         }
         Insert: {
           id: string
@@ -45,6 +47,8 @@ export interface Database {
           saved_address?: Json | null
           payment_methods?: Json | null
           shop_policies?: Json | null
+          shipping_preferences?: Json | null
+          shop_shipping?: Json | null
         }
         Update: {
           id?: string
@@ -63,6 +67,8 @@ export interface Database {
           saved_address?: Json | null
           payment_methods?: Json | null
           shop_policies?: Json | null
+          shipping_preferences?: Json | null
+          shop_shipping?: Json | null
         }
         Relationships: [
           {
@@ -97,6 +103,11 @@ export interface Database {
           cultural_origin: string | null
           condition: 'new' | 'like_new' | 'good' | 'fair'
           stock_quantity: number
+          pickup_available: boolean
+          free_shipping: boolean
+          express_shipping: boolean
+          shipping_days_min: number | null
+          shipping_days_max: number | null
           created_at: string
           updated_at: string
         }
@@ -122,6 +133,11 @@ export interface Database {
           cultural_origin?: string | null
           condition: 'new' | 'like_new' | 'good' | 'fair'
           stock_quantity: number
+          pickup_available?: boolean
+          free_shipping?: boolean
+          express_shipping?: boolean
+          shipping_days_min?: number | null
+          shipping_days_max?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -147,6 +163,11 @@ export interface Database {
           cultural_origin?: string | null
           condition?: 'new' | 'like_new' | 'good' | 'fair'
           stock_quantity?: number
+          pickup_available?: boolean
+          free_shipping?: boolean
+          express_shipping?: boolean
+          shipping_days_min?: number | null
+          shipping_days_max?: number | null
           created_at?: string
           updated_at?: string
         }

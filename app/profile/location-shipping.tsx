@@ -45,7 +45,7 @@ interface Address {
 
 interface ShippingPreferences {
     local_pickup: boolean;
-    delivery_speed: 'standard' | 'express';
+    delivery_speed: 'standard' | 'express' | 'any';
 }
 
 const COUNTRIES = [
@@ -71,7 +71,7 @@ export default function LocationShippingScreen() {
     const [addresses, setAddresses] = useState<Address[]>([]);
     const [preferences, setPreferences] = useState<ShippingPreferences>({
         local_pickup: false,
-        delivery_speed: 'standard'
+        delivery_speed: 'any'
     });
 
     // Edit/Add Mode
@@ -273,7 +273,7 @@ export default function LocationShippingScreen() {
         }
     };
 
-    const handleUpdateDeliverySpeed = async (speed: 'standard' | 'express') => {
+    const handleUpdateDeliverySpeed = async (speed: 'standard' | 'express' | 'any') => {
         const newPrefs = { ...preferences, delivery_speed: speed };
         setPreferences(newPrefs);
         setShowDeliveryOptions(false);
@@ -413,7 +413,6 @@ export default function LocationShippingScreen() {
             </SafeAreaView>
         );
     }
-
     // --- Delivery Speed Modal ---
     const renderDeliveryModal = () => (
         <Modal
@@ -429,6 +428,19 @@ export default function LocationShippingScreen() {
             >
                 <View style={styles.bottomSheet}>
                     <Text style={styles.bottomSheetTitle}>Select Delivery Speed</Text>
+
+                    <TouchableOpacity
+                        style={styles.sheetItem}
+                        onPress={() => handleUpdateDeliverySpeed('any')}
+                    >
+                        <View>
+                            <Text style={styles.sheetItemTitle}>No Preference (Any)</Text>
+                            <Text style={styles.sheetItemSubtitle}>Show all items regardless of speed</Text>
+                        </View>
+                        {preferences.delivery_speed === 'any' && <CheckCircleSolidIcon size={24} color={Colors.primary[500]} />}
+                    </TouchableOpacity>
+
+                    <View style={styles.divider} />
 
                     <TouchableOpacity
                         style={styles.sheetItem}
@@ -448,8 +460,8 @@ export default function LocationShippingScreen() {
                         onPress={() => handleUpdateDeliverySpeed('express')}
                     >
                         <View>
-                            <Text style={styles.sheetItemTitle}>Express Shipping</Text>
-                            <Text style={styles.sheetItemSubtitle}>Fast delivery (1-2 business days)</Text>
+                            <Text style={styles.sheetItemTitle}>Express Shipping Only</Text>
+                            <Text style={styles.sheetItemSubtitle}>Only show items with fast delivery</Text>
                         </View>
                         {preferences.delivery_speed === 'express' && <CheckCircleSolidIcon size={24} color={Colors.primary[500]} />}
                     </TouchableOpacity>
@@ -557,7 +569,7 @@ export default function LocationShippingScreen() {
                             </View>
                             <View style={styles.prefRight}>
                                 <Text style={styles.prefValue}>
-                                    {preferences.delivery_speed === 'express' ? 'Express' : 'Standard'}
+                                    {preferences.delivery_speed === 'express' ? 'Express' : preferences.delivery_speed === 'any' ? 'Any' : 'Standard'}
                                 </Text>
                                 <ChevronRightIcon size={20} color={Colors.neutral[400]} />
                             </View>
