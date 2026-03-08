@@ -232,19 +232,72 @@ export const toggleFavorite = async (userId: string, productId: string) => {
     return { success: !error, isFavorited: false };
   } else {
     const { error } = await supabase.from('wishlist').insert([{ user_id: userId, product_id: productId }] as any);
+    
+    // Track Save Analytics
+    if (!error) {
+      const { data: product } = await supabase.from('products').select('seller_id').eq('id', productId).single();
+      if (product) {
+        await supabase.from('listing_analytics').insert({
+          product_id: productId,
+          seller_id: product.seller_id,
+          event_type: 'save'
+        });
+        
+        // Update product total_favorites
+        await supabase.rpc('increment_total_favorites', { product_id: productId });
+      }
+    }
+    
     return { success: !error, isFavorited: true };
   }
 };
 
-export const trackProductView = async (userId: string, productId: string) => {
-  const { error } = await supabase
+export const trackProductView = async (userId: string, productId: string, sellerId?: string) => {
+  // Existing Recently Viewed logic
+  const { error: rvError } = await supabase
     .from('recently_viewed')
     .upsert(
       [{ user_id: userId, product_id: productId, viewed_at: new Date().toISOString() }] as any,
       { onConflict: 'user_id,product_id' }
     );
-  if (error) console.error('Error tracking view:', error);
+    
+  if (rvError) console.error('Error tracking recently viewed:', rvError);
+
+  // Listing Analytics Logic
+  try {
+    let finalSellerId = sellerId;
+    if (!finalSellerId) {
+      const { data } = await supabase.from('products').select('seller_id').eq('id', productId).single();
+      finalSellerId = data?.seller_id;
+    }
+
+    if (finalSellerId) {
+      await supabase.from('listing_analytics').insert({
+        product_id: productId,
+        seller_id: finalSellerId,
+        event_type: 'view'
+      });
+      
+      // Update product total_views
+      await supabase.rpc('increment_total_views', { product_id: productId });
+    }
+  } catch (error) {
+    console.error('Error tracking analytics view:', error);
+  }
 };
+
+export const trackProductSale = async (productId: string, sellerId: string) => {
+  try {
+    await supabase.from('listing_analytics').insert({
+      product_id: productId,
+      seller_id: sellerId,
+      event_type: 'sale'
+    });
+  } catch (error) {
+    console.error('Error tracking analytics sale:', error);
+  }
+};
+
 
 export const fetchWishlistCount = async (userId: string): Promise<number> => {
   const { count, error } = await supabase
@@ -254,6 +307,68 @@ export const fetchWishlistCount = async (userId: string): Promise<number> => {
   if (error) return 0;
   return count || 0;
 };
+
+export const fetchSellerAnalytics = async (sellerId: string) => {
+  try {
+    // 1. Fetch Aggregated Totals
+    const { data: totals, error: totalsError } = await supabase
+      .from('listing_analytics')
+      .select('event_type')
+      .eq('seller_id', sellerId);
+
+    if (totalsError) throw totalsError;
+
+    const summary = {
+      views: totals.filter(e => e.event_type === 'view').length,
+      saves: totals.filter(e => e.event_type === 'save').length,
+      sales: totals.filter(e => e.event_type === 'sale').length,
+      revenue: 0 // Will calculate from actual orders if needed, but for now we track 'sale' events
+    };
+
+    // calculate revenue from orders instead of just 'sale' events for accuracy
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('total_amount')
+      .eq('seller_id', sellerId)
+      .eq('status', 'paid');
+    
+    summary.revenue = orders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+
+    // 2. Fetch Product Breakdown
+    const { data: products, error: pError } = await supabase
+      .from('products')
+      .select('id, name, total_views, total_favorites')
+      .eq('seller_id', sellerId)
+      .eq('status', 'active');
+      
+    if (pError) throw pError;
+
+    // Fetch sale counts per product
+    const { data: salesPerProduct } = await supabase
+      .from('listing_analytics')
+      .select('product_id')
+      .eq('seller_id', sellerId)
+      .eq('event_type', 'sale');
+
+    const productStats = products.map(p => {
+      const salesCount = salesPerProduct?.filter(s => s.product_id === p.id).length || 0;
+      return {
+        id: p.id,
+        name: p.name,
+        views: p.total_views || 0,
+        saves: p.total_favorites || 0,
+        sales: salesCount,
+        conversion: p.total_views > 0 ? (salesCount / p.total_views) * 100 : 0
+      };
+    }).sort((a, b) => b.views - a.views);
+
+    return { summary, productStats };
+  } catch (error) {
+    console.error('Error fetching seller analytics:', error);
+    return null;
+  }
+};
+
 
 export const fetchWishlist = async (userId: string) => {
   const { data: wishlistData, error: wishlistError } = await supabase

@@ -67,8 +67,8 @@ const ItemDetail = () => {
             setProduct(productData);
 
             // Track view
-            if (user) {
-                await trackProductView(user.id, id);
+            if (user && productData.seller_id) {
+                await trackProductView(user.id, id, productData.seller_id);
             }
 
             // Load recommendations

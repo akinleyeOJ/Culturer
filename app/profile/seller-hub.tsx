@@ -282,7 +282,7 @@ const SellerHubScreen = () => {
                     />
                     <MenuItem
                         icon={TruckIcon}
-                        title="Shipping & pickup"
+                        title="Shipping & Postage"
                         subtitle="Regions, delivery times, and local pickup options"
                         onPress={() => router.push('/profile/seller-shipping')}
                         isLast
@@ -301,7 +301,7 @@ const SellerHubScreen = () => {
                         icon={ChartBarIcon}
                         title="Listings analytics"
                         subtitle="Track views, saves and conversion rates"
-                        onPress={() => { }}
+                        onPress={() => router.push('/profile/seller-analytics')}
                     />
                     <MenuItem
                         icon={BanknotesIcon}

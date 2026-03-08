@@ -103,6 +103,7 @@ export interface Database {
           cultural_origin: string | null
           condition: 'new' | 'like_new' | 'good' | 'fair'
           stock_quantity: number
+          seller_id: string
           pickup_available: boolean
           free_shipping: boolean
           express_shipping: boolean
@@ -133,6 +134,7 @@ export interface Database {
           cultural_origin?: string | null
           condition: 'new' | 'like_new' | 'good' | 'fair'
           stock_quantity: number
+          seller_id: string
           pickup_available?: boolean
           free_shipping?: boolean
           express_shipping?: boolean
@@ -163,6 +165,7 @@ export interface Database {
           cultural_origin?: string | null
           condition?: 'new' | 'like_new' | 'good' | 'fair'
           stock_quantity?: number
+          seller_id?: string
           pickup_available?: boolean
           free_shipping?: boolean
           express_shipping?: boolean
@@ -177,6 +180,45 @@ export interface Database {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      listing_analytics: {
+        Row: {
+          id: string
+          product_id: string
+          seller_id: string
+          event_type: 'view' | 'save' | 'sale'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          seller_id: string
+          event_type: 'view' | 'save' | 'sale'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          product_id?: string
+          seller_id?: string
+          event_type?: 'view' | 'save' | 'sale'
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_analytics_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_analytics_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]
@@ -449,7 +491,18 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_total_views: {
+        Args: {
+          product_id: string
+        }
+        Returns: undefined
+      }
+      increment_total_favorites: {
+        Args: {
+          product_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

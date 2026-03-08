@@ -125,7 +125,7 @@ export default function SellerShippingScreen() {
                 <TouchableOpacity onPress={() => router.back()} style={styles.circleBtn}>
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Shipping & Pickup</Text>
+                <Text style={styles.headerTitle}>Shipping & Postage</Text>
                 <View style={{ width: 40 }} />
             </View>
 

@@ -26,6 +26,7 @@ import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { fetchCart, clearCart, CartItem } from '../lib/services/cartService';
+import { trackProductSale } from '../lib/services/productService';
 import {
     ChevronLeftIcon,
     DevicePhoneMobileIcon,
@@ -859,6 +860,13 @@ const Checkout = () => {
                         created_at: new Date().toISOString()
                     })
                     .eq('id', order.id);
+
+                // Track Sales for each item
+                for (const item of cartItems) {
+                    if (item.product_id && item.product.seller_id) {
+                        await trackProductSale(item.product_id, item.product.seller_id);
+                    }
+                }
             }
 
             // 5. Payment Success
