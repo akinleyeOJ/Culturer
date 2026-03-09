@@ -22,7 +22,11 @@ import {
     CreditCardIcon,
     ChevronRightIcon,
     InformationCircleIcon,
-    ArrowTrendingUpIcon
+    ArrowTrendingUpIcon,
+    ShoppingBagIcon,
+    PlusIcon,
+    GlobeAltIcon,
+    ClipboardDocumentCheckIcon
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
@@ -44,54 +48,63 @@ const PayoutsScreen = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [balance, setBalance] = useState({ available: 0, pending: 0 });
+    const [balance, setBalance] = useState({ available: 0, pending: 0, totalLifetime: 0 });
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [paymentMethods, setPaymentMethods] = useState([
+        { id: '1', type: 'bank', name: 'Standard Bank Account', detail: '•••• 4521', isDefault: true },
+        { id: '2', type: 'card', name: 'Visa Business', detail: '•••• 8829', isDefault: false }
+    ]);
 
     const fetchFinancialData = useCallback(async (showLoading = true) => {
         if (!user) return;
         if (showLoading) setLoading(true);
 
         try {
-            // 1. Fetch orders to calculate real earnings
-            const { data: orders, error: ordersError } = await supabase
+            // 1. Fetch orders (Selling)
+            const { data: sales, error: salesError } = await supabase
                 .from('orders')
-                .select('total_amount, status, created_at')
-                .eq('seller_id', user.id)
-                .in('status', ['paid', 'shipped', 'delivered']);
+                .select('id, total_amount, status, created_at, products(name)')
+                .eq('seller_id', user.id);
 
-            if (ordersError) throw ordersError;
+            // 2. Fetch orders (Buying)
+            const { data: purchases, error: purchaseError } = await supabase
+                .from('orders')
+                .select('id, total_amount, status, created_at, products(name)')
+                .eq('buyer_id', user.id);
 
-            const totalRevenue = orders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+            if (salesError || purchaseError) throw salesError || purchaseError;
 
-            // Mocking split between available and pending for demo
+            // Calculate metrics
+            const totalRevenue = sales?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+            const availableRev = sales?.filter(o => o.status === 'delivered').reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+
             setBalance({
-                available: totalRevenue * 0.7,
-                pending: totalRevenue * 0.3
+                available: availableRev * 0.9, // Simplified commission logic
+                pending: (totalRevenue - availableRev) * 0.9,
+                totalLifetime: totalRevenue * 1.0 // Total revenue before deductions
             });
 
-            // 2. Mock Transactions for Premium UI Feel
-            const mockTransactions: Transaction[] = (orders || []).map((o, idx) => ({
-                id: `txn-${idx}`,
-                type: 'earning',
-                amount: o.total_amount,
-                description: `Sale of Listing #${idx + 101}`,
-                date: o.created_at,
-                status: o.status === 'delivered' ? 'completed' : 'pending'
-            }));
+            // 3. Consolidated Activity
+            const combined: Transaction[] = [
+                ...(sales || []).map((o: any) => ({
+                    id: `sale-${o.id}`,
+                    type: 'earning' as const,
+                    amount: o.total_amount,
+                    description: `Sale: ${Array.isArray(o.products) ? (o.products[0]?.name || 'Item') : (o.products?.name || 'Item')}`,
+                    date: o.created_at,
+                    status: (o.status === 'delivered' ? 'completed' : 'pending') as any
+                })),
+                ...(purchases || []).map((o: any) => ({
+                    id: `buy-${o.id}`,
+                    type: 'payout' as const,
+                    amount: o.total_amount,
+                    description: `Purchase: ${Array.isArray(o.products) ? (o.products[0]?.name || 'Item') : (o.products?.name || 'Item')}`,
+                    date: o.created_at,
+                    status: 'completed' as any
+                }))
+            ];
 
-            // Add a mock payout if there's revenue
-            if (totalRevenue > 100) {
-                mockTransactions.unshift({
-                    id: 'payout-1',
-                    type: 'payout',
-                    amount: 50.00,
-                    description: 'Monthly payout to Bank Account',
-                    date: new Date(Date.now() - 86400000 * 2).toISOString(),
-                    status: 'completed'
-                });
-            }
-
-            setTransactions(mockTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            setTransactions(combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
 
         } catch (error) {
             console.error('Error fetching financial data:', error);
@@ -121,38 +134,40 @@ const PayoutsScreen = () => {
                     <BanknotesIcon size={32} color={Colors.primary[600]} />
                 </View>
             </View>
+
             <View style={styles.balanceDivider} />
-            <View style={styles.pendingRow}>
-                <View style={styles.pendingItem}>
-                    <ClockIcon size={14} color={Colors.neutral[500]} />
-                    <Text style={styles.pendingText}>Pending: <Text style={styles.pendingValue}>€{balance.pending.toFixed(2)}</Text></Text>
+
+            <View style={styles.metricsRow}>
+                <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Total Lifetime</Text>
+                    <Text style={styles.metricValue}>€{balance.totalLifetime.toFixed(2)}</Text>
                 </View>
-                <TouchableOpacity style={styles.payoutBtn}>
-                    <Text style={styles.payoutBtnText}>Payout Now</Text>
-                </TouchableOpacity>
+                <View style={styles.metricDivider} />
+                <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Pending</Text>
+                    <Text style={styles.metricValue}>€{balance.pending.toFixed(2)}</Text>
+                </View>
             </View>
+
+            <TouchableOpacity style={styles.mainPayoutBtn}>
+                <Text style={styles.mainPayoutBtnText}>Request Payout</Text>
+            </TouchableOpacity>
         </View>
     );
 
-    const NextPayoutCard = () => (
-        <View style={styles.nextPayoutCard}>
-            <View style={styles.nextPayoutHeader}>
-                <Text style={styles.nextPayoutTitle}>Next payout scheduled</Text>
-                <InformationCircleIcon size={18} color={Colors.neutral[400]} />
+    const SettingsSection = ({ title, icon: Icon, children }: any) => (
+        <View style={styles.settingsSection}>
+            <View style={styles.settingsHeader}>
+                <Icon size={20} color={Colors.neutral[600]} />
+                <Text style={styles.settingsTitle}>{title}</Text>
             </View>
-            <View style={styles.nextPayoutContent}>
-                <View>
-                    <Text style={styles.nextPayoutDate}>March 15, 2026</Text>
-                    <Text style={styles.nextPayoutSub}>Estimated arrival in 3-5 days</Text>
-                </View>
-                <Text style={styles.nextPayoutAmount}>€{(balance.available * 0.5).toFixed(2)}</Text>
-            </View>
+            {children}
         </View>
     );
 
     const renderTransaction = ({ item }: { item: Transaction }) => {
         const isEarning = item.type === 'earning';
-        const Icon = isEarning ? ArrowTrendingUpIcon : CreditCardIcon;
+        const Icon = isEarning ? ArrowTrendingUpIcon : ShoppingBagIcon;
         const statusColor = item.status === 'completed' ? Colors.success[500] : item.status === 'pending' ? Colors.primary[500] : Colors.danger[500];
 
         return (
@@ -162,7 +177,7 @@ const PayoutsScreen = () => {
                 </View>
                 <View style={styles.txnContent}>
                     <View style={styles.txnHeader}>
-                        <Text style={styles.txnTitle}>{item.description}</Text>
+                        <Text style={styles.txnTitle} numberOfLines={1}>{item.description}</Text>
                         <Text style={[styles.txnAmount, { color: isEarning ? Colors.success[600] : Colors.text.primary }]}>
                             {isEarning ? '+' : '-'}€{item.amount.toFixed(2)}
                         </Text>
@@ -197,7 +212,7 @@ const PayoutsScreen = () => {
                 <TouchableOpacity onPress={() => router.back()} style={styles.circleBtn}>
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Payouts & Earnings</Text>
+                <Text style={styles.headerTitle}>Earnings Hub</Text>
                 <TouchableOpacity style={styles.circleBtn}>
                     <ArrowPathIcon size={20} color={Colors.text.primary} />
                 </TouchableOpacity>
@@ -209,30 +224,53 @@ const PayoutsScreen = () => {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
                 <BalanceCard />
-                <NextPayoutCard />
 
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Payment Method</Text>
+                    <Text style={styles.sectionTitle}>Payout Methods</Text>
                     <TouchableOpacity>
-                        <Text style={styles.editBtn}>Edit</Text>
+                        <PlusIcon size={20} color={Colors.primary[600]} />
                     </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.paymentMethodCard}>
-                    <View style={styles.bankIconBox}>
-                        <BanknotesIcon size={24} color={Colors.primary[600]} />
-                    </View>
-                    <View style={styles.bankInfo}>
-                        <Text style={styles.bankTitle}>Standard Bank Account</Text>
-                        <Text style={styles.bankSub}>Ending in •••• 4521</Text>
-                    </View>
-                    <ChevronRightIcon size={20} color={Colors.neutral[400]} />
-                </TouchableOpacity>
+                {paymentMethods.map((pm) => (
+                    <TouchableOpacity key={pm.id} style={styles.paymentMethodCard}>
+                        <View style={styles.bankIconBox}>
+                            {pm.type === 'bank' ? <BanknotesIcon size={22} color={Colors.primary[600]} /> : <CreditCardIcon size={22} color={Colors.primary[600]} />}
+                        </View>
+                        <View style={styles.bankInfo}>
+                            <Text style={styles.bankTitle}>{pm.name}</Text>
+                            <Text style={styles.bankSub}>{pm.detail}</Text>
+                        </View>
+                        {pm.isDefault && (
+                            <View style={styles.defaultBadge}>
+                                <Text style={styles.defaultText}>Primary</Text>
+                            </View>
+                        )}
+                        <ChevronRightIcon size={18} color={Colors.neutral[400]} />
+                    </TouchableOpacity>
+                ))}
+
+                <View style={styles.complianceRow}>
+                    <TouchableOpacity style={styles.complianceCard}>
+                        <GlobeAltIcon size={20} color={Colors.neutral[600]} />
+                        <View style={styles.complianceInfo}>
+                            <Text style={styles.complianceTitle}>Preferred Currency</Text>
+                            <Text style={styles.complianceSub}>Euro (€)</Text>
+                        </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.complianceCard}>
+                        <ClipboardDocumentCheckIcon size={20} color={Colors.neutral[600]} />
+                        <View style={styles.complianceInfo}>
+                            <Text style={styles.complianceTitle}>Tax Documents</Text>
+                            <Text style={styles.complianceSub}>2025 Forms</Text>
+                        </View>
+                    </TouchableOpacity>
+                </View>
 
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Recent Activity</Text>
                     <TouchableOpacity>
-                        <Text style={styles.viewAllBtn}>View All</Text>
+                        <Text style={styles.viewAllBtn}>History</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -244,7 +282,7 @@ const PayoutsScreen = () => {
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <CurrencyDollarIcon size={48} color={Colors.neutral[200]} />
-                            <Text style={styles.emptyText}>No financial activity yet</Text>
+                            <Text style={styles.emptyText}>No financial activity found</Text>
                         </View>
                     }
                 />
@@ -294,7 +332,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderRadius: 24,
         padding: 24,
-        marginBottom: 16,
+        marginBottom: 24,
         borderWidth: 1,
         borderColor: '#E5E7EB',
         shadowColor: "#000",
@@ -331,77 +369,58 @@ const styles = StyleSheet.create({
     balanceDivider: {
         height: 1,
         backgroundColor: '#F3F4F6',
-        marginBottom: 16,
+        marginBottom: 20,
     },
-    pendingRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    pendingItem: {
+    metricsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-    },
-    pendingText: {
-        fontSize: 13,
-        color: '#6B7280',
-    },
-    pendingValue: {
-        fontWeight: '700',
-        color: '#374151',
-    },
-    payoutBtn: {
-        backgroundColor: Colors.primary[500],
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 12,
-    },
-    payoutBtnText: {
-        color: '#FFF',
-        fontSize: 13,
-        fontWeight: '700',
-    },
-    nextPayoutCard: {
-        backgroundColor: '#FFF9F5',
-        borderRadius: 20,
-        padding: 20,
         marginBottom: 24,
-        borderWidth: 1,
-        borderColor: '#FED7AA',
     },
-    nextPayoutHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
+    metricItem: {
+        flex: 1,
     },
-    nextPayoutTitle: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#9A3412',
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-    },
-    nextPayoutContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    nextPayoutDate: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#111827',
-        marginBottom: 2,
-    },
-    nextPayoutSub: {
+    metricLabel: {
         fontSize: 12,
-        color: '#6B7280',
+        color: '#9CA3AF',
+        marginBottom: 4,
     },
-    nextPayoutAmount: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: Colors.primary[600],
+    metricValue: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#4B5563',
+    },
+    metricDivider: {
+        width: 1,
+        height: 24,
+        backgroundColor: '#F3F4F6',
+        marginHorizontal: 16,
+    },
+    mainPayoutBtn: {
+        backgroundColor: Colors.primary[500],
+        height: 52,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    mainPayoutBtnText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    settingsSection: {
+        marginBottom: 24,
+    },
+    settingsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 12,
+        paddingHorizontal: 4,
+    },
+    settingsTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111827',
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -415,11 +434,6 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#111827',
     },
-    editBtn: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: Colors.primary[600],
-    },
     viewAllBtn: {
         fontSize: 14,
         fontWeight: '600',
@@ -431,7 +445,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderRadius: 16,
         padding: 16,
-        marginBottom: 24,
+        marginBottom: 12,
         borderWidth: 1,
         borderColor: '#F3F4F6',
     },
@@ -458,6 +472,45 @@ const styles = StyleSheet.create({
     bankSub: {
         fontSize: 13,
         color: '#6B7280',
+    },
+    defaultBadge: {
+        backgroundColor: Colors.success[50],
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        marginRight: 10,
+    },
+    defaultText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: Colors.success[600],
+    },
+    complianceRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 24,
+    },
+    complianceCard: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F3F4F6',
+        padding: 12,
+        borderRadius: 12,
+        gap: 10,
+    },
+    complianceInfo: {
+        flex: 1,
+    },
+    complianceTitle: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#4B5563',
+    },
+    complianceSub: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#111827',
     },
     transactionItem: {
         flexDirection: 'row',
@@ -490,6 +543,8 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
         color: '#111827',
+        flex: 1,
+        marginRight: 8,
     },
     txnAmount: {
         fontSize: 15,
