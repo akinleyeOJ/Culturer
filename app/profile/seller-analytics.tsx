@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     RefreshControl,
     Dimensions,
+    Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,48 +19,107 @@ import {
     HeartIcon,
     ShoppingBagIcon,
     BanknotesIcon,
-    ArrowPathIcon
+    ArrowPathIcon,
+    GlobeAltIcon,
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchSellerAnalytics } from '../../lib/services/productService';
+import { fetchSellerAnalytics, DateRange } from '../../lib/services/productService';
+import { supabase } from '../../lib/supabase';
 
 const SellerAnalyticsScreen = () => {
     const router = useRouter();
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [range, setRange] = useState<DateRange>('7days');
     const [data, setData] = useState<any>(null);
 
-    const loadAnalytics = async () => {
+    const loadAnalytics = useCallback(async (showLoading = true) => {
         if (!user) return;
-        setLoading(true);
-        const result = await fetchSellerAnalytics(user.id);
+        if (showLoading) setLoading(true);
+        const result = await fetchSellerAnalytics(user.id, range);
         if (result) {
             setData(result);
         }
         setLoading(false);
         setRefreshing(false);
-    };
+    }, [user, range]);
 
     useEffect(() => {
         loadAnalytics();
+    }, [range, user]);
+
+    // Real-time listener
+    useEffect(() => {
+        if (!user) return;
+
+        const channel = supabase
+            .channel('analytics_realtime')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'listing_analytics',
+                    filter: `seller_id=eq.${user.id}`
+                },
+                () => {
+                    // Refresh data quietly when a new event occurs
+                    loadAnalytics(false);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, [user]);
 
     const onRefresh = () => {
         setRefreshing(true);
-        loadAnalytics();
+        loadAnalytics(false);
     };
 
-    const SummaryCard = ({ icon: Icon, label, value, color, unit = '' }: any) => (
-        <View style={styles.summaryCard}>
-            <View style={[styles.iconBox, { backgroundColor: color + '10' }]}>
-                <Icon size={22} color={color} />
-            </View>
-            <View style={styles.cardContent}>
+    const SummaryCard = ({ icon: Icon, label, value, color, unit = '', trend = '' }: any) => {
+        const isPositive = trend.startsWith('+');
+        const isNegative = trend.startsWith('-');
+        const trendColor = isPositive ? Colors.success[500] : isNegative ? '#EF4444' : '#9CA3AF';
+
+        return (
+            <View style={styles.summaryCard}>
+                <View style={styles.summaryHeader}>
+                    <Text style={styles.cardLabel}>{label}</Text>
+                    <Icon size={18} color={color} />
+                </View>
                 <Text style={styles.cardValue}>{unit}{value}</Text>
-                <Text style={styles.cardLabel}>{label}</Text>
+                {trend && range !== 'all' ? (
+                    <View style={styles.trendRow}>
+                        <ArrowTrendingUpIcon
+                            size={10}
+                            color={trendColor}
+                            style={{ transform: [{ rotate: isNegative ? '180deg' : '0deg' }] }}
+                        />
+                        <Text style={[styles.trendText, { color: trendColor }]}>{trend}</Text>
+                    </View>
+                ) : null}
             </View>
+        );
+    };
+
+    const DateFilter = () => (
+        <View style={styles.filterRow}>
+            {(['7days', '30days', 'year'] as const).map((r) => (
+                <TouchableOpacity
+                    key={r}
+                    style={[styles.filterBtn, range === r && { backgroundColor: Colors.primary[500] }]}
+                    onPress={() => setRange(r)}
+                >
+                    <Text style={[styles.filterBtnText, range === r && styles.filterBtnTextActive]}>
+                        {r === '7days' ? 'Last 7 days' : r === '30days' ? 'Last 30 days' : 'This Year'}
+                    </Text>
+                </TouchableOpacity>
+            ))}
         </View>
     );
 
@@ -81,7 +141,9 @@ const SellerAnalyticsScreen = () => {
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Listing Analytics</Text>
-                <View style={{ width: 40 }} />
+                <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+                    <ArrowPathIcon size={20} color={Colors.text.secondary} />
+                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -89,107 +151,131 @@ const SellerAnalyticsScreen = () => {
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
+                <DateFilter />
+
                 {/* Summary Section */}
+                <View style={styles.summaryGrid}>
+                    <SummaryCard
+                        icon={BanknotesIcon}
+                        label="Total Revenue"
+                        unit="€"
+                        value={(data?.summary.revenue || 0).toFixed(2)}
+                        color={Colors.primary[500]}
+                        trend={data?.summary.trends.revenue}
+                    />
+                    <SummaryCard
+                        icon={ShoppingBagIcon}
+                        label="Total Sales"
+                        value={data?.summary.sales || 0}
+                        color={Colors.secondary[500]}
+                        trend={data?.summary.trends.sales}
+                    />
+                    <SummaryCard
+                        icon={ArrowTrendingUpIcon}
+                        label="Conversion Rate"
+                        value={(data?.summary.views > 0 ? (data.summary.sales / data.summary.views * 100).toFixed(1) : '0') + '%'}
+                        color={Colors.success[500]}
+                        trend={data?.summary.trends.conversion}
+                    />
+                    <SummaryCard
+                        icon={EyeIcon}
+                        label="Shop Views"
+                        value={data?.summary.views || 0}
+                        color="#6366f1"
+                        trend={data?.summary.trends.views}
+                    />
+                </View>
+
+                {/* Traffic Trends Chart */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Performance Overview</Text>
-                    <View style={styles.summaryGrid}>
-                        <SummaryCard
-                            icon={EyeIcon}
-                            label="Total Views"
-                            value={data?.summary.views || 0}
-                            color={Colors.primary[500]}
-                        />
-                        <SummaryCard
-                            icon={HeartIcon}
-                            label="Total Saves"
-                            value={data?.summary.saves || 0}
-                            color="#EF4444"
-                        />
-                        <SummaryCard
-                            icon={ShoppingBagIcon}
-                            label="Total Sales"
-                            value={data?.summary.sales || 0}
-                            color={Colors.success[500]}
-                        />
-                        <SummaryCard
-                            icon={BanknotesIcon}
-                            label="Revenue"
-                            unit="€"
-                            value={(data?.summary.revenue || 0).toFixed(2)}
-                            color={Colors.secondary[500]}
-                        />
+                    <View style={styles.titleRow}>
+                        <Text style={styles.sectionTitle}>Traffic Trends</Text>
                     </View>
-                </View>
+                    <View style={styles.chartContainer}>
+                        <View style={styles.vBarChart}>
+                            {data?.trends.map((item: any, idx: number) => {
+                                const maxVal = Math.max(...data.trends.map((t: any) => t.value), 1);
+                                const height = (item.value / maxVal) * 100;
 
-                {/* Conversion Insights */}
-                <View style={styles.insightBox}>
-                    <View style={styles.insightHeader}>
-                        <ArrowTrendingUpIcon size={20} color={Colors.primary[600]} />
-                        <Text style={styles.insightTitle}>Conversion Insight</Text>
-                    </View>
-                    <Text style={styles.insightText}>
-                        Your average conversion rate is <Text style={styles.bold}>
-                            {data?.summary.views > 0 ? ((data.summary.sales / data.summary.views) * 100).toFixed(1) : 0}%
-                        </Text>.
-                        {data?.summary.sales > 0 ? " You're doing great! " : " Try updating photos or descriptions to boost interest."}
-                    </Text>
-                </View>
+                                // Show all labels for 7 days, every 5th for 30 days, every month for year
+                                const showLabel =
+                                    range === '7days' ||
+                                    (range === '30days' && idx % 5 === 0) ||
+                                    (range === 'year') ||
+                                    idx === data.trends.length - 1;
 
-                {/* Popularity Chart */}
-                {data?.productStats.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Views by Product</Text>
-                        <View style={styles.chartContainer}>
-                            {data.productStats.slice(0, 5).map((item: any) => {
-                                const maxViews = Math.max(...data.productStats.map((p: any) => p.views), 1);
-                                const barWidth = (item.views / maxViews) * 100;
                                 return (
-                                    <View key={item.id} style={styles.chartRow}>
-                                        <Text style={styles.chartLabel} numberOfLines={1}>{item.name}</Text>
-                                        <View style={styles.barBackground}>
-                                            <View style={[styles.barFill, { width: `${barWidth}%` }]} />
-                                            <Text style={styles.barValue}>{item.views}</Text>
+                                    <View key={idx} style={[styles.vBarColumn, range === '30days' && { marginHorizontal: 0 }]}>
+                                        <View style={[styles.vBarTrack, range === '30days' && { width: 8 }]}>
+                                            <View style={[
+                                                styles.vBarFill,
+                                                { height: `${Math.max(height, 5)}%` },
+                                                item.value === maxVal && item.value > 0 && { backgroundColor: Colors.primary[500] }
+                                            ]} />
                                         </View>
+                                        {showLabel && (
+                                            <View style={styles.vBarLabelContainer}>
+                                                <Text style={styles.vBarLabel} numberOfLines={1}>{item.label}</Text>
+                                            </View>
+                                        )}
                                     </View>
                                 );
                             })}
                         </View>
                     </View>
-                )}
+                </View>
 
-                {/* Listing Breakdown */}
+                {/* Cultures Reached */}
                 <View style={styles.section}>
                     <View style={styles.titleRow}>
-                        <Text style={styles.sectionTitle}>Breakdown by Listing</Text>
-                        <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
-                            <ArrowPathIcon size={16} color={Colors.text.secondary} />
-                        </TouchableOpacity>
+                        <Text style={styles.sectionTitle}>Cultures Reached</Text>
+                        <GlobeAltIcon size={20} color={Colors.primary[500]} />
+                    </View>
+                    <View style={styles.cultureGrid}>
+                        {data?.culturalReach.length > 0 ? data.culturalReach.map((item: any, idx: number) => (
+                            <View key={idx} style={styles.cultureCard}>
+                                <Text style={styles.cultureName}>{item.name}</Text>
+                                <Text style={styles.cultureCount}>{item.count} interactions</Text>
+                            </View>
+                        )) : (
+                            <Text style={styles.emptyText}>No data yet</Text>
+                        )}
+                    </View>
+                </View>
+
+                {/* Top Listings */}
+                <View style={styles.section}>
+                    <View style={styles.titleRow}>
+                        <Text style={styles.sectionTitle}>Top Listings</Text>
                     </View>
 
-                    {data?.productStats.length > 0 ? (
-                        <View style={styles.table}>
-                            <View style={styles.tableHeader}>
-                                <Text style={[styles.col, { flex: 2 }]}>Product</Text>
-                                <Text style={styles.col}>Views</Text>
-                                <Text style={styles.col}>Saves</Text>
-                                <Text style={styles.col}>Sales</Text>
-                            </View>
-                            {data.productStats.map((item: any) => (
-                                <View key={item.id} style={styles.tableRow}>
-                                    <View style={[styles.col, { flex: 2 }]}>
-                                        <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-                                        <Text style={styles.convText}>{item.conversion.toFixed(1)}% Conv.</Text>
+                    {data?.productStats.length > 0 ? data.productStats.map((item: any) => (
+                        <View key={item.id} style={styles.listingItem}>
+                            <Image
+                                source={{ uri: item.image_url || 'https://via.placeholder.com/60' }}
+                                style={styles.listingImage}
+                            />
+                            <View style={styles.listingMeta}>
+                                <Text style={styles.listingName} numberOfLines={1}>{item.name}</Text>
+                                <View style={styles.listingStats}>
+                                    <View style={styles.miniStat}>
+                                        <EyeIcon size={12} color="#9CA3AF" />
+                                        <Text style={styles.miniStatText}>{item.views}</Text>
                                     </View>
-                                    <Text style={styles.colValue}>{item.views}</Text>
-                                    <Text style={styles.colValue}>{item.saves}</Text>
-                                    <Text style={styles.colValue}>{item.sales}</Text>
+                                    <View style={styles.miniStat}>
+                                        <HeartIcon size={12} color="#9CA3AF" />
+                                        <Text style={styles.miniStatText}>{item.saves}</Text>
+                                    </View>
+                                    <View style={styles.miniStat}>
+                                        <ShoppingBagIcon size={12} color="#9CA3AF" />
+                                        <Text style={styles.miniStatText}>{item.sales}</Text>
+                                    </View>
                                 </View>
-                            ))}
+                            </View>
+                            <Text style={styles.listingPrice}>€{item.price}</Text>
                         </View>
-                    ) : (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyText}>No active listings yet.</Text>
-                        </View>
+                    )) : (
+                        <Text style={styles.emptyText}>No listings yet</Text>
                     )}
                 </View>
 
@@ -202,7 +288,7 @@ const SellerAnalyticsScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FAFAFA',
+        backgroundColor: '#fff',
     },
     loader: {
         flex: 1,
@@ -215,7 +301,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
@@ -232,121 +317,83 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: Colors.text.primary,
     },
+    refreshBtn: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     scrollContent: {
         paddingHorizontal: 16,
-        paddingTop: 20,
+        paddingTop: 16,
     },
-    section: {
-        marginBottom: 24,
+    filterRow: {
+        flexDirection: 'row',
+        backgroundColor: '#F3F4F6',
+        padding: 4,
+        borderRadius: 12,
+        marginBottom: 20,
     },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: Colors.text.primary,
-        marginBottom: 16,
+    filterBtn: {
+        flex: 1,
+        paddingVertical: 8,
+        alignItems: 'center',
+        borderRadius: 10,
+    },
+    filterBtnActive: {
+        backgroundColor: Colors.primary[500],
+    },
+    filterBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6B7280',
+    },
+    filterBtnTextActive: {
+        color: '#fff',
     },
     summaryGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 12,
+        marginBottom: 24,
     },
     summaryCard: {
         width: (Dimensions.get('window').width - 44) / 2,
+        padding: 16,
         backgroundColor: '#fff',
-        padding: 16,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
-    },
-    iconBox: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    cardContent: {
-        gap: 2,
-    },
-    cardValue: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: Colors.text.primary,
-    },
-    cardLabel: {
-        fontSize: 12,
-        color: Colors.text.secondary,
-        fontWeight: '500',
-    },
-    insightBox: {
-        backgroundColor: Colors.primary[50],
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: Colors.primary[100],
-        marginBottom: 24,
-    },
-    insightHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-    },
-    insightTitle: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: Colors.primary[800],
-    },
-    insightText: {
-        fontSize: 13,
-        color: Colors.primary[900],
-        lineHeight: 18,
-    },
-    bold: {
-        fontWeight: '800',
-    },
-    chartContainer: {
-        backgroundColor: '#fff',
-        padding: 16,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#F3F4F6',
     },
-    chartRow: {
-        marginBottom: 12,
+    summaryHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
     },
-    chartLabel: {
+    cardLabel: {
         fontSize: 12,
-        color: Colors.text.secondary,
-        marginBottom: 4,
+        color: '#6B7280',
         fontWeight: '500',
     },
-    barBackground: {
-        height: 24,
-        backgroundColor: '#F3F4F6',
-        borderRadius: 12,
+    cardValue: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#111827',
+        marginBottom: 4,
+    },
+    trendRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
-        overflow: 'hidden',
+        gap: 4,
     },
-    barFill: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        bottom: 0,
-        backgroundColor: Colors.primary[200],
-        borderRadius: 12,
-    },
-    barValue: {
+    trendText: {
         fontSize: 10,
-        fontWeight: '700',
-        color: Colors.primary[700],
-        marginLeft: 'auto',
+        fontWeight: '600',
+        color: Colors.success[500],
+    },
+    section: {
+        marginBottom: 24,
     },
     titleRow: {
         flexDirection: 'row',
@@ -354,67 +401,133 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
     },
-    refreshBtn: {
-        padding: 4,
+    sectionTitle: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#111827',
     },
-    table: {
+    seeFullReport: {
+        fontSize: 14,
+        color: '#5856D6',
+        fontWeight: '600',
+    },
+    chartContainer: {
         backgroundColor: '#fff',
+        paddingTop: 20,
+        paddingBottom: 30,
         borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+    },
+    vBarChart: {
+        flexDirection: 'row',
+        height: 120,
+        alignItems: 'flex-end',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+    },
+    vBarColumn: {
+        flex: 1,
+        alignItems: 'center',
+        gap: 8,
+    },
+    vBarTrack: {
+        flex: 1,
+        width: 12,
+        backgroundColor: '#F3F4F6',
+        borderRadius: 6,
+        justifyContent: 'flex-end',
         overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
     },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: '#F9FAFB',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+    vBarFill: {
+        width: '100%',
+        backgroundColor: '#E5E7EB',
+        borderRadius: 6,
     },
-    tableRow: {
-        flexDirection: 'row',
+    vBarMax: {
+        backgroundColor: Colors.primary[500],
+    },
+    vBarLabel: {
+        fontSize: 10,
+        color: '#9CA3AF',
+        fontWeight: '600',
+    },
+    vBarLabelContainer: {
+        position: 'absolute',
+        bottom: -20,
+        width: 30,
         alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
     },
-    col: {
-        flex: 1,
-        fontSize: 12,
-        fontWeight: '600',
-        color: Colors.text.secondary,
+    cultureGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
     },
-    colValue: {
-        flex: 1,
-        fontSize: 14,
-        fontWeight: '600',
-        color: Colors.text.primary,
-        textAlign: 'left',
+    cultureCard: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: Colors.primary[50],
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.primary[100],
     },
-    productName: {
-        fontSize: 14,
+    cultureName: {
+        fontSize: 13,
         fontWeight: '700',
-        color: Colors.text.primary,
-        marginBottom: 2,
+        color: Colors.primary[800],
     },
-    convText: {
+    cultureCount: {
         fontSize: 11,
-        fontWeight: '500',
-        color: Colors.success[600],
+        color: Colors.primary[600],
     },
-    emptyState: {
-        padding: 40,
+    listingItem: {
+        flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#fff',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    listingImage: {
+        width: 50,
+        height: 50,
+        borderRadius: 8,
+        backgroundColor: '#F3F4F6',
+    },
+    listingMeta: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    listingName: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 4,
+    },
+    listingStats: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    miniStat: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    miniStatText: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontWeight: '500',
+    },
+    listingPrice: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#111827',
     },
     emptyText: {
-        color: Colors.text.secondary,
         fontSize: 14,
+        color: '#9CA3AF',
+        textAlign: 'center',
+        marginTop: 10,
     }
 });
 

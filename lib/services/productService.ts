@@ -308,66 +308,178 @@ export const fetchWishlistCount = async (userId: string): Promise<number> => {
   return count || 0;
 };
 
-export const fetchSellerAnalytics = async (sellerId: string) => {
+export type DateRange = '7days' | '30days' | 'year' | 'all';
+
+export const fetchSellerAnalytics = async (sellerId: string, range: DateRange = '30days') => {
   try {
-    // 1. Fetch Aggregated Totals
-    const { data: totals, error: totalsError } = await supabase
+    const now = new Date();
+    let startDate = new Date();
+    let prevStartDate = new Date();
+    let prevEndDate = new Date();
+
+    if (range === '7days') {
+      startDate.setDate(now.getDate() - 7);
+      prevStartDate.setDate(now.getDate() - 14);
+      prevEndDate.setDate(now.getDate() - 7);
+    } else if (range === '30days') {
+      startDate.setDate(now.getDate() - 30);
+      prevStartDate.setDate(now.getDate() - 60);
+      prevEndDate.setDate(now.getDate() - 30);
+    } else if (range === 'year') {
+      startDate.setFullYear(now.getFullYear() - 1);
+      prevStartDate.setFullYear(now.getFullYear() - 2);
+      prevEndDate.setFullYear(now.getFullYear() - 1);
+    } else {
+      startDate = new Date(0); // All time
+    }
+
+    const startDateStr = startDate.toISOString();
+    const prevStartDateStr = prevStartDate.toISOString();
+    const prevEndDateStr = prevEndDate.toISOString();
+
+    // 1. Fetch Events (Current + Previous)
+    const { data: allEvents, error: eventsError } = await supabase
       .from('listing_analytics')
-      .select('event_type')
-      .eq('seller_id', sellerId);
+      .select('event_type, created_at, product_id, products(cultural_origin)')
+      .eq('seller_id', sellerId)
+      .gte('created_at', range === 'all' ? startDateStr : prevStartDateStr);
 
-    if (totalsError) throw totalsError;
+    if (eventsError) throw eventsError;
 
-    const summary = {
-      views: totals.filter(e => e.event_type === 'view').length,
-      saves: totals.filter(e => e.event_type === 'save').length,
-      sales: totals.filter(e => e.event_type === 'sale').length,
-      revenue: 0 // Will calculate from actual orders if needed, but for now we track 'sale' events
+    // Filter events into current and previous
+    const events = allEvents.filter(e => new Date(e.created_at) >= startDate);
+    const prevEvents = allEvents.filter(e => {
+        const d = new Date(e.created_at);
+        return d >= prevStartDate && d < startDate;
+    });
+
+    // 2. Fetch Orders (Current + Previous)
+    const { data: allOrders, error: ordersError } = await supabase
+      .from('orders')
+      .select('total_amount, created_at')
+      .eq('seller_id', sellerId)
+      .eq('status', 'paid')
+      .gte('created_at', range === 'all' ? startDateStr : prevStartDateStr);
+
+    if (ordersError) throw ordersError;
+
+    const orders = allOrders.filter(o => new Date(o.created_at) >= startDate);
+    const prevOrders = allOrders.filter(o => {
+        const d = new Date(o.created_at);
+        return d >= prevStartDate && d < startDate;
+    });
+
+    // 3. Compile Summary & Trends
+    const curViews = events.filter(e => e.event_type === 'view').length;
+    const curSaves = events.filter(e => e.event_type === 'save').length;
+    const curSales = events.filter(e => e.event_type === 'sale').length;
+    const curRevenue = orders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+    const curConv = curViews > 0 ? (curSales / curViews) * 100 : 0;
+
+    const prevViews = prevEvents.filter(e => e.event_type === 'view').length;
+    const prevSaves = prevEvents.filter(e => e.event_type === 'save').length;
+    const prevSales = prevEvents.filter(e => e.event_type === 'sale').length;
+    const prevRevenue = prevOrders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+    const prevConv = prevViews > 0 ? (prevSales / prevViews) * 100 : 0;
+
+    const calculateTrend = (cur: number, prev: number, type: 'percent' | 'count' = 'percent') => {
+        if (range === 'all') return '';
+        if (type === 'percent') {
+            if (prev === 0) return cur > 0 ? `+100%` : '+0%';
+            const diff = ((cur - prev) / prev) * 100;
+            return `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`;
+        } else {
+            const diff = cur - prev;
+            return `${diff >= 0 ? '+' : ''}${diff}`;
+        }
     };
 
-    // calculate revenue from orders instead of just 'sale' events for accuracy
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('total_amount')
-      .eq('seller_id', sellerId)
-      .eq('status', 'paid');
+    const summary = {
+      views: curViews,
+      saves: curSaves,
+      sales: curSales,
+      revenue: curRevenue,
+      trends: {
+          revenue: calculateTrend(curRevenue, prevRevenue),
+          sales: calculateTrend(curSales, prevSales, 'count') + ' orders',
+          conversion: calculateTrend(curConv, prevConv),
+          views: calculateTrend(curViews, prevViews, 'count')
+      }
+    };
+
+    // 4. Time-series Data (Trends Chart)
+    const trends: { label: string; value: number }[] = [];
+    const isYear = range === 'year';
     
-    summary.revenue = orders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+    if (isYear) {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(now.getMonth() - i);
+        const monthLabel = d.toLocaleString('default', { month: 'short' });
+        const count = events.filter(e => {
+          const ed = new Date(e.created_at);
+          return ed.getMonth() === d.getMonth() && ed.getFullYear() === d.getFullYear() && e.event_type === 'view';
+        }).length;
+        trends.push({ label: monthLabel, value: count });
+      }
+    } else {
+      const days = range === '7days' ? 7 : 30;
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        const dayLabel = d.toLocaleString('default', { weekday: 'short' }).substring(0, 1);
+        const count = events.filter(e => {
+          const ed = new Date(e.created_at);
+          return ed.getDate() === d.getDate() && ed.getMonth() === d.getMonth() && ed.getFullYear() === d.getFullYear() && e.event_type === 'view';
+        }).length;
+        trends.push({ label: range === '7days' ? dayLabel : d.getDate().toString(), value: count });
+      }
+    }
 
-    // 2. Fetch Product Breakdown
-    const { data: products, error: pError } = await supabase
+    // 5. Cultures Reached
+    const cultures: { [key: string]: number } = {};
+    events.forEach(e => {
+      const origin = (e.products as any)?.cultural_origin || 'Unknown';
+      cultures[origin] = (cultures[origin] || 0) + 1;
+    });
+    
+    const culturalReach = Object.entries(cultures)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // 6. Product Breakdown
+    const { data: products } = await supabase
       .from('products')
-      .select('id, name, total_views, total_favorites')
-      .eq('seller_id', sellerId)
-      .eq('status', 'active');
+      .select('id, name, image_url, price')
+      .eq('seller_id', sellerId);
+
+    const productStats = (products || []).map(p => {
+      const pEvents = events.filter(e => e.product_id === p.id);
+      const views = pEvents.filter(e => e.event_type === 'view').length;
+      const saves = pEvents.filter(e => e.event_type === 'save').length;
+      const sales = pEvents.filter(e => e.event_type === 'sale').length;
       
-    if (pError) throw pError;
-
-    // Fetch sale counts per product
-    const { data: salesPerProduct } = await supabase
-      .from('listing_analytics')
-      .select('product_id')
-      .eq('seller_id', sellerId)
-      .eq('event_type', 'sale');
-
-    const productStats = products.map(p => {
-      const salesCount = salesPerProduct?.filter(s => s.product_id === p.id).length || 0;
       return {
         id: p.id,
         name: p.name,
-        views: p.total_views || 0,
-        saves: p.total_favorites || 0,
-        sales: salesCount,
-        conversion: p.total_views > 0 ? (salesCount / p.total_views) * 100 : 0
+        image_url: p.image_url,
+        price: p.price,
+        views,
+        saves,
+        sales,
+        conversion: views > 0 ? (sales / views) * 100 : 0
       };
-    }).sort((a, b) => b.views - a.views);
+    }).sort((a, b) => b.views - a.views).slice(0, 10);
 
-    return { summary, productStats };
+    return { summary, trends, culturalReach, productStats };
   } catch (error) {
     console.error('Error fetching seller analytics:', error);
     return null;
   }
 };
+
+
 
 
 export const fetchWishlist = async (userId: string) => {
