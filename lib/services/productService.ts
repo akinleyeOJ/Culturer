@@ -233,10 +233,10 @@ export const toggleFavorite = async (userId: string, productId: string) => {
   } else {
     const { error } = await supabase.from('wishlist').insert([{ user_id: userId, product_id: productId }] as any);
     
-    // Track Save Analytics
+    // Track Save Analytics - ONLY IF NOT THE SELLER
     if (!error) {
       const { data: product } = await supabase.from('products').select('seller_id').eq('id', productId).single();
-      if (product) {
+      if (product && product.seller_id !== userId) {
         await supabase.from('listing_analytics').insert({
           product_id: productId,
           seller_id: product.seller_id,
@@ -271,7 +271,7 @@ export const trackProductView = async (userId: string, productId: string, seller
       finalSellerId = data?.seller_id;
     }
 
-    if (finalSellerId) {
+    if (finalSellerId && finalSellerId !== userId) {
       await supabase.from('listing_analytics').insert({
         product_id: productId,
         seller_id: finalSellerId,
@@ -356,9 +356,9 @@ export const fetchSellerAnalytics = async (sellerId: string, range: DateRange = 
     // 2. Fetch Orders (Current + Previous)
     const { data: allOrders, error: ordersError } = await supabase
       .from('orders')
-      .select('total_amount, created_at')
+      .select('total_amount, created_at, status')
       .eq('seller_id', sellerId)
-      .eq('status', 'paid')
+      .in('status', ['paid', 'shipped', 'delivered'])
       .gte('created_at', range === 'all' ? startDateStr : prevStartDateStr);
 
     if (ordersError) throw ordersError;
@@ -368,6 +368,19 @@ export const fetchSellerAnalytics = async (sellerId: string, range: DateRange = 
         const d = new Date(o.created_at);
         return d >= prevStartDate && d < startDate;
     });
+
+    // Fulfillment counts (current state, regardless of date range for actionable items)
+    // Actually, for the dashboard, we usually show "What's pending now"
+    const { data: currentOrders } = await supabase
+      .from('orders')
+      .select('status')
+      .eq('seller_id', sellerId)
+      .in('status', ['paid', 'shipped']);
+
+    const fulfillment = {
+      toShip: currentOrders?.filter(o => o.status === 'paid').length || 0,
+      inTransit: currentOrders?.filter(o => o.status === 'shipped').length || 0,
+    };
 
     // 3. Compile Summary & Trends
     const curViews = events.filter(e => e.event_type === 'view').length;
@@ -472,7 +485,7 @@ export const fetchSellerAnalytics = async (sellerId: string, range: DateRange = 
       };
     }).sort((a, b) => b.views - a.views).slice(0, 10);
 
-    return { summary, trends, culturalReach, productStats };
+    return { summary, trends, culturalReach, productStats, fulfillment };
   } catch (error) {
     console.error('Error fetching seller analytics:', error);
     return null;

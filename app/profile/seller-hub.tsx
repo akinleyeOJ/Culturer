@@ -341,7 +341,7 @@ const SellerHubScreen = () => {
                 <View style={styles.previewCard}>
                     <Text style={styles.previewTitle}>Preview how buyers see you</Text>
                     <Text style={styles.previewSub}>
-                        Check your public shop page to be sure photos, descriptions, and cultural context feel right for your audience.
+                        Tap on the <Text style={styles.previewSubBold}>View Public Shop</Text> button below to be sure photos, descriptions, and cultural context feel right for your audience.
                     </Text>
                 </View>
             </ScrollView>
@@ -646,6 +646,9 @@ const styles = StyleSheet.create({
     },
     btnText: {
         fontSize: 14,
+        fontWeight: '700',
+    },
+    previewSubBold: {
         fontWeight: '700',
     },
 });

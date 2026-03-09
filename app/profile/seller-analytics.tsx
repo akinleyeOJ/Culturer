@@ -14,14 +14,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
     ChevronLeftIcon,
+    ArrowPathIcon,
+    BanknotesIcon,
+    ShoppingBagIcon,
     ArrowTrendingUpIcon,
     EyeIcon,
     HeartIcon,
-    ShoppingBagIcon,
-    BanknotesIcon,
-    ArrowPathIcon,
     GlobeAltIcon,
+    TruckIcon,
+    ClipboardDocumentCheckIcon
 } from 'react-native-heroicons/outline';
+import {
+    GlobeAltIcon as GlobeSolidIcon,
+    ArrowUpIcon,
+    ArrowDownIcon,
+} from 'react-native-heroicons/solid';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchSellerAnalytics, DateRange } from '../../lib/services/productService';
@@ -167,23 +174,55 @@ const SellerAnalyticsScreen = () => {
                         icon={ShoppingBagIcon}
                         label="Total Sales"
                         value={data?.summary.sales || 0}
-                        color={Colors.secondary[500]}
+                        color={Colors.primary[500]}
                         trend={data?.summary.trends.sales}
                     />
                     <SummaryCard
                         icon={ArrowTrendingUpIcon}
                         label="Conversion Rate"
                         value={(data?.summary.views > 0 ? (data.summary.sales / data.summary.views * 100).toFixed(1) : '0') + '%'}
-                        color={Colors.success[500]}
+                        color={Colors.primary[500]}
                         trend={data?.summary.trends.conversion}
                     />
                     <SummaryCard
                         icon={EyeIcon}
                         label="Shop Views"
                         value={data?.summary.views || 0}
-                        color="#6366f1"
+                        color={Colors.primary[500]}
                         trend={data?.summary.trends.views}
                     />
+                </View>
+
+                {/* Fulfillment Tracking */}
+                <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Fulfillment</Text>
+                    <View style={styles.fulfillmentRow}>
+                        <TouchableOpacity
+                            style={styles.fulfillmentCard}
+                            onPress={() => router.push('/profile/orders?tab=selling&status=paid')}
+                        >
+                            <View style={[styles.fulfillmentIcon, { backgroundColor: '#F8F9FA' }]}>
+                                <ClipboardDocumentCheckIcon size={20} color={Colors.primary[500]} />
+                            </View>
+                            <View>
+                                <Text style={styles.fulfillmentValue}>{data?.fulfillment?.toShip || 0}</Text>
+                                <Text style={styles.fulfillmentLabel}>To Ship</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.fulfillmentCard}
+                            onPress={() => router.push('/profile/orders?tab=selling&status=shipped')}
+                        >
+                            <View style={[styles.fulfillmentIcon, { backgroundColor: '#F8F9FA' }]}>
+                                <TruckIcon size={20} color={Colors.primary[500]} />
+                            </View>
+                            <View>
+                                <Text style={styles.fulfillmentValue}>{data?.fulfillment?.inTransit || 0}</Text>
+                                <Text style={styles.fulfillmentLabel}>In Transit</Text>
+                            </View>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Traffic Trends Chart */}
@@ -242,7 +281,7 @@ const SellerAnalyticsScreen = () => {
                             </View>
                         )) : (
                             <View style={styles.emptyContainer}>
-                                <GlobeAltIcon size={24} color="#D1D5DB" />
+                                <GlobeSolidIcon size={24} color="#D1D5DB" />
                                 <Text style={styles.emptyText}>Share your listings to start tracking cultural engagement</Text>
                             </View>
                         )}
@@ -550,6 +589,38 @@ const styles = StyleSheet.create({
         color: '#9CA3AF',
         textAlign: 'center',
         maxWidth: 200,
+    },
+    fulfillmentRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    fulfillmentCard: {
+        flex: 1,
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+    },
+    fulfillmentIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fulfillmentValue: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#111827',
+    },
+    fulfillmentLabel: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontWeight: '600',
     }
 });
 
