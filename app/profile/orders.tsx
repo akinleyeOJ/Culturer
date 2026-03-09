@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
     View,
     Text,
@@ -36,11 +36,18 @@ interface Order {
 
 const OrdersScreen = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'buying' | 'selling'>('buying');
-    const [statusFilter, setStatusFilter] = useState<OrderStatus>('all');
+    const params = useLocalSearchParams<{ tab?: 'buying' | 'selling'; status?: OrderStatus }>();
+    const [activeTab, setActiveTab] = useState<'buying' | 'selling'>(params.tab || 'buying');
+    const [statusFilter, setStatusFilter] = useState<OrderStatus>(params.status || 'all');
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Sync state if params change while component is mounted
+    React.useEffect(() => {
+        if (params.tab) setActiveTab(params.tab);
+        if (params.status) setStatusFilter(params.status);
+    }, [params.tab, params.status]);
 
     const fetchOrders = useCallback(async () => {
         if (!user) return;
