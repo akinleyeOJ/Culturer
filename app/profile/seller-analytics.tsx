@@ -228,7 +228,10 @@ const SellerAnalyticsScreen = () => {
                 {/* Cultures Reached */}
                 <View style={styles.section}>
                     <View style={styles.titleRow}>
-                        <Text style={styles.sectionTitle}>Cultures Reached</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.sectionTitle}>Cultures Reached</Text>
+                            <Text style={styles.sectionSubtitle}>Discover which traditions resonate with your buyers</Text>
+                        </View>
                         <GlobeAltIcon size={20} color={Colors.primary[500]} />
                     </View>
                     <View style={styles.cultureGrid}>
@@ -238,7 +241,10 @@ const SellerAnalyticsScreen = () => {
                                 <Text style={styles.cultureCount}>{item.count} interactions</Text>
                             </View>
                         )) : (
-                            <Text style={styles.emptyText}>No data yet</Text>
+                            <View style={styles.emptyContainer}>
+                                <GlobeAltIcon size={24} color="#D1D5DB" />
+                                <Text style={styles.emptyText}>Share your listings to start tracking cultural engagement</Text>
+                            </View>
                         )}
                     </View>
                 </View>
@@ -250,9 +256,13 @@ const SellerAnalyticsScreen = () => {
                     </View>
 
                     {data?.productStats.length > 0 ? data.productStats.map((item: any) => (
-                        <View key={item.id} style={styles.listingItem}>
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.listingItem}
+                            onPress={() => router.push(`/item/${item.id}`)}
+                        >
                             <Image
-                                source={{ uri: item.image_url || 'https://via.placeholder.com/60' }}
+                                source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2670&auto=format&fit=crop' }}
                                 style={styles.listingImage}
                             />
                             <View style={styles.listingMeta}>
@@ -273,7 +283,7 @@ const SellerAnalyticsScreen = () => {
                                 </View>
                             </View>
                             <Text style={styles.listingPrice}>€{item.price}</Text>
-                        </View>
+                        </TouchableOpacity>
                     )) : (
                         <Text style={styles.emptyText}>No listings yet</Text>
                     )}
@@ -406,6 +416,12 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#111827',
     },
+    sectionSubtitle: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2,
+        fontWeight: '500',
+    },
     seeFullReport: {
         fontSize: 14,
         color: '#5856D6',
@@ -523,11 +539,17 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#111827',
     },
+    emptyContainer: {
+        width: '100%',
+        alignItems: 'center',
+        paddingVertical: 20,
+        gap: 8,
+    },
     emptyText: {
         fontSize: 14,
         color: '#9CA3AF',
         textAlign: 'center',
-        marginTop: 10,
+        maxWidth: 200,
     }
 });
 

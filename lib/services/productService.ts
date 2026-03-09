@@ -451,7 +451,7 @@ export const fetchSellerAnalytics = async (sellerId: string, range: DateRange = 
     // 6. Product Breakdown
     const { data: products } = await supabase
       .from('products')
-      .select('id, name, image_url, price')
+      .select('id, name, image_url, images, price')
       .eq('seller_id', sellerId);
 
     const productStats = (products || []).map(p => {
@@ -463,7 +463,7 @@ export const fetchSellerAnalytics = async (sellerId: string, range: DateRange = 
       return {
         id: p.id,
         name: p.name,
-        image_url: p.image_url,
+        image_url: p.image_url || (p as any).images?.[0] || null,
         price: p.price,
         views,
         saves,
