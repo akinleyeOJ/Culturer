@@ -465,7 +465,8 @@ export const fetchSellerAnalytics = async (sellerId: string, range: DateRange = 
     const { data: products } = await supabase
       .from('products')
       .select('id, name, image_url, images, price')
-      .eq('seller_id', sellerId);
+      .eq('seller_id', sellerId)
+      .eq('status', 'active');
 
     const productStats = (products || []).map(p => {
       const pEvents = events.filter(e => e.product_id === p.id);

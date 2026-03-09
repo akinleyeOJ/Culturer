@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeftIcon, DocumentTextIcon, TrashIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, DocumentTextIcon, TrashIcon, PlusIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchUserDrafts, deleteListing } from '../../lib/services/productService';
@@ -126,7 +126,12 @@ const DraftsScreen = () => {
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Drafts</Text>
-                <View style={{ width: 40 }} />
+                <TouchableOpacity
+                    onPress={() => router.push('/profile/create-listing' as any)}
+                    style={styles.circleBtn}
+                >
+                    <PlusIcon size={24} color={Colors.primary[500]} />
+                </TouchableOpacity>
             </View>
 
             <FlatList

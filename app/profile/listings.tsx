@@ -16,10 +16,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeftIcon, XMarkIcon, PlusIcon, TagIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon, CheckCircleIcon, AdjustmentsHorizontalIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, XMarkIcon, PlusIcon, TagIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon, CheckCircleIcon, AdjustmentsHorizontalIcon, ArchiveBoxIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchUserActiveListings, deleteListing, createListing } from '../../lib/services/productService';
+import { fetchUserActiveListings, deleteListing, createListing, fetchUserDrafts } from '../../lib/services/productService';
 import { CATEGORIES } from '../../constants/categories';
 
 
@@ -27,6 +27,7 @@ const ListingsScreen = () => {
     const router = useRouter();
     const { user } = useAuth();
     const [allListings, setAllListings] = useState<any[]>([]);
+    const [draftsCount, setDraftsCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -44,8 +45,12 @@ const ListingsScreen = () => {
     const loadListings = async () => {
         if (!user) return;
         try {
-            const data = await fetchUserActiveListings(user.id);
-            setAllListings(data);
+            const [activeData, draftsData] = await Promise.all([
+                fetchUserActiveListings(user.id),
+                fetchUserDrafts(user.id)
+            ]);
+            setAllListings(activeData);
+            setDraftsCount(draftsData.length);
         } catch (error) {
             console.error('Error loading listings:', error);
         } finally {
@@ -229,12 +234,25 @@ const ListingsScreen = () => {
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Listings</Text>
-                <TouchableOpacity
-                    onPress={() => router.push('/profile/create-listing' as any)}
-                    style={styles.circleBtn}
-                >
-                    <PlusIcon size={24} color={Colors.primary[500]} />
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity
+                        onPress={() => router.push('/profile/drafts' as any)}
+                        style={[styles.circleBtn, { marginRight: 10 }]}
+                    >
+                        <ArchiveBoxIcon size={22} color={Colors.neutral[600]} />
+                        {draftsCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{draftsCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => router.push('/profile/create-listing' as any)}
+                        style={styles.circleBtn}
+                    >
+                        <PlusIcon size={24} color={Colors.primary[500]} />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={styles.searchContainer}>
@@ -428,6 +446,30 @@ const styles = StyleSheet.create({
         backgroundColor: '#F3F4F6',
         justifyContent: 'center',
         alignItems: 'center',
+        position: 'relative',
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    badge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: Colors.danger[500],
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#FFF',
+        paddingHorizontal: 4,
+    },
+    badgeText: {
+        color: '#FFF',
+        fontSize: 10,
+        fontWeight: '700',
     },
     headerTitle: {
         fontSize: 18,
