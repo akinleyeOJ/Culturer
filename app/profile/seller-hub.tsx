@@ -307,7 +307,7 @@ const SellerHubScreen = () => {
                         icon={BanknotesIcon}
                         title="Payouts & earnings"
                         subtitle="Balance, payout methods, and currency"
-                        onPress={() => { }}
+                        onPress={() => router.push('/profile/payouts')}
                     />
                     <MenuItem
                         icon={ReceiptPercentIcon}
