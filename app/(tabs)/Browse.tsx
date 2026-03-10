@@ -42,6 +42,7 @@ interface Product {
   isFavorited?: boolean;
   badge?: "NEW" | "HOT" | "SALE" | null;
   originalPrice?: string;
+  seller_id: string;
 }
 
 const Browse = () => {
@@ -518,6 +519,7 @@ const Browse = () => {
       onLike={() => handleToggleFavorite(item.id)}
       style={{ width: COLUMN_WIDTH, marginBottom: 16 }}
       onPress={() => handleProductPress(item.id)}
+      hideFavoriteButton={user?.id === item.seller_id}
     />
   );
 

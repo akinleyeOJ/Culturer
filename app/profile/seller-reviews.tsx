@@ -28,6 +28,7 @@ const SellerReviewsScreen = () => {
     const [replyingTo, setReplyingTo] = useState<string | null>(null);
     const [replyText, setReplyText] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest' | 'lowest'>('newest');
 
     const loadReviews = useCallback(async () => {
         if (!user) return;
@@ -49,6 +50,23 @@ const SellerReviewsScreen = () => {
     const averageRating = reviews.length > 0
         ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)
         : '0.0';
+
+    const sortedReviews = React.useMemo(() => {
+        return [...reviews].sort((a, b) => {
+            switch (sortBy) {
+                case 'newest':
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                case 'oldest':
+                    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                case 'highest':
+                    return b.rating - a.rating;
+                case 'lowest':
+                    return a.rating - b.rating;
+                default:
+                    return 0;
+            }
+        });
+    }, [reviews, sortBy]);
 
     const handleReplySubmit = async (reviewId: string) => {
         if (!replyText.trim()) return;
@@ -199,7 +217,7 @@ const SellerReviewsScreen = () => {
                     </View>
                 ) : (
                     <FlatList
-                        data={reviews}
+                        data={sortedReviews}
                         keyExtractor={item => item.id}
                         renderItem={renderReviewItem}
                         contentContainerStyle={styles.listContent}
@@ -218,11 +236,33 @@ const SellerReviewsScreen = () => {
                                     <Text style={styles.summaryLabel}>Total Reviews</Text>
                                 </View>
                             </View>
-                        }
+                            
+                            {/* Filter/Sort Bar */}
+                            <View style={styles.filterSection}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollProps}>
+                                    {[
+                                        { id: 'newest', label: 'Newest' },
+                                        { id: 'highest', label: 'Highest Rating' },
+                                        { id: 'lowest', label: 'Lowest Rating' },
+                                        { id: 'oldest', label: 'Oldest' }
+                                    ].map((option) => (
+                                        <TouchableOpacity
+                                            key={option.id}
+                                            style={[styles.filterChip, sortBy === option.id && styles.filterChipActive]}
+                                            onPress={() => setSortBy(option.id as any)}
+                                        >
+                                            <Text style={[styles.filterChipText, sortBy === option.id && styles.filterChipTextActive]}>
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </>}
                     />
                 )}
-            </KeyboardAvoidingView>
-        </SafeAreaView>
+        </KeyboardAvoidingView>
+        </SafeAreaView >
     );
 };
 
@@ -299,6 +339,32 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 12,
+    },
+    filterSection: {
+        marginBottom: 16,
+    },
+    filterScrollProps: {
+        gap: 8,
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    filterChipActive: {
+        backgroundColor: Colors.primary[500],
+        borderColor: Colors.primary[500],
+    },
+    filterChipText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#4B5563',
+    },
+    filterChipTextActive: {
+        color: '#FFF',
     },
     summaryTextGroup: {
         alignItems: 'flex-start',

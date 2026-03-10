@@ -53,6 +53,7 @@ interface RecentlyViewedProduct {
   price: string;
   emoji: string;
   image?: string;
+  seller_id: string;
 }
 
 // Skeleton Card Components
@@ -421,6 +422,7 @@ const Home = () => {
                       isLiked={product.isFavorited || false}
                       variant="default"
                       style={{ width: 155, marginRight: 0 }}
+                      hideFavoriteButton={user?.id === product.seller_id}
                     />
                   ))}
                 </View>
@@ -444,6 +446,7 @@ const Home = () => {
                       isLiked={product.isFavorited || false}
                       variant="default"
                       style={{ width: 155, marginRight: 0 }}
+                      hideFavoriteButton={user?.id === product.seller_id}
                     />
                   ))}
                 </View>

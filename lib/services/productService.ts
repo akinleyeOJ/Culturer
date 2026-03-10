@@ -193,7 +193,7 @@ export const fetchRecentlyViewed = async (userId: string) => {
   const productIds = (recentlyViewedData as any[]).map((rv: any) => rv.product_id);
   const { data: products } = await supabase
     .from('products')
-    .select('id, name, price, emoji, image_url, images')
+    .select('id, name, price, emoji, image_url, images, seller_id')
     .in('id', productIds)
     .eq('status', 'active')
     .or('out_of_stock.is.null,out_of_stock.eq.false');
@@ -210,6 +210,7 @@ export const fetchRecentlyViewed = async (userId: string) => {
       price: `$${product.price.toFixed(2)}`,
       emoji: product.emoji || '🎨',
       image: product.image_url || product.images?.[0],
+      seller_id: product.seller_id,
     };
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };
