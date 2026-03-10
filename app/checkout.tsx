@@ -217,6 +217,8 @@ const Checkout = () => {
 
                     console.log('Setting direct purchase item:', { id: p.id, name: p.name, price: priceNum, quantity });
 
+                    const discount = p.discount_percentage || 0;
+                    const effectivePrice = discount > 0 ? priceNum * (1 - discount / 100) : priceNum;
                     setCartItems([{
                         id: p.id,
                         product_id: p.id,
@@ -226,7 +228,7 @@ const Checkout = () => {
                         product: {
                             id: p.id,
                             name: p.name,
-                            price: priceNum,
+                            price: effectivePrice,
                             image_url: p.image_url || undefined,
                             seller_id: p.user_id,
                             seller_name: sellerName,
@@ -261,6 +263,8 @@ const Checkout = () => {
                             ? parseFloat((p.price as string).replace('$', ''))
                             : p.price;
 
+                        const discount2 = p.discount_percentage || 0;
+                        const effectivePrice2 = discount2 > 0 ? priceNum * (1 - discount2 / 100) : priceNum;
                         return {
                             id: item.id,
                             product_id: item.product_id,
@@ -270,10 +274,10 @@ const Checkout = () => {
                             product: {
                                 id: p.id,
                                 name: p.name,
-                                price: priceNum,
+                                price: effectivePrice2,
                                 image_url: p.image_url || undefined,
                                 seller_id: p.user_id,
-                                seller_name: 'Seller', // Could fetch lookup if needed, but simplified for now
+                                seller_name: 'Seller',
                                 emoji: p.emoji || '📦',
                                 shipping: p.shipping || 'Standard',
                                 out_of_stock: p.out_of_stock || false,
@@ -1430,7 +1434,7 @@ const Checkout = () => {
                         style={[styles.input, { flex: 1, marginBottom: 0, marginRight: 8 }]}
                         placeholder="Enter promo code"
                         value={promoCode}
-                        onChangeText={setPromoCode}
+                        onChangeText={(text) => setPromoCode(text.toUpperCase())}
                         autoCapitalize="characters"
                     />
                     <TouchableOpacity

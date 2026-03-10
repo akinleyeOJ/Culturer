@@ -80,7 +80,8 @@ const PromotionsScreen = () => {
                 .from('products')
                 .select('*')
                 .eq('seller_id', user.id)
-                .eq('status', 'active');
+                .eq('status', 'active')
+                .or('out_of_stock.is.null,out_of_stock.eq.false');
 
             if (error) throw error;
             setProducts(data || []);

@@ -71,7 +71,8 @@ export const fetchProducts = async (
     .from('products')
     .select('*', { count: 'exact' })
     .eq('status', 'active')
-    .gt('stock_quantity', 0);
+    .gt('stock_quantity', 0)
+    .or('out_of_stock.is.null,out_of_stock.eq.false');
 
   // 1. Categories (multiple)
   if (filters.categories && filters.categories.length > 0) {
@@ -194,7 +195,8 @@ export const fetchRecentlyViewed = async (userId: string) => {
     .from('products')
     .select('id, name, price, emoji, image_url, images')
     .in('id', productIds)
-    .eq('status', 'active');
+    .eq('status', 'active')
+    .or('out_of_stock.is.null,out_of_stock.eq.false');
 
   if (!products) return [];
   const productsMap = new Map((products as any[]).map(p => [p.id, p]));
@@ -630,6 +632,7 @@ export const fetchSimilarProducts = async (
       .eq('category', category)
       .eq('status', 'active')
       .gt('stock_quantity', 0)
+      .or('out_of_stock.is.null,out_of_stock.eq.false')
       .neq('id', productId)
       .gte('price', priceMin)
       .lte('price', priceMax)
