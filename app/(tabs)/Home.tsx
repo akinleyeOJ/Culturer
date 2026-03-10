@@ -44,6 +44,7 @@ interface Product {
   isFavorited?: boolean;
   badge?: "NEW" | "HOT" | "SALE" | null;
   originalPrice?: string;
+  seller_id: string;
 }
 
 interface RecentlyViewedProduct {
@@ -501,6 +502,7 @@ const Home = () => {
                   onLike={() => handleToggleFavorite(product.id)}
                   isLiked={product.isFavorited || false}
                   variant="large"
+                  hideFavoriteButton={user?.id === product.seller_id}
                 />
               ))
             ) : (

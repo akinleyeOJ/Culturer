@@ -326,7 +326,7 @@ const SellerHubScreen = () => {
                         icon={StarIcon}
                         title="Reviews"
                         subtitle="Read feedback and respond to buyers"
-                        onPress={() => { }}
+                        onPress={() => router.push('/profile/seller-reviews')}
                     />
                     <MenuItem
                         icon={LanguageIcon}

@@ -28,7 +28,8 @@ const Index = () => {
 
   // If user is logged in, go to Profile (landing page)
   if (user) {
-    return <Redirect href="/(tabs)/profile" />;
+    // Temporary redirect for testing
+    return <Redirect href="/profile" />;
   }
 
   // If not logged in, go to Splash screen (which flows to Onboarding -> Auth)

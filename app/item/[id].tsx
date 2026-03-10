@@ -12,9 +12,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon, ShoppingBagIcon, ChatBubbleLeftIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon, ShoppingBagIcon, ChatBubbleLeftIcon, StarIcon as StarOutline } from 'react-native-heroicons/outline';
 import { HeartIcon as HeartOutline } from 'react-native-heroicons/outline';
-import { HeartIcon as HeartSolid } from 'react-native-heroicons/solid';
+import { HeartIcon as HeartSolid, StarIcon as StarSolid } from 'react-native-heroicons/solid';
 import { Colors } from '../../constants/color';
 import { ImageCarousel } from '../../components/ImageCarousel';
 import { SellerCard } from '../../components/SellerCard';
@@ -28,6 +28,7 @@ import {
     toggleFavorite,
     trackProductView,
 } from '../../lib/services/productService';
+import { fetchProductReviews, ReviewWithDetails } from '../../lib/services/reviewService';
 import { addToCart } from '../../lib/services/cartService';
 import { useCart } from '../../contexts/CartContext';
 import { CartToast } from '../../components/CartToast';
@@ -42,6 +43,7 @@ const ItemDetail = () => {
     const [product, setProduct] = useState<any>(null);
     const [sellerProducts, setSellerProducts] = useState<any[]>([]);
     const [similarProducts, setSimilarProducts] = useState<any[]>([]);
+    const [reviews, setReviews] = useState<ReviewWithDetails[]>([]);
     const [loading, setLoading] = useState(true);
     const [quantity, setQuantity] = useState(1);
 
@@ -71,8 +73,8 @@ const ItemDetail = () => {
                 await trackProductView(user.id, id, productData.seller_id);
             }
 
-            // Load recommendations
-            const [seller, similar] = await Promise.all([
+            // Load recommendations and reviews
+            const [seller, similar, productReviews] = await Promise.all([
                 fetchSellerProducts(productData.seller_id || 'seller-1', id, 6, user?.id),
                 fetchSimilarProducts(
                     id,
@@ -81,10 +83,12 @@ const ItemDetail = () => {
                     8,
                     user?.id
                 ),
+                fetchProductReviews(id),
             ]);
 
             setSellerProducts(seller);
             setSimilarProducts(similar);
+            setReviews(productReviews);
         } catch (error) {
             console.error('Error loading product:', error);
             Alert.alert('Error', 'Failed to load product details');
@@ -244,6 +248,18 @@ const ItemDetail = () => {
             ? 'In stock'
             : 'Sold out';
 
+    const renderStars = (rating: number) => {
+        return (
+            <View style={{ flexDirection: 'row', gap: 2 }}>
+                {[1, 2, 3, 4, 5].map(star => (
+                    star <= rating
+                        ? <StarSolid key={star} size={14} color="#F59E0B" />
+                        : <StarOutline key={star} size={14} color="#D1D5DB" />
+                ))}
+            </View>
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <CartToast
@@ -292,13 +308,15 @@ const ItemDetail = () => {
                     <View style={styles.productInfo}>
                         <View style={styles.titleRow}>
                             <Text style={styles.productName}>{product.name}</Text>
-                            <TouchableOpacity onPress={handleToggleFavorite}>
-                                {product.isFavorited ? (
-                                    <HeartSolid size={24} color="#EF4444" />
-                                ) : (
-                                    <HeartOutline size={24} color={Colors.text.secondary} />
-                                )}
-                            </TouchableOpacity>
+                            {!isOwnListing && (
+                                <TouchableOpacity onPress={handleToggleFavorite}>
+                                    {product.isFavorited ? (
+                                        <HeartSolid size={24} color="#EF4444" />
+                                    ) : (
+                                        <HeartOutline size={24} color={Colors.text.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                         {product.condition && (
@@ -374,6 +392,53 @@ const ItemDetail = () => {
                         </View>
                     </View>
 
+                    {/* Product Reviews */}
+                    {reviews.length > 0 && (
+                        <View style={styles.section}>
+                            <View style={styles.reviewsHeaderRow}>
+                                <Text style={styles.sectionTitle}>Reviews</Text>
+                                <View style={styles.reviewsBadge}>
+                                    <StarSolid size={14} color="#F59E0B" />
+                                    <Text style={styles.reviewsBadgeText}>
+                                        {(reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)} ({reviews.length})
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {reviews.map(review => (
+                                <View key={review.id} style={styles.publicReviewCard}>
+                                    <View style={styles.publicReviewHeader}>
+                                        <View style={styles.buyerInfo}>
+                                            <View style={styles.buyerAvatar}>
+                                                <Text style={styles.buyerInitials}>
+                                                    {review.buyer_name.substring(0, 1).toUpperCase()}
+                                                </Text>
+                                            </View>
+                                            <View>
+                                                <Text style={styles.publicBuyerName}>{review.buyer_name}</Text>
+                                                <Text style={styles.publicReviewDate}>
+                                                    {new Date(review.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        {renderStars(review.rating)}
+                                    </View>
+
+                                    <Text style={styles.publicCommentText}>{review.comment || 'No written feedback provided.'}</Text>
+
+                                    {review.seller_reply && (
+                                        <View style={styles.publicSellerReplyBox}>
+                                            <View style={styles.replyHeaderRow}>
+                                                <Text style={styles.replySellerName}>{product.seller_name} (Seller)</Text>
+                                            </View>
+                                            <Text style={styles.replySellerText}>{review.seller_reply}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
                     {/* Other items by seller */}
                     {sellerProducts.length > 0 && (
                         <View style={styles.section}>
@@ -393,6 +458,7 @@ const ItemDetail = () => {
                                         onLike={() => handleToggleRecommendationFavorite(item.id)}
                                         onPress={() => router.push(`/item/${item.id}`)}
                                         style={{ width: 160, marginRight: 12 }}
+                                        hideFavoriteButton={user?.id === item.seller_id}
                                     />
                                 ))}
                             </ScrollView>
@@ -418,6 +484,7 @@ const ItemDetail = () => {
                                         onLike={() => handleToggleRecommendationFavorite(item.id)}
                                         onPress={() => router.push(`/item/${item.id}`)}
                                         style={{ width: 160, marginRight: 12 }}
+                                        hideFavoriteButton={user?.id === item.seller_id}
                                     />
                                 ))}
                             </ScrollView>
@@ -619,6 +686,94 @@ const styles = StyleSheet.create({
     shippingText: {
         fontSize: 14,
         color: Colors.text.secondary,
+    },
+    // Review Styles
+    reviewsHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    reviewsBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFBEB',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+    },
+    reviewsBadgeText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#D97706',
+    },
+    publicReviewCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: Colors.neutral[200],
+    },
+    publicReviewHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 12,
+    },
+    buyerInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    buyerAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: Colors.primary[100],
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    buyerInitials: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.primary[700],
+    },
+    publicBuyerName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.text.primary,
+    },
+    publicReviewDate: {
+        fontSize: 12,
+        color: Colors.text.tertiary,
+    },
+    publicCommentText: {
+        fontSize: 14,
+        color: Colors.text.secondary,
+        lineHeight: 20,
+    },
+    publicSellerReplyBox: {
+        marginTop: 12,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        padding: 12,
+        borderLeftWidth: 3,
+        borderLeftColor: Colors.primary[400],
+    },
+    replyHeaderRow: {
+        marginBottom: 4,
+    },
+    replySellerName: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: Colors.text.primary,
+    },
+    replySellerText: {
+        fontSize: 13,
+        color: Colors.text.secondary,
+        lineHeight: 18,
     },
     horizontalScroll: {
         paddingRight: 16,

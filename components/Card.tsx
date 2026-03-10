@@ -38,6 +38,7 @@ interface ProductCardProps extends CardProps {
   variant?: "default" | "large";
   badge?: "NEW" | "HOT" | "SALE" | null;
   originalPrice?: string;
+  hideFavoriteButton?: boolean;
 }
 
 export const ProductCard = ({
@@ -56,6 +57,7 @@ export const ProductCard = ({
   variant = "default",
   badge = null,
   originalPrice,
+  hideFavoriteButton = false,
 }: ProductCardProps) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -153,22 +155,24 @@ export const ProductCard = ({
           </View>
 
           {/* Favorite Button */}
-          <TouchableOpacity
-            style={styles.favoriteButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onLike?.();
-            }}
-            activeOpacity={0.7}
-          >
-            <Animated.View style={animatedIconStyle}>
-              {isLiked ? (
-                <HeartSolid size={18} color="#EF4444" />
-              ) : (
-                <HeartOutline size={18} color="#4A4A4A" />
-              )}
-            </Animated.View>
-          </TouchableOpacity>
+          {!hideFavoriteButton && (
+            <TouchableOpacity
+              style={styles.favoriteButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onLike?.();
+              }}
+              activeOpacity={0.7}
+            >
+              <Animated.View style={animatedIconStyle}>
+                {isLiked ? (
+                  <HeartSolid size={18} color="#EF4444" />
+                ) : (
+                  <HeartOutline size={18} color="#4A4A4A" />
+                )}
+              </Animated.View>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Card>
