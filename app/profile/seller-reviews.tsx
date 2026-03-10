@@ -10,7 +10,8 @@ import {
     TextInput,
     KeyboardAvoidingView,
     Platform,
-    Alert
+    Alert,
+    ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -222,46 +223,47 @@ const SellerReviewsScreen = () => {
                         renderItem={renderReviewItem}
                         contentContainerStyle={styles.listContent}
                         ListHeaderComponent={
-                            <View style={styles.summaryContainer}>
-                                <View style={styles.summaryStat}>
-                                    <StarIcon size={32} color="#F59E0B" />
-                                    <View style={styles.summaryTextGroup}>
-                                        <Text style={styles.summaryValue}>{averageRating}</Text>
-                                        <Text style={styles.summaryLabel}>Average Rating</Text>
+                            <>
+                                <View style={styles.summaryContainer}>
+                                    <View style={styles.summaryStat}>
+                                        <StarIcon size={32} color="#F59E0B" />
+                                        <View style={styles.summaryTextGroup}>
+                                            <Text style={styles.summaryValue}>{averageRating}</Text>
+                                            <Text style={styles.summaryLabel}>Average Rating</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.summaryDivider} />
+                                    <View style={styles.summaryStat}>
+                                        <Text style={[styles.summaryValue, { fontSize: 28 }]}>{reviews.length}</Text>
+                                        <Text style={styles.summaryLabel}>Total Reviews</Text>
                                     </View>
                                 </View>
-                                <View style={styles.summaryDivider} />
-                                <View style={styles.summaryStat}>
-                                    <Text style={[styles.summaryValue, { fontSize: 28 }]}>{reviews.length}</Text>
-                                    <Text style={styles.summaryLabel}>Total Reviews</Text>
+
+                                {/* Filter/Sort Bar */}
+                                <View style={styles.filterSection}>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollProps}>
+                                        {[
+                                            { id: 'newest', label: 'Newest' },
+                                            { id: 'highest', label: 'Highest Rating' },
+                                            { id: 'lowest', label: 'Lowest Rating' },
+                                            { id: 'oldest', label: 'Oldest' }
+                                        ].map((option) => (
+                                            <TouchableOpacity
+                                                key={option.id}
+                                                style={[styles.filterChip, sortBy === option.id && styles.filterChipActive]}
+                                                onPress={() => setSortBy(option.id as any)}
+                                            >
+                                                <Text style={[styles.filterChipText, sortBy === option.id && styles.filterChipTextActive]}>
+                                                    {option.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
                                 </View>
-                            </View>
-                            
-                            {/* Filter/Sort Bar */}
-                            <View style={styles.filterSection}>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollProps}>
-                                    {[
-                                        { id: 'newest', label: 'Newest' },
-                                        { id: 'highest', label: 'Highest Rating' },
-                                        { id: 'lowest', label: 'Lowest Rating' },
-                                        { id: 'oldest', label: 'Oldest' }
-                                    ].map((option) => (
-                                        <TouchableOpacity
-                                            key={option.id}
-                                            style={[styles.filterChip, sortBy === option.id && styles.filterChipActive]}
-                                            onPress={() => setSortBy(option.id as any)}
-                                        >
-                                            <Text style={[styles.filterChipText, sortBy === option.id && styles.filterChipTextActive]}>
-                                                {option.label}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        </>}
+                            </>}
                     />
                 )}
-        </KeyboardAvoidingView>
+            </KeyboardAvoidingView>
         </SafeAreaView >
     );
 };

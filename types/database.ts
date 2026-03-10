@@ -29,6 +29,8 @@ export interface Database {
           shop_policies: Json | null
           shipping_preferences: Json | null
           shop_shipping: Json | null
+          spoken_languages: string[] | null
+          shipping_regions: string[] | null
         }
         Insert: {
           id: string
@@ -49,6 +51,8 @@ export interface Database {
           shop_policies?: Json | null
           shipping_preferences?: Json | null
           shop_shipping?: Json | null
+          spoken_languages?: string[] | null
+          shipping_regions?: string[] | null
         }
         Update: {
           id?: string
@@ -69,6 +73,8 @@ export interface Database {
           shop_policies?: Json | null
           shipping_preferences?: Json | null
           shop_shipping?: Json | null
+          spoken_languages?: string[] | null
+          shipping_regions?: string[] | null
         }
         Relationships: [
           {
