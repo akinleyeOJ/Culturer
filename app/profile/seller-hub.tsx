@@ -313,7 +313,7 @@ const SellerHubScreen = () => {
                         icon={ReceiptPercentIcon}
                         title="Promotions"
                         subtitle="Discounts, bundles, and featured boosts"
-                        onPress={() => { }}
+                        onPress={() => router.push('/profile/promotions')}
                         isLast
                     />
                 </MenuSection>

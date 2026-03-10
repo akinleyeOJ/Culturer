@@ -36,7 +36,8 @@ interface ProductCardProps extends CardProps {
   onLike?: () => void;
   isLiked?: boolean;
   variant?: "default" | "large";
-  badge?: "NEW" | "HOT" | null;
+  badge?: "NEW" | "HOT" | "SALE" | null;
+  originalPrice?: string;
 }
 
 export const ProductCard = ({
@@ -54,6 +55,7 @@ export const ProductCard = ({
   style,
   variant = "default",
   badge = null,
+  originalPrice,
 }: ProductCardProps) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -136,7 +138,12 @@ export const ProductCard = ({
       </View>
 
       <View style={styles.cardContent}>
-        <Text style={styles.cardPrice}>{price}</Text>
+        <View style={styles.priceRow}>
+          <Text style={styles.cardPrice}>{price}</Text>
+          {originalPrice && (
+            <Text style={styles.originalPrice}>{originalPrice}</Text>
+          )}
+        </View>
         <Text style={styles.cardName} numberOfLines={2}>{name}</Text>
 
         <View style={styles.cardFooter}>
@@ -335,11 +342,21 @@ const styles = StyleSheet.create({
     position: 'relative',
     minHeight: 120, // Ensure enough height for content + button
   },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginBottom: 4,
+  },
   cardPrice: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#212529',
-    marginBottom: 4,
+    color: Colors.primary[600],
+  },
+  originalPrice: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
   },
   cardName: {
     fontSize: 13,

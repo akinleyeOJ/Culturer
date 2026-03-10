@@ -63,13 +63,13 @@ const PayoutsScreen = () => {
             // 1. Fetch orders (Selling)
             const { data: sales, error: salesError } = await supabase
                 .from('orders')
-                .select('id, total_amount, status, created_at, products(name)')
+                .select('id, total_amount, status, created_at')
                 .eq('seller_id', user.id);
 
             // 2. Fetch orders (Buying)
             const { data: purchases, error: purchaseError } = await supabase
                 .from('orders')
-                .select('id, total_amount, status, created_at, products(name)')
+                .select('id, total_amount, status, created_at')
                 .eq('buyer_id', user.id);
 
             if (salesError || purchaseError) throw salesError || purchaseError;
@@ -90,7 +90,7 @@ const PayoutsScreen = () => {
                     id: `sale-${o.id}`,
                     type: 'earning' as const,
                     amount: o.total_amount,
-                    description: `Sale: ${Array.isArray(o.products) ? (o.products[0]?.name || 'Item') : (o.products?.name || 'Item')}`,
+                    description: `Sale #${o.id.slice(0, 8)}`,
                     date: o.created_at,
                     status: (o.status === 'delivered' ? 'completed' : 'pending') as any
                 })),
@@ -98,7 +98,7 @@ const PayoutsScreen = () => {
                     id: `buy-${o.id}`,
                     type: 'payout' as const,
                     amount: o.total_amount,
-                    description: `Purchase: ${Array.isArray(o.products) ? (o.products[0]?.name || 'Item') : (o.products?.name || 'Item')}`,
+                    description: `Purchase #${o.id.slice(0, 8)}`,
                     date: o.created_at,
                     status: 'completed' as any
                 }))
