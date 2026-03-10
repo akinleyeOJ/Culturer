@@ -42,7 +42,8 @@ interface Product {
   shipping: string;
   outOfStock: boolean;
   isFavorited?: boolean;
-  badge?: "NEW" | "HOT" | null;
+  badge?: "NEW" | "HOT" | "SALE" | null;
+  originalPrice?: string;
 }
 
 interface RecentlyViewedProduct {
@@ -413,6 +414,7 @@ const Home = () => {
                       shipping={product.shipping}
                       outOfStock={product.outOfStock}
                       badge={product.badge}
+                      originalPrice={product.originalPrice}
                       onPress={() => handleProductPress(product.id)}
                       onLike={() => handleToggleFavorite(product.id)}
                       isLiked={product.isFavorited || false}
@@ -435,6 +437,7 @@ const Home = () => {
                       shipping={product.shipping}
                       outOfStock={product.outOfStock}
                       badge={product.badge}
+                      originalPrice={product.originalPrice}
                       onPress={() => handleProductPress(product.id)}
                       onLike={() => handleToggleFavorite(product.id)}
                       isLiked={product.isFavorited || false}

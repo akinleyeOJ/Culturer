@@ -40,7 +40,8 @@ interface Product {
   outOfStock?: boolean;
   category?: string | null;
   isFavorited?: boolean;
-  badge?: "NEW" | "HOT" | null;
+  badge?: "NEW" | "HOT" | "SALE" | null;
+  originalPrice?: string;
 }
 
 const Browse = () => {
@@ -512,6 +513,8 @@ const Browse = () => {
       shipping={item.shipping}
       outOfStock={item.outOfStock}
       isLiked={item.isFavorited}
+      badge={item.badge}
+      originalPrice={item.originalPrice}
       onLike={() => handleToggleFavorite(item.id)}
       style={{ width: COLUMN_WIDTH, marginBottom: 16 }}
       onPress={() => handleProductPress(item.id)}

@@ -15,28 +15,38 @@ const getUserFavorites = async (userId: string): Promise<string[]> => {
 };
 
 // Helper: Transform product for UI
-const transformProduct = (product: Product, favoriteIds: string[] = []) => ({
-  id: product.id,
-  name: product.name,
-  price: `$${product.price.toFixed(2)}`,
-  emoji: product.emoji || '🎨',
-  image: product.image_url || product.images?.[0],
-  rating: product.rating,
-  reviews: product.reviews_count,
-  shipping: product.shipping,
-  outOfStock: product.out_of_stock || !product.in_stock || (product as any).stock_quantity === 0,
-  category: product.category,
-  condition: product.condition,
-  description: product.description,
-  images: product.images || [],
-  status: (product as any).status,
-  stock_quantity: (product as any).stock_quantity,
-  cultural_origin: product.cultural_origin,
-  cultural_story: (product as any).cultural_story,
-  seller_id: (product as any).seller_id,
-  isFavorited: favoriteIds.includes(product.id),
-  badge: product.is_featured ? 'HOT' as const : null,
-});
+const transformProduct = (product: Product, favoriteIds: string[] = []) => {
+  const endsAt = (product as any).promotion_ends_at;
+  const isExpired = endsAt ? new Date(endsAt) < new Date() : false;
+  const discount = isExpired ? 0 : ((product as any).discount_percentage || 0);
+  const hasDiscount = discount > 0;
+  const discountedPrice = hasDiscount ? product.price * (1 - discount / 100) : product.price;
+
+  return {
+    id: product.id,
+    name: product.name,
+    price: `$${discountedPrice.toFixed(2)}`,
+    originalPrice: hasDiscount ? `$${product.price.toFixed(2)}` : undefined,
+    emoji: product.emoji || '🎨',
+    image: product.image_url || product.images?.[0],
+    rating: product.rating,
+    reviews: product.reviews_count,
+    shipping: product.shipping,
+    outOfStock: product.out_of_stock || !product.in_stock || (product as any).stock_quantity === 0,
+    category: product.category,
+    condition: product.condition,
+    description: product.description,
+    images: product.images || [],
+    status: (product as any).status,
+    stock_quantity: (product as any).stock_quantity,
+    cultural_origin: product.cultural_origin,
+    cultural_story: (product as any).cultural_story,
+    seller_id: (product as any).seller_id,
+    isFavorited: favoriteIds.includes(product.id),
+    badge: hasDiscount ? 'SALE' as const : product.is_featured ? 'HOT' as const : null,
+    discount_percentage: discount,
+  };
+};
 
 // Filter Options Interface
 export interface FilterOptions {

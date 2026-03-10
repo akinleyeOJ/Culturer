@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Dimensions, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import {
     ChevronLeftIcon,
     PlusIcon,
@@ -15,8 +16,7 @@ import {
     SparklesIcon,
     CheckIcon,
     XMarkIcon,
-    MagnifyingGlassIcon,
-    GiftIcon
+    MagnifyingGlassIcon
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
@@ -36,9 +36,42 @@ const PromotionsScreen = () => {
     const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
     const [discountValue, setDiscountValue] = useState('10');
     const [flashDuration, setFlashDuration] = useState('24');
-    const [bundleMinQty, setBundleMinQty] = useState('2');
+    const [couponCode, setCouponCode] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [promoType, setPromoType] = useState<'sale' | 'flash' | 'coupon' | 'bundle'>('sale');
+    const [promoType, setPromoType] = useState<'sale' | 'flash' | 'coupon'>('sale');
+    const [activePromotions, setActivePromotions] = useState<any[]>([]);
+    const [activeCoupons, setActiveCoupons] = useState<any[]>([]);
+
+    const fetchActivePromotions = useCallback(async () => {
+        if (!user) return;
+        try {
+            const { data, error } = await supabase
+                .from('products')
+                .select('id, name, price, images, discount_percentage, promotion_ends_at')
+                .eq('seller_id', user.id)
+                .gt('discount_percentage', 0);
+            if (!error) setActivePromotions(data || []);
+        } catch (e) {
+            console.error('Error fetching active promotions:', e);
+        }
+    }, [user]);
+
+    const fetchActiveCoupons = useCallback(async () => {
+        if (!user) return;
+        try {
+            const { data, error } = await supabase
+                .from('coupons' as any)
+                .select('*')
+                .eq('seller_id', user.id)
+                .eq('is_active', true);
+            if (!error) setActiveCoupons((data as any[]) || []);
+        } catch (e) {
+            console.error('Error fetching active coupons:', e);
+        }
+    }, [user]);
+
+    useEffect(() => { fetchActivePromotions(); fetchActiveCoupons(); }, [user]);
+    useFocusEffect(useCallback(() => { fetchActivePromotions(); fetchActiveCoupons(); }, [fetchActivePromotions, fetchActiveCoupons]));
 
     const fetchProducts = async () => {
         if (!user) return;
@@ -60,11 +93,12 @@ const PromotionsScreen = () => {
         }
     };
 
-    const handleCreateStart = (type: 'sale' | 'flash' | 'coupon' | 'bundle') => {
+    const handleCreateStart = (type: 'sale' | 'flash' | 'coupon') => {
         setPromoType(type);
         setStep(1);
         setSelectedProducts([]);
         setSearchQuery('');
+        setCouponCode('');
         setIsCreateModalVisible(true);
         fetchProducts();
     };
@@ -81,25 +115,141 @@ const PromotionsScreen = () => {
             return;
         }
 
+        const discount = parseInt(discountValue || '0');
+        if (discount <= 0 || discount > 100) {
+            Alert.alert('Invalid Discount', 'Please enter a discount between 1 and 100.');
+            return;
+        }
+
+        if (promoType === 'coupon' && !couponCode.trim()) {
+            Alert.alert('Code Required', 'Please enter a coupon code name.');
+            return;
+        }
+
+        if (promoType === 'flash') {
+            const hours = parseInt(flashDuration || '0');
+            if (hours < 1 || hours > 72) {
+                Alert.alert('Invalid Duration', 'Flash sale duration must be between 1 and 72 hours.');
+                return;
+            }
+        }
+
         setIsLoading(true);
         try {
-            // In a real app, we'd create a record in a 'promotions' table
-            // and update the 'products' table with discounted prices.
-            // For MVP, we'll simulate success.
+            if (promoType === 'coupon') {
+                // Insert coupon into coupons table
+                const { error } = await supabase
+                    .from('coupons' as any)
+                    .insert({
+                        code: couponCode.toUpperCase().trim(),
+                        discount_type: 'percentage',
+                        discount_value: discount,
+                        seller_id: user!.id,
+                        is_active: true,
+                    } as any);
 
-            Alert.alert(
-                'Success!',
-                `Your ${promoType} has been created for ${selectedProducts.length} items.`,
-                [{ text: 'Great', onPress: () => setIsCreateModalVisible(false) }]
-            );
+                if (error) throw error;
+                await fetchActiveCoupons();
+
+                Alert.alert(
+                    'Coupon Created! 🎟️',
+                    `Code "${couponCode.toUpperCase().trim()}" is now active for ${discount}% off.`,
+                    [{ text: 'Great', onPress: () => setIsCreateModalVisible(false) }]
+                );
+            } else {
+                // Sale or Flash — update product discount_percentage
+                const updatePayload: any = { discount_percentage: discount };
+
+                // Flash sales get an expiry timestamp
+                if (promoType === 'flash') {
+                    const hours = parseInt(flashDuration || '24');
+                    const endsAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+                    updatePayload.promotion_ends_at = endsAt;
+                } else {
+                    updatePayload.promotion_ends_at = null;
+                }
+
+                const { error } = await supabase
+                    .from('products')
+                    .update(updatePayload)
+                    .in('id', selectedProducts);
+
+                if (error) throw error;
+                await fetchActivePromotions();
+
+                Alert.alert(
+                    'Promotion Live! 🎉',
+                    `${discount}% off applied to ${selectedProducts.length} item${selectedProducts.length > 1 ? 's' : ''}.`,
+                    [{ text: 'Great', onPress: () => setIsCreateModalVisible(false) }]
+                );
+            }
 
             setSelectedProducts([]);
+            setCouponCode('');
             setStep(1);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to create promotion.');
+        } catch (error: any) {
+            console.error('Error applying promotion:', error);
+            if (error?.code === '23505') {
+                Alert.alert('Duplicate Code', 'A coupon with this code already exists.');
+            } else {
+                Alert.alert('Error', 'Failed to create promotion. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleDeactivateCoupon = (couponId: string, code: string) => {
+        Alert.alert(
+            'Deactivate Coupon',
+            `Deactivate coupon "${code}"?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Deactivate',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase
+                                .from('coupons' as any)
+                                .update({ is_active: false } as any)
+                                .eq('id', couponId);
+                            if (error) throw error;
+                            await fetchActiveCoupons();
+                        } catch (e) {
+                            Alert.alert('Error', 'Could not deactivate coupon.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleEndPromotion = (productId: string, productName: string) => {
+        Alert.alert(
+            'End Promotion',
+            `Remove the discount from "${productName}"?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'End Promotion',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase
+                                .from('products')
+                                .update({ discount_percentage: 0, promotion_ends_at: null })
+                                .eq('id', productId);
+                            if (error) throw error;
+                            await fetchActivePromotions();
+                            await fetchProducts();
+                        } catch (e) {
+                            Alert.alert('Error', 'Could not end promotion.');
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const PromoCategory = ({ icon: Icon, title, subtitle, color, onPress }: any) => (
@@ -142,7 +292,7 @@ const PromotionsScreen = () => {
                     <View style={styles.modalHeader}>
                         <View>
                             <Text style={styles.modalTitle}>
-                                {step === 1 ? 'Select Items' : `Launch ${promoType === 'flash' ? 'Flash Sale' : promoType === 'bundle' ? 'Bundle Deal' : promoType === 'sale' ? 'Sale' : 'Coupon'}`}
+                                {step === 1 ? 'Select Items' : `Launch ${promoType === 'flash' ? 'Flash Sale' : promoType === 'sale' ? 'Sale' : 'Coupon'}`}
                             </Text>
                             {step === 2 && <Text style={styles.modalSubHeader}>{selectedProducts.length} items selected</Text>}
                         </View>
@@ -153,7 +303,35 @@ const PromotionsScreen = () => {
 
                     {step === 1 ? (
                         <View style={styles.modalBody}>
-                            <Text style={styles.modalSub}>Select which items to promote</Text>
+                            <View style={styles.selectHeaderRow}>
+                                <Text style={styles.modalSub}>Select which items to promote</Text>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        const selectableIds = products
+                                            .filter(p => {
+                                                if (promoType === 'sale' || promoType === 'flash') {
+                                                    return !(p.discount_percentage && p.discount_percentage > 0);
+                                                }
+                                                return true;
+                                            })
+                                            .map(p => p.id);
+                                        if (selectedProducts.length === selectableIds.length) {
+                                            setSelectedProducts([]);
+                                        } else {
+                                            setSelectedProducts(selectableIds);
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.selectAllText}>
+                                        {selectedProducts.length === products.filter(p => {
+                                            if (promoType === 'sale' || promoType === 'flash') {
+                                                return !(p.discount_percentage && p.discount_percentage > 0);
+                                            }
+                                            return true;
+                                        }).length ? 'Deselect All' : 'Select All'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
 
                             {/* Search Bar */}
                             <View style={styles.searchBarContainer}>
@@ -182,7 +360,7 @@ const PromotionsScreen = () => {
                                     keyExtractor={(item) => item.id}
                                     style={{ maxHeight: 400 }}
                                     renderItem={({ item }) => {
-                                        const isInPromo = item.discount_percentage && item.discount_percentage > 0;
+                                        const isInPromo = (promoType === 'sale' || promoType === 'flash') && !!(item.discount_percentage && item.discount_percentage > 0);
                                         return (
                                             <TouchableOpacity
                                                 style={[
@@ -236,6 +414,8 @@ const PromotionsScreen = () => {
                                         style={styles.textInput}
                                         placeholder="e.g. SUMMER24"
                                         autoCapitalize="characters"
+                                        value={couponCode}
+                                        onChangeText={setCouponCode}
                                     />
                                 </View>
                             ) : null}
@@ -256,35 +436,21 @@ const PromotionsScreen = () => {
 
                             {promoType === 'flash' && (
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.inputLabel}>Flash Sale Duration (Hours)</Text>
+                                    <Text style={styles.inputLabel}>Flash Sale Duration (1-72 Hours)</Text>
                                     <View style={styles.percentageInputRow}>
                                         <TextInput
                                             style={styles.textInput}
                                             value={flashDuration}
-                                            onChangeText={setFlashDuration}
+                                            onChangeText={(text) => setFlashDuration(text.replace(/[^0-9]/g, ''))}
                                             keyboardType="numeric"
                                             placeholder="24"
+                                            maxLength={2}
                                         />
                                         <Text style={styles.inputSuffix}>hrs</Text>
                                     </View>
                                 </View>
                             )}
 
-                            {promoType === 'bundle' && (
-                                <View style={styles.inputGroup}>
-                                    <Text style={styles.inputLabel}>Minimum Items to Buy</Text>
-                                    <View style={styles.percentageInputRow}>
-                                        <TextInput
-                                            style={styles.textInput}
-                                            value={bundleMinQty}
-                                            onChangeText={setBundleMinQty}
-                                            keyboardType="numeric"
-                                            placeholder="2"
-                                        />
-                                        <Text style={styles.inputSuffix}>items</Text>
-                                    </View>
-                                </View>
-                            )}
 
                             <View style={styles.previewBox}>
                                 <Text style={styles.previewTitle}>Example Price Impact:</Text>
@@ -304,7 +470,7 @@ const PromotionsScreen = () => {
                                     {isLoading ? (
                                         <ActivityIndicator color="#FFF" />
                                     ) : (
-                                        <Text style={styles.modalActionBtnText}>Launch {promoType === 'flash' ? 'Flash Sale' : promoType === 'bundle' ? 'Bundle Deal' : 'Promotion'}</Text>
+                                        <Text style={styles.modalActionBtnText}>Launch</Text>
                                     )}
                                 </TouchableOpacity>
                             </View>
@@ -356,13 +522,6 @@ const PromotionsScreen = () => {
                         onPress={() => handleCreateStart('flash')}
                     />
                     <PromoCategory
-                        icon={GiftIcon}
-                        title="Bundle Deals"
-                        subtitle="Buy more, save more discounts"
-                        color="#8B5CF6"
-                        onPress={() => handleCreateStart('bundle')}
-                    />
-                    <PromoCategory
                         icon={TicketIcon}
                         title="Coupon Codes"
                         subtitle="Custom codes to share on social media"
@@ -389,15 +548,67 @@ const PromotionsScreen = () => {
                     </View>
 
                     {/* Active Content */}
-                    <EmptyState />
+                    {activeTab === 'active' && (activePromotions.length > 0 || activeCoupons.length > 0) ? (
+                        <>
+                            {activePromotions.map((item) => (
+                                <View key={item.id} style={styles.activePromoItem}>
+                                    <Image source={{ uri: item.images?.[0] }} style={styles.activePromoImage} />
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.productSelectName} numberOfLines={1}>{item.name}</Text>
+                                        <Text style={styles.productSelectPrice}>
+                                            €{(item.price * (1 - item.discount_percentage / 100)).toFixed(2)}{' '}
+                                            <Text style={{ textDecorationLine: 'line-through', color: '#9CA3AF' }}>€{item.price}</Text>
+                                        </Text>
+                                        <View style={styles.promoBadge}>
+                                            <Text style={styles.promoBadgeText}>{item.discount_percentage}% OFF</Text>
+                                        </View>
+                                        {item.promotion_ends_at && (() => {
+                                            const remaining = new Date(item.promotion_ends_at).getTime() - Date.now();
+                                            if (remaining <= 0) return <Text style={{ fontSize: 11, color: '#DC2626', marginTop: 2 }}>⚡ Expired</Text>;
+                                            const hours = Math.floor(remaining / (1000 * 60 * 60));
+                                            const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+                                            return <Text style={{ fontSize: 11, color: '#F97316', marginTop: 2 }}>⚡ Ends in {hours}h {mins}m</Text>;
+                                        })()}
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.endPromoBtn}
+                                        onPress={() => handleEndPromotion(item.id, item.name)}
+                                    >
+                                        <Text style={styles.endPromoBtnText}>End</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                            {activeCoupons.map((coupon: any) => (
+                                <View key={coupon.id} style={styles.activePromoItem}>
+                                    <View style={styles.couponIconBox}>
+                                        <TicketIcon size={22} color="#EC4899" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.productSelectName}>{coupon.code}</Text>
+                                        <View style={[styles.promoBadge, { backgroundColor: '#FCE7F3' }]}>
+                                            <Text style={[styles.promoBadgeText, { color: '#BE185D' }]}>{coupon.discount_value}% OFF COUPON</Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.endPromoBtn}
+                                        onPress={() => handleDeactivateCoupon(coupon.id, coupon.code)}
+                                    >
+                                        <Text style={styles.endPromoBtnText}>End</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                        </>
+                    ) : (
+                        <EmptyState />
+                    )}
 
                     {/* Tips Section */}
                     <View style={styles.tipCard}>
                         <InformationCircleIcon size={20} color={Colors.neutral[500]} />
                         <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Bundle Suggestion</Text>
+                            <Text style={styles.tipTitle}>Pro Tip</Text>
                             <Text style={styles.tipText}>
-                                Try "Buy 2, Get 10% Off" to increase your average order value.
+                                Share coupon codes on social media to drive traffic and boost sales.
                             </Text>
                         </View>
                     </View>
@@ -653,7 +864,6 @@ const styles = StyleSheet.create({
     modalSub: {
         fontSize: 14,
         color: '#6B7280',
-        marginBottom: 20,
     },
     productSelectItem: {
         flexDirection: 'row',
@@ -789,6 +999,17 @@ const styles = StyleSheet.create({
         color: '#374151',
     },
     // Search Bar Styles
+    selectHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        marginBottom: 12,
+    },
+    selectAllText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.primary[600],
+    },
     searchBarContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -822,6 +1043,42 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '700',
         color: '#92400E',
+    },
+    // Active Promotion Styles
+    activePromoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF',
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+        marginBottom: 8,
+    },
+    activePromoImage: {
+        width: 48,
+        height: 48,
+        borderRadius: 8,
+        backgroundColor: '#F3F4F6',
+    },
+    couponIconBox: {
+        width: 48,
+        height: 48,
+        borderRadius: 8,
+        backgroundColor: '#FDF2F8',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    endPromoBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 8,
+        backgroundColor: '#FEE2E2',
+    },
+    endPromoBtnText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#DC2626',
     },
 });
 

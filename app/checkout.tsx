@@ -502,10 +502,17 @@ const Checkout = () => {
 
         let discountAmount = 0;
         if (appliedDiscount) {
+            // For seller-specific coupons, only discount that seller's items
+            const discountableSubtotal = appliedDiscount.seller_id
+                ? cartItems
+                    .filter(item => item.product.seller_id === appliedDiscount.seller_id)
+                    .reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
+                : subtotal;
+
             if (appliedDiscount.discount_type === 'percentage') {
-                discountAmount = subtotal * (appliedDiscount.discount_value / 100);
+                discountAmount = discountableSubtotal * (appliedDiscount.discount_value / 100);
             } else {
-                discountAmount = Number(appliedDiscount.discount_value);
+                discountAmount = Math.min(Number(appliedDiscount.discount_value), discountableSubtotal);
             }
         }
 
@@ -1371,6 +1378,16 @@ const Checkout = () => {
             }
 
             const couponData = data as any;
+
+            // Verify coupon belongs to a seller whose items are in the cart
+            const cartSellerIds = cartItems.map(item => item.product.seller_id);
+            if (couponData.seller_id && !cartSellerIds.includes(couponData.seller_id)) {
+                Alert.alert('Invalid Coupon', 'This coupon doesn\'t apply to items in your cart.');
+                setAppliedDiscount(null);
+                setCheckingCoupon(false);
+                return;
+            }
+
             setAppliedDiscount(couponData);
             Alert.alert('Success', `Coupon applied: ${couponData.code}`);
         } catch (e) {

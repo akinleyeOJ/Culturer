@@ -109,6 +109,8 @@ export interface Database {
           express_shipping: boolean
           shipping_days_min: number | null
           shipping_days_max: number | null
+          discount_percentage: number
+          promotion_ends_at: string | null
           created_at: string
           updated_at: string
         }
@@ -140,6 +142,7 @@ export interface Database {
           express_shipping?: boolean
           shipping_days_min?: number | null
           shipping_days_max?: number | null
+          discount_percentage?: number
           created_at?: string
           updated_at?: string
         }
@@ -171,6 +174,7 @@ export interface Database {
           express_shipping?: boolean
           shipping_days_min?: number | null
           shipping_days_max?: number | null
+          discount_percentage?: number
           created_at?: string
           updated_at?: string
         }

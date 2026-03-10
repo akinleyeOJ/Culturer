@@ -70,7 +70,7 @@ const PayoutsScreen = () => {
             const { data: purchases, error: purchaseError } = await supabase
                 .from('orders')
                 .select('id, total_amount, status, created_at')
-                .eq('buyer_id', user.id);
+                .eq('user_id', user.id);
 
             if (salesError || purchaseError) throw salesError || purchaseError;
 
