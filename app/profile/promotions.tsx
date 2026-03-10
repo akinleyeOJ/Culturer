@@ -28,7 +28,6 @@ const PromotionsScreen = () => {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'active' | 'scheduled' | 'ended'>('active');
     const [isLoading, setIsLoading] = useState(false);
     const [products, setProducts] = useState<any[]>([]);
     const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
@@ -95,12 +94,13 @@ const PromotionsScreen = () => {
 
     const handleCreateStart = (type: 'sale' | 'flash' | 'coupon') => {
         setPromoType(type);
-        setStep(1);
+        setStep(type === 'coupon' ? 2 : 1);
         setSelectedProducts([]);
         setSearchQuery('');
         setCouponCode('');
+        setDiscountValue('');
         setIsCreateModalVisible(true);
-        fetchProducts();
+        if (type !== 'coupon') fetchProducts();
     };
 
     const toggleProductSelection = (id: string) => {
@@ -110,7 +110,7 @@ const PromotionsScreen = () => {
     };
 
     const handleApplyPromotion = async () => {
-        if (selectedProducts.length === 0) {
+        if (promoType !== 'coupon' && selectedProducts.length === 0) {
             Alert.alert('Selection Required', 'Please select at least one item.');
             return;
         }
@@ -302,7 +302,7 @@ const PromotionsScreen = () => {
                     </View>
 
                     {step === 1 ? (
-                        <View style={styles.modalBody}>
+                        <ScrollView style={styles.modalBody} bounces={false}>
                             <View style={styles.selectHeaderRow}>
                                 <Text style={styles.modalSub}>Select which items to promote</Text>
                                 <TouchableOpacity
@@ -355,47 +355,43 @@ const PromotionsScreen = () => {
                                     <ActivityIndicator size="large" color={Colors.primary[500]} />
                                 </View>
                             ) : (
-                                <FlatList
-                                    data={products.filter(p => !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()))}
-                                    keyExtractor={(item) => item.id}
-                                    style={{ maxHeight: 400 }}
-                                    renderItem={({ item }) => {
-                                        const isInPromo = (promoType === 'sale' || promoType === 'flash') && !!(item.discount_percentage && item.discount_percentage > 0);
-                                        return (
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.productSelectItem,
-                                                    selectedProducts.includes(item.id) && styles.productSelected,
-                                                    isInPromo && styles.productDisabled
-                                                ]}
-                                                onPress={() => !isInPromo && toggleProductSelection(item.id)}
-                                                disabled={isInPromo}
-                                            >
-                                                <Image source={{ uri: item.images?.[0] }} style={[styles.productMiniImage, isInPromo && { opacity: 0.5 }]} />
-                                                <View style={{ flex: 1, marginLeft: 12 }}>
-                                                    <Text style={[styles.productSelectName, isInPromo && { color: '#9CA3AF' }]} numberOfLines={1}>{item.name}</Text>
-                                                    <Text style={styles.productSelectPrice}>€{item.price}</Text>
-                                                    {isInPromo && (
-                                                        <View style={styles.promoBadge}>
-                                                            <Text style={styles.promoBadgeText}>Already in promotion</Text>
-                                                        </View>
-                                                    )}
-                                                </View>
-                                                {!isInPromo && (
-                                                    <View style={[
-                                                        styles.checkbox,
-                                                        selectedProducts.includes(item.id) && styles.checkboxActive
-                                                    ]}>
-                                                        {selectedProducts.includes(item.id) && <CheckIcon size={14} color="#FFF" />}
+                                products.filter(p => !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((item) => {
+                                    const isInPromo = (promoType === 'sale' || promoType === 'flash') && !!(item.discount_percentage && item.discount_percentage > 0);
+                                    return (
+                                        <TouchableOpacity
+                                            key={item.id}
+                                            style={[
+                                                styles.productSelectItem,
+                                                selectedProducts.includes(item.id) && styles.productSelected,
+                                                isInPromo && styles.productDisabled
+                                            ]}
+                                            onPress={() => !isInPromo && toggleProductSelection(item.id)}
+                                            disabled={isInPromo}
+                                        >
+                                            <Image source={{ uri: item.images?.[0] }} style={[styles.productMiniImage, isInPromo && { opacity: 0.5 }]} />
+                                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                                <Text style={[styles.productSelectName, isInPromo && { color: '#9CA3AF' }]} numberOfLines={1}>{item.name}</Text>
+                                                <Text style={styles.productSelectPrice}>€{item.price}</Text>
+                                                {isInPromo && (
+                                                    <View style={styles.promoBadge}>
+                                                        <Text style={styles.promoBadgeText}>Already in promotion</Text>
                                                     </View>
                                                 )}
-                                            </TouchableOpacity>
-                                        );
-                                    }}
-                                    ListEmptyComponent={
-                                        <Text style={styles.emptyListText}>No active items found.</Text>
-                                    }
-                                />
+                                            </View>
+                                            {!isInPromo && (
+                                                <View style={[
+                                                    styles.checkbox,
+                                                    selectedProducts.includes(item.id) && styles.checkboxActive
+                                                ]}>
+                                                    {selectedProducts.includes(item.id) && <CheckIcon size={14} color="#FFF" />}
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })
+                            )}
+                            {!isLoading && products.filter(p => !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                                <Text style={styles.emptyListText}>No active items found.</Text>
                             )}
                             <TouchableOpacity
                                 style={[styles.modalActionBtn, selectedProducts.length === 0 && styles.disabledBtn]}
@@ -404,7 +400,7 @@ const PromotionsScreen = () => {
                             >
                                 <Text style={styles.modalActionBtnText}>Next: Configure</Text>
                             </TouchableOpacity>
-                        </View>
+                        </ScrollView>
                     ) : (
                         <ScrollView style={styles.modalBody} bounces={false}>
                             {promoType === 'coupon' ? (
@@ -426,9 +422,10 @@ const PromotionsScreen = () => {
                                     <TextInput
                                         style={styles.textInput}
                                         value={discountValue}
-                                        onChangeText={setDiscountValue}
+                                        onChangeText={(text) => setDiscountValue(text.replace(/[^0-9]/g, ''))}
                                         keyboardType="numeric"
                                         placeholder="e.g. 15"
+                                        maxLength={2}
                                     />
                                     <Text style={styles.inputSuffix}>%</Text>
                                 </View>
@@ -460,9 +457,11 @@ const PromotionsScreen = () => {
                             </View>
 
                             <View style={styles.modalBtnRow}>
-                                <TouchableOpacity style={styles.modalBackBtn} onPress={() => setStep(1)}>
-                                    <Text style={styles.modalBackBtnText}>Back</Text>
-                                </TouchableOpacity>
+                                {promoType !== 'coupon' && (
+                                    <TouchableOpacity style={styles.modalBackBtn} onPress={() => setStep(1)}>
+                                        <Text style={styles.modalBackBtnText}>Back</Text>
+                                    </TouchableOpacity>
+                                )}
                                 <TouchableOpacity
                                     style={styles.modalActionBtn}
                                     onPress={handleApplyPromotion}
@@ -529,26 +528,9 @@ const PromotionsScreen = () => {
                         onPress={() => handleCreateStart('coupon')}
                     />
 
-                    {/* Tabs for active promos */}
-                    <View style={styles.tabSection}>
-                        <Text style={styles.sectionTitle}>Manage Promotions</Text>
-                        <View style={styles.tabBar}>
-                            {(['active', 'scheduled', 'ended'] as const).map((tab) => (
-                                <TouchableOpacity
-                                    key={tab}
-                                    style={[styles.tab, activeTab === tab && styles.activeTab]}
-                                    onPress={() => setActiveTab(tab)}
-                                >
-                                    <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-
-                    {/* Active Content */}
-                    {activeTab === 'active' && (activePromotions.length > 0 || activeCoupons.length > 0) ? (
+                    {/* Active Promotions */}
+                    <Text style={styles.sectionTitle}>Active Promotions</Text>
+                    {(activePromotions.length > 0 || activeCoupons.length > 0) ? (
                         <>
                             {activePromotions.map((item) => (
                                 <View key={item.id} style={styles.activePromoItem}>
@@ -718,38 +700,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#6B7280',
     },
-    tabSection: {
-        marginTop: 16,
-        marginBottom: 16,
-    },
-    tabBar: {
-        flexDirection: 'row',
-        backgroundColor: '#F3F4F6',
-        padding: 4,
-        borderRadius: 12,
-    },
-    tab: {
-        flex: 1,
-        paddingVertical: 8,
-        alignItems: 'center',
-        borderRadius: 8,
-    },
-    activeTab: {
-        backgroundColor: '#FFF',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    tabText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#6B7280',
-    },
-    activeTabText: {
-        color: '#111827',
-    },
+
     emptyContainer: {
         backgroundColor: '#FFF',
         borderRadius: 20,
@@ -827,7 +778,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingBottom: 40,
-        maxHeight: '90%',
+        maxHeight: '85%',
     },
     modalHeader: {
         flexDirection: 'row',
@@ -913,6 +864,7 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     modalActionBtn: {
+        flex: 3,
         backgroundColor: Colors.primary[500],
         height: 52,
         borderRadius: 12,
@@ -984,7 +936,7 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     modalBackBtn: {
-        flex: 1,
+        flex: 2,
         height: 52,
         borderRadius: 12,
         borderWidth: 1,
