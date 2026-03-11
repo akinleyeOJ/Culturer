@@ -338,6 +338,37 @@ const ItemDetail = () => {
                         onVisitShop={() => Alert.alert('Visit Shop', 'Navigate to seller shop')}
                     />
 
+                    {/* Shop Details */}
+                    {(product.seller_cultures?.length > 0 || product.seller_spoken_languages?.length > 0 || product.seller_shipping_regions?.length > 0) && (
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Shop details</Text>
+                            <View style={styles.detailsGrid}>
+                                {product.seller_cultures && product.seller_cultures.length > 0 && (
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailLabel}>Cultures:</Text>
+                                        <Text style={styles.detailValue}>
+                                            {product.seller_cultures
+                                                .map((c: string) => c.trim().charAt(0).toUpperCase() + c.trim().slice(1))
+                                                .join(', ')}
+                                        </Text>
+                                    </View>
+                                )}
+                                {product.seller_spoken_languages && product.seller_spoken_languages.length > 0 && (
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailLabel}>Speaks:</Text>
+                                        <Text style={styles.detailValue}>{product.seller_spoken_languages.join(', ')}</Text>
+                                    </View>
+                                )}
+                                {product.seller_shipping_regions && product.seller_shipping_regions.length > 0 && (
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailLabel}>Ships to:</Text>
+                                        <Text style={styles.detailValue}>{product.seller_shipping_regions.join(', ')}</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                    )}
+
                     {/* Details */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Details</Text>
@@ -375,7 +406,10 @@ const ItemDetail = () => {
                         </View>
 
                         {product.description && (
-                            <Text style={styles.description}>{product.description}</Text>
+                            <View style={styles.descriptionContainer}>
+                                <Text style={styles.descriptionHeader}>Description</Text>
+                                <Text style={styles.description}>{product.description}</Text>
+                            </View>
                         )}
                     </View>
 
@@ -674,6 +708,15 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: Colors.text.primary,
         fontWeight: '500',
+    },
+    descriptionContainer: {
+        marginTop: 20,
+    },
+    descriptionHeader: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        marginBottom: 8,
     },
     description: {
         fontSize: 14,

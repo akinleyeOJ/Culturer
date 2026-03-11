@@ -332,7 +332,7 @@ const SellerHubScreen = () => {
                         icon={LanguageIcon}
                         title="Languages & regions"
                         subtitle="Preferred languages and cultural focus"
-                        onPress={() => { }}
+                        onPress={() => router.push('/profile/languages-regions')}
                         isLast
                     />
                 </MenuSection>
