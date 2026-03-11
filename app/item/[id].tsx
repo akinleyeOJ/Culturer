@@ -319,13 +319,73 @@ const ItemDetail = () => {
                             )}
                         </View>
 
-                        {product.condition && (
-                            <View style={styles.conditionBadge}>
-                                <Text style={styles.conditionText}>{product.condition}</Text>
+                        <View style={styles.priceRow}>
+                            <Text style={styles.price}>{product.price}</Text>
+                            {product.originalPrice && (
+                                <Text style={styles.originalPrice}>{product.originalPrice}</Text>
+                            )}
+                            {product.discount_percentage ? (
+                                <View style={styles.discountBadge}>
+                                    <Text style={styles.discountText}>-{product.discount_percentage}%</Text>
+                                </View>
+                            ) : null}
+                        </View>
+                    </View>
+                    {/* Details section: Description FIRST, then standard attributes */}
+                    <View style={styles.section}>
+                        {product.description && (
+                            <View style={[styles.descriptionContainer, { marginTop: 0, marginBottom: 20 }]}>
+                                <Text style={styles.sectionTitle}>Description</Text>
+                                <Text style={styles.description}>{product.description}</Text>
                             </View>
                         )}
 
-                        <Text style={styles.price}>{product.price}</Text>
+                        <Text style={styles.sectionTitle}>Details</Text>
+                        <View style={styles.detailsGrid}>
+                            {product.cultural_origin && (
+                                <View style={styles.detailItem}>
+                                    <Text style={styles.detailLabel}>Origin:</Text>
+                                    <Text style={styles.detailValue}>{product.cultural_origin}</Text>
+                                </View>
+                            )}
+                            {product.dimensions && (
+                                <View style={styles.detailItem}>
+                                    <Text style={styles.detailLabel}>Dimensions:</Text>
+                                    <Text style={styles.detailValue}>{product.dimensions}</Text>
+                                </View>
+                            )}
+                            {product.condition && (
+                                <View style={styles.detailItem}>
+                                    <Text style={styles.detailLabel}>Condition:</Text>
+                                    <Text style={styles.detailValue}>{product.condition}</Text>
+                                </View>
+                            )}
+                            {product.category && (
+                                <View style={styles.detailItem}>
+                                    <Text style={styles.detailLabel}>Category:</Text>
+                                    <Text style={styles.detailValue}>{product.category}</Text>
+                                </View>
+                            )}
+                            {product.returns_policy && (
+                                <View style={styles.detailItem}>
+                                    <Text style={styles.detailLabel}>Returns:</Text>
+                                    <Text style={styles.detailValue}>{product.returns_policy}</Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+
+                    {/* Location & Shipping */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Location & shipping</Text>
+                        <View style={styles.shippingInfo}>
+                            {product.pickup_available && (
+                                <Text style={styles.shippingText}>• Local pickup: Available</Text>
+                            )}
+                            <Text style={styles.shippingText}>
+                                • Shipping: {product.free_shipping ? 'Free' : product.shipping} · {product.shipping_days_min}-{product.shipping_days_max} days
+                            </Text>
+                        </View>
                     </View>
 
                     {/* Seller Card */}
@@ -368,63 +428,6 @@ const ItemDetail = () => {
                             </View>
                         </View>
                     )}
-
-                    {/* Details */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Details</Text>
-                        <View style={styles.detailsGrid}>
-                            {product.cultural_origin && (
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Origin:</Text>
-                                    <Text style={styles.detailValue}>{product.cultural_origin}</Text>
-                                </View>
-                            )}
-                            {product.dimensions && (
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Dimensions:</Text>
-                                    <Text style={styles.detailValue}>{product.dimensions}</Text>
-                                </View>
-                            )}
-                            {product.condition && (
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Condition:</Text>
-                                    <Text style={styles.detailValue}>{product.condition}</Text>
-                                </View>
-                            )}
-                            {product.category && (
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Category:</Text>
-                                    <Text style={styles.detailValue}>{product.category}</Text>
-                                </View>
-                            )}
-                            {product.returns_policy && (
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Returns:</Text>
-                                    <Text style={styles.detailValue}>{product.returns_policy}</Text>
-                                </View>
-                            )}
-                        </View>
-
-                        {product.description && (
-                            <View style={styles.descriptionContainer}>
-                                <Text style={styles.descriptionHeader}>Description</Text>
-                                <Text style={styles.description}>{product.description}</Text>
-                            </View>
-                        )}
-                    </View>
-
-                    {/* Location & Shipping */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Location & shipping</Text>
-                        <View style={styles.shippingInfo}>
-                            {product.pickup_available && (
-                                <Text style={styles.shippingText}>• Local pickup: Available</Text>
-                            )}
-                            <Text style={styles.shippingText}>
-                                • Shipping: {product.free_shipping ? 'Free' : product.shipping} · {product.shipping_days_min}-{product.shipping_days_max} days
-                            </Text>
-                        </View>
-                    </View>
 
                     {/* Product Reviews */}
                     {reviews.length > 0 && (
@@ -664,23 +667,33 @@ const styles = StyleSheet.create({
         color: Colors.text.primary,
         marginRight: 12,
     },
-    conditionBadge: {
-        alignSelf: 'flex-start',
-        backgroundColor: Colors.secondary[100],
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-        marginBottom: 8,
-    },
-    conditionText: {
-        color: Colors.secondary[500],
-        fontSize: 12,
-        fontWeight: '600',
+    priceRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        gap: 8,
     },
     price: {
         fontSize: 24,
         fontWeight: '700',
         color: Colors.text.primary,
+    },
+    originalPrice: {
+        fontSize: 16,
+        color: Colors.text.tertiary,
+        textDecorationLine: 'line-through',
+        marginBottom: 3,
+    },
+    discountBadge: {
+        backgroundColor: Colors.danger[500],
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        marginBottom: 4,
+    },
+    discountText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '700',
     },
     section: {
         marginBottom: 24,
