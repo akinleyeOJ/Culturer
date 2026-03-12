@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   },
   outOfStockText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '600',
   },
 
