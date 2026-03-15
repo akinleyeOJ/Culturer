@@ -130,6 +130,61 @@ export const fetchProducts = async (
   return { products, count: count || 0 };
 };
 
+// Unified fetcher for a specific seller's entire public inventory (including Sold items)
+export const fetchSellerInventory = async (
+  sellerId: string,
+  page: number = 0,
+  limit: number = 20,
+  filters: FilterOptions = {},
+  userId?: string
+) => {
+  // We explicitly DO NOT filter out 'out_of_stock' or 'status = sold' here, 
+  // because the public profile needs to show history for trust.
+  let query = supabase
+    .from('products')
+    .select('*', { count: 'exact' })
+    .eq('user_id', sellerId)
+    .neq('status', 'draft'); // Only hide drafts
+
+  // 1. Categories (multiple)
+  if (filters.categories && filters.categories.length > 0) {
+    query = query.in('category', filters.categories);
+  }
+
+  // 2. Search
+  if (filters.searchQuery) {
+    query = query.ilike('name', `%${filters.searchQuery}%`);
+  }
+
+  // 3. Sorting (default to newest, sold items will naturally sort by creation date)
+  switch (filters.sortBy) {
+    case 'price_asc': query = query.order('price', { ascending: true }); break;
+    case 'price_desc': query = query.order('price', { ascending: false }); break;
+    case 'popularity': query = query.order('total_favorites', { ascending: false }); break;
+    case 'newest':
+    default: query = query.order('created_at', { ascending: false }); break;
+  }
+
+  // Pagination
+  query = query.range(page * limit, (page + 1) * limit - 1);
+
+  // Parallel execution
+  const [productsResponse, favoriteIds] = await Promise.all([
+    query,
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const { data, error, count } = productsResponse;
+
+  if (error) {
+    console.error('Error fetching seller inventory:', error);
+    return { products: [], count: 0 };
+  }
+
+  const products = data ? data.map(p => transformProduct(p, favoriteIds)) : [];
+  return { products, count: count || 0 };
+};
+
 // Specific fetchers for Home screen (reusing fetchProducts)
 export const fetchForYouProducts = async (userId?: string) => {
   const filters: FilterOptions = { sortBy: 'newest' };

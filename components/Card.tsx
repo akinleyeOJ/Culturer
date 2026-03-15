@@ -39,6 +39,7 @@ interface ProductCardProps extends CardProps {
   badge?: "NEW" | "HOT" | "SALE" | null;
   originalPrice?: string;
   hideFavoriteButton?: boolean;
+  showSoldOutOverlay?: boolean;
 }
 
 export const ProductCard = ({
@@ -58,6 +59,7 @@ export const ProductCard = ({
   badge = null,
   originalPrice,
   hideFavoriteButton = false,
+  showSoldOutOverlay = false,
 }: ProductCardProps) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -132,9 +134,11 @@ export const ProductCard = ({
         )}
 
         {/* Out of Stock Overlay */}
-        {outOfStock && (
+        {(outOfStock || showSoldOutOverlay) && (
           <View style={styles.outOfStockOverlay}>
-            <Text style={styles.outOfStockText}>Out of Stock</Text>
+            <Text style={styles.outOfStockText}>
+              {showSoldOutOverlay ? 'Sold Out' : 'Out of Stock'}
+            </Text>
           </View>
         )}
       </View>

@@ -348,7 +348,10 @@ const SellerHubScreen = () => {
 
             {/* Sticky Footer */}
             <View style={styles.footer}>
-                <TouchableOpacity style={styles.viewShopBtn}>
+                <TouchableOpacity 
+                    style={styles.viewShopBtn}
+                    onPress={() => user?.id && router.push(`/seller/${user.id}` as any)}
+                >
                     <EyeIcon size={20} color={Colors.text.primary} />
                     <Text style={[styles.btnText, { color: Colors.text.primary }]}>View public shop</Text>
                 </TouchableOpacity>
