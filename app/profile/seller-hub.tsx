@@ -30,7 +30,8 @@ import {
     InformationCircleIcon,
     MapPinIcon,
     TagIcon,
-    UserCircleIcon
+    UserCircleIcon,
+    CheckBadgeIcon
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
@@ -333,6 +334,13 @@ const SellerHubScreen = () => {
                         title="Languages & regions"
                         subtitle="Preferred languages and cultural focus"
                         onPress={() => router.push('/profile/languages-regions')}
+                    />
+                    <MenuItem
+                        icon={CheckBadgeIcon}
+                        title="Identity verification"
+                        subtitle={profile?.verification_status === 'verified' ? "Your identity is verified" : profile?.verification_status === 'pending' ? "Review in progress" : "Confirm your identity to build trust"}
+                        badge={profile?.verification_status === 'pending' ? "Pending" : undefined}
+                        onPress={() => router.push('/profile/verification')}
                         isLast
                     />
                 </MenuSection>

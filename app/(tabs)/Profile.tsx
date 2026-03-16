@@ -31,7 +31,9 @@ import {
   ChevronRightIcon,
   ArrowLeftOnRectangleIcon,
   BuildingStorefrontIcon,
-  ShareIcon
+  ShareIcon,
+  CheckBadgeIcon,
+  ShieldCheckIcon
 } from "react-native-heroicons/outline";
 import { supabase } from "../../lib/supabase";
 import { FontAwesome } from "@expo/vector-icons";
@@ -299,6 +301,13 @@ const Profile = () => {
             subtitle="Default addresses and delivery methods"
             onPress={() => router.push('/profile/location-shipping' as any)}
           />
+          <MenuItem
+            icon={CheckBadgeIcon}
+            label="Identity Verification"
+            subtitle={profile?.is_verified ? "Your identity is verified" : "Confirm your identity to build trust"}
+            onPress={() => router.push('/profile/verification')}
+            showBorder={false}
+          />
         </View>
 
         {/* Seller Section */}
@@ -360,6 +369,20 @@ const Profile = () => {
             showBorder={false}
           />
         </View>
+
+        {/* Admin Section (Visible only to admins) */}
+        {profile?.role === 'admin' && (
+          <View style={styles.section}>
+            <SectionHeader title="Admin" />
+            <MenuItem
+              icon={ShieldCheckIcon}
+              label="Verification Review"
+              subtitle="Review pending identity documents"
+              onPress={() => router.push('/admin/verifications' as any)}
+              showBorder={false}
+            />
+          </View>
+        )}
 
         <TouchableOpacity
           style={styles.logoutButton}

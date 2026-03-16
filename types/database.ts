@@ -31,6 +31,11 @@ export interface Database {
           shop_shipping: Json | null
           spoken_languages: string[] | null
           shipping_regions: string[] | null
+          is_verified: boolean
+          verification_status: 'none' | 'pending' | 'verified' | 'rejected'
+          verification_document_url: string | null
+          role: 'user' | 'admin'
+          verification_rejection_reason: string | null
         }
         Insert: {
           id: string
@@ -53,6 +58,9 @@ export interface Database {
           shop_shipping?: Json | null
           spoken_languages?: string[] | null
           shipping_regions?: string[] | null
+          is_verified?: boolean
+          verification_status?: 'none' | 'pending' | 'verified' | 'rejected'
+          verification_document_url?: string | null
         }
         Update: {
           id?: string
@@ -75,6 +83,9 @@ export interface Database {
           shop_shipping?: Json | null
           spoken_languages?: string[] | null
           shipping_regions?: string[] | null
+          is_verified?: boolean
+          verification_status?: 'none' | 'pending' | 'verified' | 'rejected'
+          verification_document_url?: string | null
         }
         Relationships: [
           {

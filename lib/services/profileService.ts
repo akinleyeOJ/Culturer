@@ -16,6 +16,8 @@ export const fetchPublicSellerProfile = async (sellerId: string) => {
             spoken_languages,
             shipping_regions,
             shop_policies,
+            is_verified,
+            verification_status,
             created_at
         `)
         .eq('id', sellerId)
@@ -113,4 +115,94 @@ export const toggleFollowSeller = async (followerId: string, sellerId: string, c
         }
         return { success: true, isFollowing: true };
     }
+};
+
+export const requestVerification = async (userId: string, documentUrl: string) => {
+    if (!userId || !documentUrl) return { success: false };
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ 
+            verification_status: 'pending',
+            verification_document_url: documentUrl
+        })
+        .eq('id', userId);
+
+    if (error) {
+        console.error('Error requesting verification:', error);
+        return { success: false, error };
+    }
+
+    return { success: true };
+};
+
+export const cancelVerification = async (userId: string) => {
+    if (!userId) return { success: false };
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ 
+            verification_status: 'none',
+            verification_document_url: null 
+        })
+        .eq('id', userId);
+
+    if (error) {
+        console.error('Error cancelling verification:', error);
+        return { success: false, error };
+    }
+
+    return { success: true };
+};
+
+// Admin Service Functions
+export const fetchPendingVerifications = async () => {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, username, avatar_url, verification_status, verification_document_url, created_at')
+        .eq('verification_status', 'pending')
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching pending verifications:', error);
+        return { success: false, error };
+    }
+
+    return { success: true, data };
+};
+
+export const updateVerificationStatus = async (
+    userId: string, 
+    status: 'verified' | 'rejected',
+    isVerified: boolean = false,
+    rejectionReason?: string
+) => {
+    const { error } = await supabase
+        .from('profiles')
+        .update({ 
+            verification_status: status,
+            is_verified: isVerified,
+            verification_rejection_reason: rejectionReason || null
+        })
+        .eq('id', userId);
+
+    if (error) {
+        console.error(`Error updating verification to ${status}:`, error);
+        return { success: false, error };
+    }
+
+    return { success: true };
+};
+
+export const getSignedImageUrl = async (bucket: string, path: string, expiresIn: number = 3600) => {
+    const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, expiresIn);
+
+    if (error) {
+        console.error('Error creating signed URL:', error);
+        return null;
+    }
+
+    return data.signedUrl;
 };

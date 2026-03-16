@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
     TextInput,
     Dimensions,
+    Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -48,6 +49,7 @@ export default function PublicSellerProfileScreen() {
     const [filters, setFilters] = useState<FilterOptions>({});
     
     const { refreshCartCount } = useCart();
+    const [showVerificationModal, setShowVerificationModal] = useState(false);
     
     // Categories derived from the fetched inventory
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
@@ -206,9 +208,15 @@ export default function PublicSellerProfileScreen() {
                                 <Text style={styles.avatarText}>{seller.full_name?.substring(0, 1) || '?'}</Text>
                             </View>
                         )}
-                        <View style={styles.verifiedBadge}>
-                            <CheckBadgeIcon size={18} color={Colors.primary[500]} />
-                        </View>
+                        {seller.is_verified && (
+                            <TouchableOpacity 
+                                style={styles.verifiedBadge}
+                                onPress={() => setShowVerificationModal(true)}
+                                activeOpacity={0.8}
+                            >
+                                <CheckBadgeIcon size={18} color={Colors.primary[500]} />
+                            </TouchableOpacity>
+                        )}
                     </View>
 
                     <Text style={styles.sellerName}>{seller.full_name}</Text>
@@ -416,6 +424,36 @@ export default function PublicSellerProfileScreen() {
                     )}
                 </View>
             </ScrollView>
+
+            {/* Verification Info Modal */}
+            <Modal
+                visible={showVerificationModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowVerificationModal(false)}
+            >
+                <TouchableOpacity 
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowVerificationModal(false)}
+                >
+                    <View style={styles.infoModalContent}>
+                        <View style={styles.modalHeader}>
+                            <CheckBadgeIcon size={32} color={Colors.primary[500]} />
+                            <Text style={styles.modalTitle}>Verified Seller</Text>
+                        </View>
+                        <Text style={styles.modalDescription}>
+                            This seller has completed our standard identity verification check. We've verified their government-issued ID to confirm they are a real person, helping ensure a safer community for everyone.
+                        </Text>
+                        <TouchableOpacity 
+                            style={styles.modalCloseButton}
+                            onPress={() => setShowVerificationModal(false)}
+                        >
+                            <Text style={styles.modalCloseButtonText}>Got it</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -739,5 +777,51 @@ const styles = StyleSheet.create({
         color: Colors.text.tertiary,
         textAlign: 'center',
         marginTop: 40,
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    infoModalContent: {
+        backgroundColor: '#FFF',
+        borderRadius: 24,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        alignItems: 'center',
+    },
+    modalHeader: {
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 8,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    modalDescription: {
+        fontSize: 15,
+        color: Colors.text.secondary,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    modalCloseButton: {
+        backgroundColor: Colors.primary[500],
+        paddingVertical: 12,
+        paddingHorizontal: 32,
+        borderRadius: 12,
+        width: '100%',
+        alignItems: 'center',
+    },
+    modalCloseButtonText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
