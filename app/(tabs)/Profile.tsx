@@ -40,6 +40,8 @@ interface UserStats {
   listings: number;
   orders: number;
   rating: number;
+  followers: number;
+  following: number;
 }
 
 const Profile = () => {
@@ -79,6 +81,18 @@ const Profile = () => {
         .eq('seller_id', user.id)
         .eq('status', 'active');
 
+      // 4. Fetch Followers count
+      const { count: followersCount } = await supabase
+        .from('user_follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', user.id);
+
+      // 5. Fetch Following count
+      const { count: followingCount } = await supabase
+        .from('user_follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', user.id);
+
       // Update member since
       if (user.created_at) {
         const year = new Date(user.created_at).getFullYear();
@@ -89,6 +103,8 @@ const Profile = () => {
         orders: ordersCount || 0,
         listings: listingsCount || 0,
         rating: 4.9,
+        followers: followersCount || 0,
+        following: followingCount || 0,
       });
 
     } catch (e) {
@@ -195,6 +211,9 @@ const Profile = () => {
               </Text>
               <Text style={styles.subText}>
                 Member since {memberSince} • {profile?.location || (isInitialLoading ? ' ' : (user?.user_metadata?.location || 'Earth'))}
+              </Text>
+              <Text style={styles.followStatsText}>
+                <Text style={{ fontWeight: '700', color: Colors.text.primary }}>{stats?.followers || 0}</Text> followers • <Text style={{ fontWeight: '700', color: Colors.text.primary }}>{stats?.following || 0}</Text> following
               </Text>
               {/* Social Links Row */}
               <View style={styles.socialsRow}>
@@ -404,6 +423,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   subText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  followStatsText: {
     fontSize: 14,
     color: '#6B7280',
     marginBottom: 8,

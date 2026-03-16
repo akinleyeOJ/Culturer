@@ -223,12 +223,7 @@ export default function PublicSellerProfileScreen() {
                         <View style={styles.metaBadge}>
                             <StarIcon size={14} color="#F59E0B" />
                             <Text style={styles.metaBadgeText}>
-                                {seller.average_rating > 0 ? seller.average_rating.toFixed(1) : 'New'} ({seller.review_count})
-                            </Text>
-                        </View>
-                        <View style={styles.metaBadge}>
-                            <Text style={styles.metaBadgeText}>
-                                {seller.follower_count} {seller.follower_count === 1 ? 'follower' : 'followers'} · {seller.following_count} following
+                                {seller.average_rating > 0 ? seller.average_rating.toFixed(1) : 'No reviews'} ({seller.review_count})
                             </Text>
                         </View>
                     </View>
@@ -261,7 +256,6 @@ export default function PublicSellerProfileScreen() {
                         {seller.cultures && seller.cultures.length > 0 && (
                             <View style={styles.trustPill}>
                                 <GlobeAltIcon size={16} color={Colors.primary[600]} />
-                                <Text style={styles.trustPillLabel}>Focus: </Text>
                                 <Text style={styles.trustPillValue}>
                                     {seller.cultures.map((c: string) => c.charAt(0).toUpperCase() + c.slice(1)).join(', ')}
                                 </Text>
@@ -369,13 +363,56 @@ export default function PublicSellerProfileScreen() {
                             )}
                         </View>
                     ) : (
-                        <View style={styles.policiesContainer}>
-                            {seller.shop_policies ? (
-                                <Text style={styles.policyText}>{JSON.stringify(seller.shop_policies, null, 2)}</Text>
+                        <ScrollView style={styles.policiesContainer} showsVerticalScrollIndicator={false}>
+                            {seller.shop_policies && Object.keys(seller.shop_policies).length > 0 ? (
+                                <View style={styles.policyCard}>
+                                    {seller.shop_policies.processing_time && (
+                                        <View style={styles.policyRow}>
+                                            <Text style={styles.policyTitle}>Processing Time</Text>
+                                            <Text style={styles.policyDetail}>{seller.shop_policies.processing_time}</Text>
+                                        </View>
+                                    )}
+                                    {seller.shop_policies.response_time && (
+                                        <View style={styles.policyRow}>
+                                            <Text style={styles.policyTitle}>Typical Response Time</Text>
+                                            <Text style={styles.policyDetail}>{seller.shop_policies.response_time}</Text>
+                                        </View>
+                                    )}
+                                    <View style={styles.policyRow}>
+                                        <Text style={styles.policyTitle}>Accepts Returns & Exchanges</Text>
+                                        <Text style={styles.policyDetail}>
+                                            {seller.shop_policies.accepts_returns ? 'Yes' : 'No'}
+                                        </Text>
+                                        {seller.shop_policies.accepts_returns && seller.shop_policies.return_window_days && (
+                                            <Text style={styles.policySubDetail}>
+                                                Within {seller.shop_policies.return_window_days} days of delivery
+                                            </Text>
+                                        )}
+                                    </View>
+                                    {seller.shop_policies.return_shipping && (
+                                        <View style={styles.policyRow}>
+                                            <Text style={styles.policyTitle}>Return Shipping</Text>
+                                            <Text style={styles.policyDetail}>{seller.shop_policies.return_shipping}</Text>
+                                        </View>
+                                    )}
+                                    <View style={styles.policyRow}>
+                                        <Text style={styles.policyTitle}>Accepts Cancellations</Text>
+                                        <Text style={styles.policyDetail}>
+                                            {seller.shop_policies.accepts_cancellations ? 'Yes' : 'No'}
+                                        </Text>
+                                    </View>
+                                    
+                                    {seller.shop_policies.additional_terms ? (
+                                        <View style={[styles.policyRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                                            <Text style={styles.policyTitle}>Additional Terms</Text>
+                                            <Text style={styles.policyDetail}>{seller.shop_policies.additional_terms}</Text>
+                                        </View>
+                                    ) : null}
+                                </View>
                             ) : (
-                                <Text style={styles.emptyText}>This seller hasn't added formal shop policies yet.</Text>
+                                <Text style={styles.noPoliciesText}>This shop has no detailed policies listed.</Text>
                             )}
-                        </View>
+                        </ScrollView>
                     )}
                 </View>
             </ScrollView>
@@ -658,13 +695,49 @@ const styles = StyleSheet.create({
         color: Colors.text.tertiary,
     },
     policiesContainer: {
-        padding: 20,
-        backgroundColor: '#FFF',
-        minHeight: 300,
+        flex: 1,
+        backgroundColor: '#FAFAFA',
+        paddingHorizontal: 20,
+        paddingTop: 24,
+        paddingBottom: 40,
     },
-    policyText: {
-        fontSize: 15,
+    policyCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    policyRow: {
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.neutral[100],
+        paddingBottom: 16,
+        marginBottom: 16,
+    },
+    policyTitle: {
+        fontSize: 14,
+        fontWeight: '600',
         color: Colors.text.secondary,
-        lineHeight: 24,
+        marginBottom: 4,
+    },
+    policyDetail: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: Colors.text.primary,
+        lineHeight: 22,
+    },
+    policySubDetail: {
+        fontSize: 13,
+        color: Colors.neutral[500],
+        marginTop: 4,
+    },
+    noPoliciesText: {
+        fontSize: 15,
+        color: Colors.text.tertiary,
+        textAlign: 'center',
+        marginTop: 40,
     },
 });
