@@ -14,7 +14,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/color';
-import { ChevronLeftIcon, MagnifyingGlassIcon, CheckBadgeIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, MagnifyingGlassIcon, CheckBadgeIcon, QuestionMarkCircleIcon } from 'react-native-heroicons/outline';
 import { MapPinIcon, GlobeAltIcon, LanguageIcon, StarIcon } from 'react-native-heroicons/solid';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -420,6 +420,22 @@ export default function PublicSellerProfileScreen() {
                             ) : (
                                 <Text style={styles.noPoliciesText}>This shop has no detailed policies listed.</Text>
                             )}
+
+                            {/* Shop FAQs Section */}
+                            {seller.shop_policies?.faqs && seller.shop_policies.faqs.length > 0 && (
+                                <View style={styles.faqSection}>
+                                    <Text style={styles.sectionHeading}>Frequently Asked Questions</Text>
+                                    {seller.shop_policies.faqs.map((faq: any, index: number) => (
+                                        <View key={faq.id || index} style={styles.faqCard}>
+                                            <View style={styles.faqQuestionRow}>
+                                                <QuestionMarkCircleIcon size={20} color={Colors.primary[500]} />
+                                                <Text style={styles.faqQuestionText}>{faq.question}</Text>
+                                            </View>
+                                            <Text style={styles.faqAnswerText}>{faq.answer}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
                         </ScrollView>
                     )}
                 </View>
@@ -823,5 +839,46 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 16,
         fontWeight: '600',
+    },
+    // FAQ Styles
+    faqSection: {
+        marginTop: 24,
+        paddingHorizontal: 16,
+        paddingBottom: 40,
+    },
+    sectionHeading: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        marginBottom: 16,
+    },
+    faqCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    faqQuestionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    faqQuestionText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        flex: 1,
+    },
+    faqAnswerText: {
+        fontSize: 14,
+        color: Colors.text.secondary,
+        lineHeight: 20,
+        paddingLeft: 28,
     },
 });

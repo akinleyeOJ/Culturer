@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Colors } from '../constants/color';
-import { UserIcon, MapPinIcon } from 'react-native-heroicons/outline';
+import { UserIcon, MapPinIcon, CheckBadgeIcon } from 'react-native-heroicons/outline';
 import { StarRating } from './StarRating';
 
 interface SellerCardProps {
@@ -10,6 +10,7 @@ interface SellerCardProps {
     sellerRating: number;
     sellerReviewsCount: number;
     sellerLocation?: string;
+    isVerified?: boolean;
     onVisitShop: () => void;
 }
 
@@ -19,6 +20,7 @@ export const SellerCard = ({
     sellerRating,
     sellerReviewsCount,
     sellerLocation,
+    isVerified,
     onVisitShop,
 }: SellerCardProps) => {
     const renderStars = (rating: number) => {
@@ -37,7 +39,12 @@ export const SellerCard = ({
                 )}
 
                 <View style={styles.details}>
-                    <Text style={styles.name}>{sellerName}</Text>
+                    <View style={styles.nameRow}>
+                        <Text style={styles.name} numberOfLines={1}>{sellerName}</Text>
+                        {isVerified && (
+                            <CheckBadgeIcon size={18} color={Colors.primary[500]} />
+                        )}
+                    </View>
                     <View style={styles.ratingRow}>
                         <StarRating rating={sellerRating} size={12} color="#F59E0B" />
                         <Text style={styles.reviewCount}>
@@ -94,11 +101,16 @@ const styles = StyleSheet.create({
     details: {
         flex: 1,
     },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginBottom: 4,
+    },
     name: {
         fontSize: 16,
         fontWeight: '600',
         color: Colors.text.primary,
-        marginBottom: 4,
     },
     ratingRow: {
         flexDirection: 'row',

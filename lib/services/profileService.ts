@@ -139,20 +139,37 @@ export const requestVerification = async (userId: string, documentUrl: string) =
 export const cancelVerification = async (userId: string) => {
     if (!userId) return { success: false };
 
-    const { error } = await supabase
-        .from('profiles')
-        .update({ 
-            verification_status: 'none',
-            verification_document_url: null 
-        })
-        .eq('id', userId);
+    try {
+        // 1. Get current document URL
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('verification_document_url')
+            .eq('id', userId)
+            .single();
 
-    if (error) {
+        // 2. Clear from DB
+        const { error } = await supabase
+            .from('profiles')
+            .update({ 
+                verification_status: 'none',
+                verification_document_url: null 
+            })
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        // 3. Delete from storage if it existed
+        if (profile?.verification_document_url) {
+            await supabase.storage
+                .from('verification-docs')
+                .remove([profile.verification_document_url]);
+        }
+
+        return { success: true };
+    } catch (error) {
         console.error('Error cancelling verification:', error);
         return { success: false, error };
     }
-
-    return { success: true };
 };
 
 // Admin Service Functions

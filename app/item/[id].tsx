@@ -395,6 +395,7 @@ const ItemDetail = () => {
                         sellerRating={product.seller_rating}
                         sellerReviewsCount={product.seller_reviews_count}
                         sellerLocation={product.seller_location}
+                        isVerified={product.is_verified}
                         onVisitShop={() => router.push(`/seller/${product.seller_id}` as any)}
                     />
 
