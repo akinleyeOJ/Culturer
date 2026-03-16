@@ -25,6 +25,7 @@ import {
   trackProductView,
   fetchWishlistCount
 } from "../../lib/services/productService";
+import { addToCart } from "../../lib/services/cartService";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
 import { supabase } from "../../lib/supabase";
@@ -229,6 +230,24 @@ const Home = () => {
     }
   };
 
+  const handleAddToCart = async (productId: string, outOfStock: boolean) => {
+    if (!user) {
+      Alert.alert("Sign In Required", "Please sign in to add items to cart");
+      return;
+    }
+    if (outOfStock) {
+      Alert.alert("Unavailable", "This item is sold out or out of stock.");
+      return;
+    }
+    
+    const { success } = await addToCart(user.id, productId, 1);
+    if (success) {
+      await refreshCartCount();
+    } else {
+      Alert.alert('Error', 'Failed to add item to cart. Please try again.');
+    }
+  };
+
   // Handle product press
   const handleProductPress = async (productId: string) => {
     if (user) {
@@ -420,9 +439,11 @@ const Home = () => {
                       onPress={() => handleProductPress(product.id)}
                       onLike={() => handleToggleFavorite(product.id)}
                       isLiked={product.isFavorited || false}
+                      onAddToCart={() => handleAddToCart(product.id, product.outOfStock)}
                       variant="default"
                       style={{ width: 155, marginRight: 0 }}
                       hideFavoriteButton={user?.id === product.seller_id}
+                      hideAddToCartButton={user?.id === product.seller_id}
                     />
                   ))}
                 </View>
@@ -504,8 +525,10 @@ const Home = () => {
                   onPress={() => handleProductPress(product.id)}
                   onLike={() => handleToggleFavorite(product.id)}
                   isLiked={product.isFavorited || false}
+                  onAddToCart={() => handleAddToCart(product.id, product.outOfStock)}
                   variant="large"
                   hideFavoriteButton={user?.id === product.seller_id}
+                  hideAddToCartButton={user?.id === product.seller_id}
                 />
               ))
             ) : (

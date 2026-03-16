@@ -15,11 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/color';
 import { ChevronLeftIcon, MagnifyingGlassIcon, CheckBadgeIcon } from 'react-native-heroicons/outline';
 import { MapPinIcon, GlobeAltIcon, LanguageIcon, StarIcon } from 'react-native-heroicons/solid';
-
 import { useAuth } from '../../contexts/AuthContext';
+
 import { fetchPublicSellerProfile, getFollowStatus, toggleFollowSeller } from '../../lib/services/profileService';
-import { fetchSellerInventory, FilterOptions } from '../../lib/services/productService';
+import { fetchSellerInventory, FilterOptions, toggleFavorite } from '../../lib/services/productService';
 import { ProductCard } from '../../components/Card';
+import { useCart } from '../../contexts/CartContext';
+import { addToCart } from '../../lib/services/cartService';
+import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +46,8 @@ export default function PublicSellerProfileScreen() {
     const [inventoryLoading, setInventoryLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filters, setFilters] = useState<FilterOptions>({});
+    
+    const { refreshCartCount } = useCart();
     
     // Categories derived from the fetched inventory
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
@@ -106,6 +111,49 @@ export default function PublicSellerProfileScreen() {
         setFollowActionLoading(false);
     };
 
+    const handleToggleFavorite = async (productId: string) => {
+        if (!user) {
+            Alert.alert("Sign In Required", "Please sign in to save items");
+            return;
+        }
+        
+        // Optimistic update
+        setInventory(current => 
+            current.map(p => 
+                p.id === productId ? { ...p, isFavorited: !p.isFavorited } : p
+            )
+        );
+        
+        const isFav = await toggleFavorite(user.id, productId);
+        
+        // Revert on failure
+        if (isFav === null) {
+            setInventory(current => 
+                current.map(p => 
+                    p.id === productId ? { ...p, isFavorited: !p.isFavorited } : p
+                )
+            );
+        }
+    };
+
+    const handleAddToCart = async (productId: string, outOfStock: boolean) => {
+        if (!user) {
+            Alert.alert("Sign In Required", "Please sign in to add items to cart");
+            return;
+        }
+        if (outOfStock) {
+            Alert.alert("Unavailable", "This item is sold out or out of stock.");
+            return;
+        }
+        
+        const { success } = await addToCart(user.id, productId, 1);
+        if (success) {
+            await refreshCartCount();
+        } else {
+            Alert.alert('Error', 'Failed to add item to cart. Please try again.');
+        }
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -130,7 +178,7 @@ export default function PublicSellerProfileScreen() {
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
                 {/* Header / Banner Area */}
                 <View style={styles.bannerContainer}>
@@ -141,11 +189,11 @@ export default function PublicSellerProfileScreen() {
                     )}
                     
                     {/* Fixed Navbar Overlay */}
-                    <SafeAreaView edges={['top']} style={styles.navbarOverlay}>
+                    <View style={styles.navbarOverlay}>
                         <TouchableOpacity onPress={() => router.back()} style={styles.backButtonOverlay}>
                             <ChevronLeftIcon size={20} color="#000" />
                         </TouchableOpacity>
-                    </SafeAreaView>
+                    </View>
                 </View>
 
                 {/* Profile Card Overlay */}
@@ -180,7 +228,7 @@ export default function PublicSellerProfileScreen() {
                         </View>
                         <View style={styles.metaBadge}>
                             <Text style={styles.metaBadgeText}>
-                                {seller.follower_count} {seller.follower_count === 1 ? 'follower' : 'followers'}
+                                {seller.follower_count} {seller.follower_count === 1 ? 'follower' : 'followers'} · {seller.following_count} following
                             </Text>
                         </View>
                     </View>
@@ -308,7 +356,11 @@ export default function PublicSellerProfileScreen() {
                                                 shipping={item.shipping}
                                                 outOfStock={item.status === 'sold' || item.outOfStock}
                                                 showSoldOutOverlay={item.status === 'sold'}
-                                                hideFavoriteButton={true}
+                                                hideFavoriteButton={user?.id === seller.id}
+                                                hideAddToCartButton={user?.id === seller.id}
+                                                isLiked={item.isFavorited}
+                                                onLike={() => handleToggleFavorite(item.id)}
+                                                onAddToCart={() => handleAddToCart(item.id, item.status === 'sold' || item.outOfStock)}
                                                 onPress={() => router.push(`/item/${item.id}`)}
                                             />
                                         </View>
@@ -327,7 +379,7 @@ export default function PublicSellerProfileScreen() {
                     )}
                 </View>
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 }
 
@@ -357,7 +409,7 @@ const styles = StyleSheet.create({
     },
     bannerContainer: {
         width: '100%',
-        height: 180,
+        height: 140,
         position: 'relative',
     },
     coverImage: {

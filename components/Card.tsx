@@ -1,7 +1,7 @@
 import React, { ReactNode, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, StyleProp, Image } from "react-native";
 import { Colors } from "../constants/color";
-import { HeartIcon as HeartOutline } from "react-native-heroicons/outline";
+import { HeartIcon as HeartOutline, ShoppingBagIcon } from "react-native-heroicons/outline";
 import { HeartIcon as HeartSolid } from "react-native-heroicons/solid";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withTiming } from "react-native-reanimated";
 import { StarRating } from "./StarRating";
@@ -40,6 +40,8 @@ interface ProductCardProps extends CardProps {
   originalPrice?: string;
   hideFavoriteButton?: boolean;
   showSoldOutOverlay?: boolean;
+  onAddToCart?: () => void;
+  hideAddToCartButton?: boolean;
 }
 
 export const ProductCard = ({
@@ -60,6 +62,8 @@ export const ProductCard = ({
   originalPrice,
   hideFavoriteButton = false,
   showSoldOutOverlay = false,
+  onAddToCart,
+  hideAddToCartButton = false,
 }: ProductCardProps) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -141,6 +145,26 @@ export const ProductCard = ({
             </Text>
           </View>
         )}
+
+        {/* Favorite Button Overlay on Image */}
+        {!hideFavoriteButton && (
+          <TouchableOpacity
+            style={styles.favoriteButtonOverlay}
+            onPress={(e) => {
+              e.stopPropagation();
+              onLike?.();
+            }}
+            activeOpacity={0.7}
+          >
+            <Animated.View style={animatedIconStyle}>
+              {isLiked ? (
+                <HeartSolid size={18} color="#EF4444" />
+              ) : (
+                <HeartOutline size={18} color="#4A4A4A" />
+              )}
+            </Animated.View>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.cardContent}>
@@ -158,25 +182,21 @@ export const ProductCard = ({
             <Text style={styles.reviewText}>({reviews})</Text>
           </View>
 
-          {/* Favorite Button */}
-          {!hideFavoriteButton && (
-            <TouchableOpacity
-              style={styles.favoriteButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                onLike?.();
-              }}
-              activeOpacity={0.7}
-            >
-              <Animated.View style={animatedIconStyle}>
-                {isLiked ? (
-                  <HeartSolid size={18} color="#EF4444" />
-                ) : (
-                  <HeartOutline size={18} color="#4A4A4A" />
-                )}
-              </Animated.View>
-            </TouchableOpacity>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {/* Add to Cart Button */}
+            {!hideAddToCartButton && (
+              <TouchableOpacity
+                style={styles.favoriteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onAddToCart?.();
+                }}
+                activeOpacity={0.7}
+              >
+                <ShoppingBagIcon size={18} color="#4A4A4A" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </Card>
@@ -408,6 +428,22 @@ const styles = StyleSheet.create({
   },
   favoriteIcon: {
     fontSize: 10,
+  },
+  favoriteButtonOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
 
   // Recently Viewed Card

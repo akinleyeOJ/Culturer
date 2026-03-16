@@ -19,6 +19,7 @@ import { ProductCard, ProductCardSkeleton } from "../../components/Card";
 import BrowseHeader from "../../components/BrowseHeader";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
+import { addToCart } from "../../lib/services/cartService";
 import { supabase } from "../../lib/supabase";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { fetchProducts, toggleFavorite, fetchWishlistCount, trackProductView } from "../../lib/services/productService";
@@ -273,6 +274,24 @@ const Browse = () => {
     }
   };
 
+  const handleAddToCart = async (productId: string, outOfStock: boolean) => {
+    if (!user) {
+      Alert.alert("Sign In Required", "Please sign in to add items to cart");
+      return;
+    }
+    if (outOfStock) {
+      Alert.alert("Unavailable", "This item is sold out or out of stock.");
+      return;
+    }
+    
+    const { success } = await addToCart(user.id, productId, 1);
+    if (success) {
+      await refreshCartCount();
+    } else {
+      Alert.alert('Error', 'Failed to add item to cart. Please try again.');
+    }
+  };
+
   const handleProductPress = async (productId: string) => {
     if (user) {
       await trackProductView(user.id, productId);
@@ -517,9 +536,11 @@ const Browse = () => {
       badge={item.badge}
       originalPrice={item.originalPrice}
       onLike={() => handleToggleFavorite(item.id)}
+      onAddToCart={() => handleAddToCart(item.id, item.outOfStock || false)}
       style={{ width: COLUMN_WIDTH, marginBottom: 16 }}
       onPress={() => handleProductPress(item.id)}
       hideFavoriteButton={user?.id === item.seller_id}
+      hideAddToCartButton={user?.id === item.seller_id}
     />
   );
 
