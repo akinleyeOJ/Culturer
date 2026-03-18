@@ -8,6 +8,9 @@ import {
     Image,
     ActivityIndicator,
     Alert,
+    Modal,
+    TextInput,
+    Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,7 +19,8 @@ import {
     ChatBubbleLeftRightIcon,
     QuestionMarkCircleIcon,
     XCircleIcon,
-    StarIcon
+    StarIcon,
+    TruckIcon,
 } from 'react-native-heroicons/outline';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -50,6 +54,10 @@ interface Order {
         lastName: string;
     };
     payment_method: string;
+    carrier_name: string | null;
+    tracking_number: string | null;
+    shipping_method_details: any | null;
+    shipping_zone: string | null;
     created_at: string;
     updated_at?: string;
     order_items: OrderItem[];
@@ -61,6 +69,17 @@ const OrderDetailsScreen = () => {
     const router = useRouter();
     const [order, setOrder] = useState<Order | null>(null);
     const [loading, setLoading] = useState(true);
+    const [showShipModal, setShowShipModal] = useState(false);
+    const [shipCarrier, setShipCarrier] = useState('');
+    const [shipTrackingNumber, setShipTrackingNumber] = useState('');
+    const [shipProcessing, setShipProcessing] = useState(false);
+
+    // Common carriers for the dropdown
+    const CARRIER_OPTIONS = [
+        'InPost', 'DHL', 'DPD', 'Royal Mail', 'Evri', 'UPS',
+        'FedEx', 'Poczta Polska', 'Hermes', 'GLS',
+        'Poste Italiane', 'BRT', 'Colissimo', 'Correos', 'PostNL',
+    ];
 
     useEffect(() => {
         fetchOrderDetails();
@@ -131,6 +150,54 @@ const OrderDetailsScreen = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleMarkAsShipped = async () => {
+        if (!shipCarrier.trim() || !shipTrackingNumber.trim()) {
+            Alert.alert('Required', 'Please select a carrier and enter the tracking number.');
+            return;
+        }
+        try {
+            setShipProcessing(true);
+            const { error } = await supabase
+                .from('orders' as any)
+                .update({
+                    status: 'shipped',
+                    carrier_name: shipCarrier.trim(),
+                    tracking_number: shipTrackingNumber.trim(),
+                })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            setShowShipModal(false);
+            setShipCarrier('');
+            setShipTrackingNumber('');
+            Alert.alert('Shipped!', 'Order marked as shipped. Buyer can now track their package.');
+            fetchOrderDetails();
+        } catch (error) {
+            console.error('Error marking as shipped:', error);
+            Alert.alert('Error', 'Failed to mark as shipped');
+        } finally {
+            setShipProcessing(false);
+        }
+    };
+
+    const getTrackingUrl = (carrier: string, trackingNum: string): string | null => {
+        const c = carrier.toLowerCase();
+        if (c.includes('inpost')) return `https://inpost.pl/sledzenie-przesylek?number=${trackingNum}`;
+        if (c.includes('dhl')) return `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNum}`;
+        if (c.includes('dpd')) return `https://www.dpd.com/tracking?parcelno=${trackingNum}`;
+        if (c.includes('royal mail')) return `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNum}`;
+        if (c.includes('evri') || c.includes('hermes')) return `https://www.evri.com/track/parcel/${trackingNum}`;
+        if (c.includes('ups')) return `https://www.ups.com/track?tracknum=${trackingNum}`;
+        if (c.includes('fedex')) return `https://www.fedex.com/fedextrack/?trknbr=${trackingNum}`;
+        if (c.includes('poczta')) return `https://śledzenie.poczta-polska.pl/?numer=${trackingNum}`;
+        if (c.includes('gls')) return `https://gls-group.com/track/${trackingNum}`;
+        if (c.includes('postnl')) return `https://postnl.nl/tracktrace/?B=${trackingNum}`;
+        if (c.includes('colissimo')) return `https://www.laposte.fr/outils/suivre-vos-envois?code=${trackingNum}`;
+        if (c.includes('correos')) return `https://www.correos.es/ss/Satellite/site/aplicacion-localizador_702-sidioma=en_GB?numero=${trackingNum}`;
+        return null;
     };
 
     const handleContactUser = async () => {
@@ -361,6 +428,35 @@ const OrderDetailsScreen = () => {
                     </View>
                 </View>
 
+                {/* Tracking Info (shown when shipped or delivered) */}
+                {(order.status === 'shipped' || order.status === 'delivered') && order.carrier_name && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>📦 Shipping Information</Text>
+                        <View style={styles.trackingCard}>
+                            <View style={styles.trackingRow}>
+                                <Text style={styles.trackingLabel}>Carrier</Text>
+                                <Text style={styles.trackingValue}>{order.carrier_name}</Text>
+                            </View>
+                            <View style={styles.trackingRow}>
+                                <Text style={styles.trackingLabel}>Tracking #</Text>
+                                <Text style={styles.trackingValue}>{order.tracking_number}</Text>
+                            </View>
+                            {order.tracking_number && (() => {
+                                const url = getTrackingUrl(order.carrier_name!, order.tracking_number);
+                                return url ? (
+                                    <TouchableOpacity
+                                        style={styles.trackButton}
+                                        onPress={() => Linking.openURL(url)}
+                                    >
+                                        <TruckIcon size={18} color="#FFF" />
+                                        <Text style={styles.trackButtonText}>Track My Package</Text>
+                                    </TouchableOpacity>
+                                ) : null;
+                            })()}
+                        </View>
+                    </View>
+                )}
+
                 {/* Order Actions */}
                 <View style={styles.actionSection}>
                     {user?.id === order.seller_id ? (
@@ -370,7 +466,7 @@ const OrderDetailsScreen = () => {
                             {order.status === 'paid' && (
                                 <TouchableOpacity
                                     style={[styles.primaryActionButton]}
-                                    onPress={() => handleUpdateStatus('shipped')}
+                                    onPress={() => setShowShipModal(true)}
                                 >
                                     <Text style={styles.primaryActionButtonText}>Mark as Shipped</Text>
                                 </TouchableOpacity>
@@ -437,6 +533,78 @@ const OrderDetailsScreen = () => {
                     )}
                 </View>
             </ScrollView>
+
+            {/* ─── Ship Order Modal ─── */}
+            <Modal
+                visible={showShipModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowShipModal(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowShipModal(false)}
+                >
+                    <View style={styles.bottomSheet}>
+                        <Text style={styles.bottomSheetTitle}>Ship This Order</Text>
+                        <Text style={styles.bottomSheetSubtitle}>Select the carrier and enter the tracking number</Text>
+
+                        {/* Carrier Selection */}
+                        <Text style={styles.shipFieldLabel}>Carrier</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carrierChipsScroll}>
+                            {CARRIER_OPTIONS.map((c) => (
+                                <TouchableOpacity
+                                    key={c}
+                                    style={[
+                                        styles.carrierChip,
+                                        shipCarrier === c && styles.carrierChipActive,
+                                    ]}
+                                    onPress={() => setShipCarrier(c)}
+                                >
+                                    <Text style={[
+                                        styles.carrierChipText,
+                                        shipCarrier === c && styles.carrierChipTextActive,
+                                    ]}>{c}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        {/* Tracking Number */}
+                        <Text style={[styles.shipFieldLabel, { marginTop: 16 }]}>Tracking Number</Text>
+                        <TextInput
+                            style={styles.trackingInput}
+                            value={shipTrackingNumber}
+                            onChangeText={setShipTrackingNumber}
+                            placeholder="e.g. 628000123456789"
+                            placeholderTextColor="#9CA3AF"
+                            autoCapitalize="characters"
+                        />
+
+                        <TouchableOpacity
+                            style={[
+                                styles.confirmShipBtn,
+                                (!shipCarrier || !shipTrackingNumber.trim()) && styles.confirmShipBtnDisabled,
+                            ]}
+                            onPress={handleMarkAsShipped}
+                            disabled={!shipCarrier || !shipTrackingNumber.trim() || shipProcessing}
+                        >
+                            {shipProcessing ? (
+                                <ActivityIndicator color="#FFF" />
+                            ) : (
+                                <Text style={styles.confirmShipBtnText}>Confirm Shipped</Text>
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.cancelShipBtn}
+                            onPress={() => setShowShipModal(false)}
+                        >
+                            <Text style={styles.cancelShipBtnText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -718,6 +886,131 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: Colors.primary[500],
         marginLeft: 6,
+    },
+
+    // Tracking Section
+    trackingCard: {
+        backgroundColor: '#F9FAFB',
+        borderRadius: 12,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    trackingRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    trackingLabel: {
+        fontSize: 14,
+        color: '#6B7280',
+    },
+    trackingValue: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#111827',
+    },
+    trackButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.primary[500],
+        borderRadius: 12,
+        padding: 14,
+        marginTop: 12,
+        gap: 8,
+    },
+    trackButtonText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#FFF',
+    },
+
+    // Ship Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheet: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 24,
+    },
+    bottomSheetTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    bottomSheetSubtitle: {
+        fontSize: 14,
+        color: '#6B7280',
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    shipFieldLabel: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#374151',
+        marginBottom: 8,
+    },
+    carrierChipsScroll: {
+        maxHeight: 44,
+    },
+    carrierChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        marginRight: 8,
+    },
+    carrierChipActive: {
+        backgroundColor: Colors.primary[500],
+    },
+    carrierChipText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#4B5563',
+    },
+    carrierChipTextActive: {
+        color: '#FFF',
+    },
+    trackingInput: {
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 16,
+        color: '#111827',
+        backgroundColor: '#F9FAFB',
+    },
+    confirmShipBtn: {
+        backgroundColor: Colors.primary[500],
+        borderRadius: 14,
+        padding: 16,
+        alignItems: 'center',
+        marginTop: 20,
+    },
+    confirmShipBtnDisabled: {
+        backgroundColor: '#D1D5DB',
+    },
+    confirmShipBtnText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFF',
+    },
+    cancelShipBtn: {
+        padding: 16,
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    cancelShipBtnText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#9CA3AF',
     },
 });
 

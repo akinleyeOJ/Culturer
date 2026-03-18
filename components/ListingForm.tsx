@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -16,7 +16,7 @@ import {
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { CameraIcon, XMarkIcon, ChevronLeftIcon, InformationCircleIcon } from 'react-native-heroicons/outline';
+import { CameraIcon, XMarkIcon, ChevronLeftIcon, InformationCircleIcon, CubeIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../constants/color';
 import { CATEGORIES } from '../constants/categories';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +33,12 @@ const CONDITIONS = [
     { id: 'like_new', label: 'Like New' },
     { id: 'good', label: 'Good' },
     { id: 'fair', label: 'Fair' },
+];
+
+const WEIGHT_TIERS = [
+    { id: 'small', label: 'Small (S)', desc: 'Light items (e.g., Jewelry, T-shirts, Phone cases)', icon: '📦' },
+    { id: 'medium', label: 'Medium (M)', desc: 'Standard size (e.g., Shoes, Jeans, Books, Cameras)', icon: '📦' },
+    { id: 'large', label: 'Large (L)', desc: 'Bulky items (e.g., Winter coats, Electronics, Handbags)', icon: '📦' },
 ];
 
 interface ListingFormProps {
@@ -61,6 +67,7 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
     const [zoomVisible, setZoomVisible] = useState(false);
     const [selectedZoomIndex, setSelectedZoomIndex] = useState(0);
     const [isPickingImage, setIsPickingImage] = useState(false);
+    const [weightTier, setWeightTier] = useState<'small' | 'medium' | 'large'>('medium');
 
     const resetForm = () => {
         setTitle('');
@@ -71,6 +78,7 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
         setCulturalStory('');
         setDescription('');
         setStockQuantity('1');
+        setWeightTier('medium');
         setImages([]);
     };
 
@@ -163,6 +171,7 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
                 images: uploadedUrls,
                 status,
                 stock_quantity: Math.max(0, parseInt(stockQuantity) || 1),
+                weight_tier: weightTier,
             });
 
             Alert.alert('Success!', status === 'active' ? 'Your listing is live.' : 'Draft saved.', [
@@ -335,6 +344,35 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
                             value={stockQuantity}
                             onChangeText={setStockQuantity}
                         />
+                    </View>
+
+                    {/* Weight Tier */}
+                    <View style={styles.inputGroup}>
+                        <FormLabel label="Shipping Size" />
+                        <Text style={styles.weightTierHelper}>Choose the closest size for shipping estimates</Text>
+                        {WEIGHT_TIERS.map(tier => (
+                            <TouchableOpacity
+                                key={tier.id}
+                                style={[
+                                    styles.weightTierBtn,
+                                    weightTier === tier.id && styles.weightTierBtnActive,
+                                ]}
+                                onPress={() => setWeightTier(tier.id as any)}
+                            >
+                                <View style={styles.weightTierContent}>
+                                    <Text style={[
+                                        styles.weightTierLabel,
+                                        weightTier === tier.id && styles.weightTierLabelActive,
+                                    ]}>{tier.label}</Text>
+                                    <Text style={styles.weightTierDesc}>{tier.desc}</Text>
+                                </View>
+                                {weightTier === tier.id && (
+                                    <View style={styles.weightTierCheck}>
+                                        <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>✓</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        ))}
                     </View>
                 </View>
 
@@ -543,6 +581,51 @@ const styles = StyleSheet.create({
     modalItemActive: { backgroundColor: Colors.primary[50] },
     modalItemText: { fontSize: 16, color: '#4B5563' },
     modalItemActiveText: { color: Colors.primary[600], fontWeight: '700' },
+
+    // Weight Tier Styles
+    weightTierHelper: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginBottom: 10,
+    },
+    weightTierBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 8,
+    },
+    weightTierBtnActive: {
+        backgroundColor: Colors.primary[50],
+        borderColor: Colors.primary[500],
+    },
+    weightTierContent: {
+        flex: 1,
+    },
+    weightTierLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    weightTierLabelActive: {
+        color: Colors.primary[700],
+    },
+    weightTierDesc: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginTop: 2,
+    },
+    weightTierCheck: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: Colors.primary[500],
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
 });
 
 export default ListingForm;

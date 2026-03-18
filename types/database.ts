@@ -161,6 +161,7 @@ export interface Database {
           shipping_days_max: number | null
           discount_percentage: number
           promotion_ends_at: string | null
+          weight_tier: 'small' | 'medium' | 'large'
           created_at: string
           updated_at: string
         }
@@ -455,6 +456,10 @@ export interface Database {
           shipping_address: Json
           payment_method: string
           notes: string | null
+          carrier_name: string | null
+          tracking_number: string | null
+          shipping_method_details: Json | null
+          shipping_zone: string | null
           created_at: string
           updated_at: string
         }
@@ -470,6 +475,10 @@ export interface Database {
           shipping_address: Json
           payment_method: string
           notes?: string | null
+          carrier_name?: string | null
+          tracking_number?: string | null
+          shipping_method_details?: Json | null
+          shipping_zone?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -485,6 +494,10 @@ export interface Database {
           shipping_address?: Json;
           payment_method?: string
           notes?: string | null
+          carrier_name?: string | null
+          tracking_number?: string | null
+          shipping_method_details?: Json | null
+          shipping_zone?: string | null
           created_at?: string
           updated_at?: string
         }
