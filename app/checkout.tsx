@@ -28,6 +28,26 @@ import { supabase } from '../lib/supabase';
 import { fetchCart, clearCart, CartItem } from '../lib/services/cartService';
 import { trackProductSale } from '../lib/services/productService';
 import {
+    detectShippingZone,
+    WEIGHT_TIER_GRAMS,
+    formatWeight,
+    getCarrierPrice,
+    getEnabledCarriers,
+    sellerShipsToZone,
+    type ShippingZone,
+    type WeightTier,
+    type SellerShippingConfig,
+    type CarrierConfig,
+} from '../lib/shippingUtils';
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
+    FadeInDown,
+} from 'react-native-reanimated';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import { shippingUtils, WeightTier, CarrierConfig, SellerShippingConfig } from '../lib/shippingUtils';
+import {
     ChevronLeftIcon,
     DevicePhoneMobileIcon,
     CreditCardIcon,
@@ -52,7 +72,7 @@ const COUNTRIES = [
 
 // Types 
 type CheckoutStep = 1 | 2 | 3;
-type ShippingMethod = 'standard' | 'express';
+type ShippingMethod = 'standard' | 'express' | 'carrier';
 
 interface Address {
     line1: string;
@@ -98,6 +118,18 @@ const Checkout = () => {
     const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
     const [orderNote, setOrderNote] = useState('');
     const [saveAddress, setSaveAddress] = useState(false);
+
+    // Shipping Zone & Carrier State
+    const [sellerShipping, setSellerShipping] = useState<SellerShippingConfig | null>(null);
+    const [shippingZone, setShippingZone] = useState<ShippingZone>('domestic');
+    const [selectedCarrier, setSelectedCarrier] = useState<CarrierConfig | null>(null);
+    const [totalWeightGrams, setTotalWeightGrams] = useState(0);
+    const [cartWeightTier, setCartWeightTier] = useState<WeightTier>('medium');
+
+    // Locker Selection State
+    const [lockerSearch, setLockerSearch] = useState('');
+    const [selectedLocker, setSelectedLocker] = useState<{ id: string; address: string; hint: string } | null>(null);
+    const [lockerResults, setLockerResults] = useState<{ id: string; address: string; hint: string }[]>([]);
 
     // Payment State
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'apple_pay' | 'p24'>('card');
@@ -384,6 +416,81 @@ const Checkout = () => {
         }
     }, [country]);
 
+    // ─── Fetch Seller Shipping Config & Detect Zone ───
+    useEffect(() => {
+        const fetchSellerShipping = async () => {
+            if (cartItems.length === 0) return;
+
+            // Get the first seller's ID (MVP: single-seller cart)
+            const sellerId = cartItems[0]?.product?.seller_id;
+            if (!sellerId || sellerId === 'system') return;
+
+            try {
+                const { data: profile, error } = await supabase
+                    .from('profiles' as any)
+                    .select('shipping_settings')
+                    .eq('id', sellerId)
+                    .single();
+
+                if (!error && (profile as any)?.shipping_settings) {
+                    const config = (profile as any).shipping_settings as SellerShippingConfig;
+                    setSellerShipping(config);
+
+                    // Auto-select first enabled carrier
+                    const enabledCarriers = getEnabledCarriers(config);
+                    if (enabledCarriers.length > 0 && !selectedCarrier) {
+                        setSelectedCarrier(enabledCarriers[0]);
+                        setShippingMethod('carrier');
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching seller shipping config:', err);
+            }
+        };
+
+        fetchSellerShipping();
+    }, [cartItems]);
+
+    // ─── Zone Detection (when country or seller changes) ───
+    useEffect(() => {
+        if (!country || !sellerShipping) return;
+        const zone = detectShippingZone(sellerShipping.origin_country, country);
+        setShippingZone(zone);
+    }, [country, sellerShipping]);
+
+    // ─── Weight Calculation ───
+    useEffect(() => {
+        if (cartItems.length === 0) return;
+
+        // Fetch weight tiers for all products
+        const fetchWeights = async () => {
+            const productIds = cartItems.map(item => item.product_id);
+            const { data: products } = await supabase
+                .from('products')
+                .select('id, weight_tier')
+                .in('id', productIds);
+
+            let totalGrams = 0;
+            let maxTier: WeightTier = 'small';
+            const tierOrder: WeightTier[] = ['small', 'medium', 'large'];
+
+            cartItems.forEach(item => {
+                const product = products?.find((p: any) => p.id === item.product_id);
+                const tier = (product?.weight_tier as WeightTier) || 'medium';
+                totalGrams += WEIGHT_TIER_GRAMS[tier] * item.quantity;
+
+                if (tierOrder.indexOf(tier) > tierOrder.indexOf(maxTier)) {
+                    maxTier = tier;
+                }
+            });
+
+            setTotalWeightGrams(totalGrams);
+            setCartWeightTier(maxTier); // Use the largest tier in cart for pricing
+        };
+
+        fetchWeights();
+    }, [cartItems]);
+
     // Auto-Save Draft to AsyncStorage
     useEffect(() => {
         const timeout = setTimeout(async () => {
@@ -501,12 +608,19 @@ const Checkout = () => {
     // Total cost calculations 
     const totals = useMemo(() => {
         const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-        const shippingCost = shippingMethod === 'express' ? 15.00 : 0.00;
+        
+        // Use selected carrier price or fallback to old logic
+        let shippingCost = 0;
+        if (selectedCarrier) {
+            shippingCost = getCarrierPrice(selectedCarrier, cartWeightTier);
+        } else if (shippingMethod === 'express') {
+            shippingCost = 15.00;
+        }
+        
         const tax = subtotal * 0.10; // 10% Tax
 
         let discountAmount = 0;
         if (appliedDiscount) {
-            // For seller-specific coupons, only discount that seller's items
             const discountableSubtotal = appliedDiscount.seller_id
                 ? cartItems
                     .filter(item => item.product.seller_id === appliedDiscount.seller_id)
@@ -523,7 +637,7 @@ const Checkout = () => {
         const total = Math.max(0, subtotal + shippingCost + tax - discountAmount);
 
         return { subtotal, shippingCost, tax, discount: discountAmount, total };
-    }, [cartItems, shippingMethod, appliedDiscount]);
+    }, [cartItems, shippingMethod, appliedDiscount, selectedCarrier, cartWeightTier]);
 
     // Formatters
     const formatCardNumber = (text: string) => {
@@ -807,6 +921,14 @@ const Checkout = () => {
                     shipping_address: shippingAddressObj,
                     payment_method: selectedPaymentMethod,
                     notes: orderNote,
+                    carrier_name: selectedCarrier?.name || null,
+                    shipping_zone: shippingZone,
+                    shipping_method_details: selectedCarrier ? {
+                        carrier: selectedCarrier.name,
+                        type: selectedCarrier.type,
+                        weight_tier: cartWeightTier,
+                        total_weight_grams: totalWeightGrams,
+                    } : null,
                 })
                     .select()
                     .single();
@@ -1032,12 +1154,64 @@ const Checkout = () => {
                         onChangeText={setLastName}
                     />
                 </View>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Address Line 1"
-                    value={address1}
-                    onChangeText={setAddress1}
-                />
+                <View style={[styles.row, { zIndex: 100 }]}>
+                    <GooglePlacesAutocomplete
+                        placeholder="Search or enter Address Line 1"
+                        onPress={(data, details = null) => {
+                            if (details) {
+                                // Extract address components
+                                let streetNumber = '';
+                                let route = '';
+                                let locality = '';
+                                let postalCode = '';
+                                let countryCode = '';
+
+                                details.address_components.forEach(component => {
+                                    const types = component.types;
+                                    if (types.includes('street_number')) streetNumber = component.long_name;
+                                    if (types.includes('route')) route = component.long_name;
+                                    if (types.includes('locality')) locality = component.long_name;
+                                    if (types.includes('postal_code')) postalCode = component.long_name;
+                                    if (types.includes('country')) countryCode = component.short_name;
+                                });
+
+                                setAddress1(`${streetNumber} ${route}`.trim() || data.description);
+                                if (locality) setCity(locality);
+                                if (postalCode) setZipCode(postalCode);
+                                if (countryCode) setCountry(countryCode);
+                            } else {
+                                setAddress1(data.description);
+                            }
+                        }}
+                        query={{
+                            key: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+                            language: 'en',
+                        }}
+                        fetchDetails={true}
+                        styles={{
+                            container: { flex: 0, width: '100%', marginBottom: 12 },
+                            textInputContainer: { width: '100%' },
+                            textInput: styles.input,
+                            listView: {
+                                position: 'absolute',
+                                top: 48,
+                                zIndex: 1000,
+                                elevation: 5,
+                                backgroundColor: 'white',
+                                borderRadius: 10,
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.1,
+                                shadowRadius: 4,
+                            },
+                        }}
+                        textInputProps={{
+                            value: address1,
+                            onChangeText: setAddress1,
+                            placeholderTextColor: Colors.text.placeholder
+                        }}
+                    />
+                </View>
                 <TextInput
                     style={styles.input}
                     placeholder="Address Line 2 (Optional)"
@@ -1102,37 +1276,182 @@ const Checkout = () => {
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Shipping Method</Text>
 
-                <TouchableOpacity
-                    style={[styles.radioOption, shippingMethod === 'standard' && styles.radioOptionSelected]}
-                    onPress={() => setShippingMethod('standard')}
-                >
-                    <View style={styles.radioRow}>
-                        <View style={styles.radioCircle}>
-                            {shippingMethod === 'standard' && <View style={styles.radioDot} />}
-                        </View>
-                        <View>
-                            <Text style={styles.radioTitle}>Standard Delivery</Text>
-                            <Text style={styles.radioSubtitle}>Est. 3-5 Business Days</Text>
-                        </View>
+                {/* Weight Summary */}
+                {totalWeightGrams > 0 && (
+                    <View style={styles.weightSummaryRow}>
+                        <Text style={styles.weightSummaryLabel}>📦 Estimated Package Weight</Text>
+                        <Text style={styles.weightSummaryValue}>{formatWeight(totalWeightGrams)}</Text>
                     </View>
-                    <Text style={styles.radioPrice}>Free</Text>
-                </TouchableOpacity>
+                )}
 
-                <TouchableOpacity
-                    style={[styles.radioOption, shippingMethod === 'express' && styles.radioOptionSelected]}
-                    onPress={() => setShippingMethod('express')}
-                >
-                    <View style={styles.radioRow}>
-                        <View style={styles.radioCircle}>
-                            {shippingMethod === 'express' && <View style={styles.radioDot} />}
-                        </View>
-                        <View>
-                            <Text style={styles.radioTitle}>Express Delivery</Text>
-                            <Text style={styles.radioSubtitle}>Est. 1-2 Business Days</Text>
-                        </View>
+                {/* Zone Info */}
+                {sellerShipping && country && (
+                    <View style={[styles.zoneInfoBox, 
+                        shippingZone === 'international' && { backgroundColor: '#FFF7ED', borderColor: '#FFEDD5' }
+                    ]}>
+                        <Text style={styles.zoneInfoText}>
+                            {shippingZone === 'domestic' 
+                                ? `🏠 Domestic shipping within ${country}`
+                                : shippingZone === 'eu' 
+                                    ? `🇪🇺 EU shipping — no customs duties`
+                                    : `🌍 International shipping — import duties or taxes may apply upon delivery`
+                            }
+                        </Text>
                     </View>
-                    <Text style={styles.radioPrice}>$15.00</Text>
-                </TouchableOpacity>
+                )}
+
+                {/* Dynamic Carrier Options (from seller config) */}
+                {sellerShipping && getEnabledCarriers(sellerShipping).length > 0 ? (
+                    <>
+                        {getEnabledCarriers(sellerShipping).map((carrier) => {
+                            const price = getCarrierPrice(carrier, cartWeightTier);
+                            const isSelected = selectedCarrier?.name === carrier.name;
+                            return (
+                                <TouchableOpacity
+                                    key={carrier.name}
+                                    style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
+                                    onPress={() => {
+                                        setSelectedCarrier(carrier);
+                                        setShippingMethod('carrier');
+                                    }}
+                                >
+                                    <View style={styles.radioRow}>
+                                        <View style={styles.radioCircle}>
+                                            {isSelected && <View style={styles.radioDot} />}
+                                        </View>
+                                        <View>
+                                            <Text style={styles.radioTitle}>{carrier.name}</Text>
+                                            <Text style={styles.radioSubtitle}>
+                                                {carrier.type === 'locker' ? 'Locker / Pickup Point' :
+                                                    carrier.type === 'pickup' ? 'Store Pickup' : 'Home Delivery'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.radioPrice}>
+                                        {price === 0 ? 'Free' : `€${price.toFixed(2)}`}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </>
+                ) : (
+                    /* Fallback: Standard/Express (legacy) */
+                    <>
+                        <TouchableOpacity
+                            style={[styles.radioOption, shippingMethod === 'standard' && styles.radioOptionSelected]}
+                            onPress={() => { setShippingMethod('standard'); setSelectedCarrier(null); }}
+                        >
+                            <View style={styles.radioRow}>
+                                <View style={styles.radioCircle}>
+                                    {shippingMethod === 'standard' && <View style={styles.radioDot} />}
+                                </View>
+                                <View>
+                                    <Text style={styles.radioTitle}>Standard Delivery</Text>
+                                    <Text style={styles.radioSubtitle}>Est. 3-5 Business Days</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.radioPrice}>Free</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.radioOption, shippingMethod === 'express' && styles.radioOptionSelected]}
+                            onPress={() => { setShippingMethod('express'); setSelectedCarrier(null); }}
+                        >
+                            <View style={styles.radioRow}>
+                                <View style={styles.radioCircle}>
+                                    {shippingMethod === 'express' && <View style={styles.radioDot} />}
+                                </View>
+                                <View>
+                                    <Text style={styles.radioTitle}>Express Delivery</Text>
+                                    <Text style={styles.radioSubtitle}>Est. 1-2 Business Days</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.radioPrice}>$15.00</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+
+                {/* Locker Selection (when carrier type = locker) */}
+                {selectedCarrier?.type === 'locker' && (
+                    <View style={styles.lockerSection}>
+                        <Text style={styles.lockerTitle}>📮 Select Pickup Point</Text>
+                        <Text style={styles.lockerSubtitle}>Search by city or zip code to find available lockers</Text>
+                        
+                        <View style={styles.lockerSearchRow}>
+                            <MagnifyingGlassIcon size={18} color="#9CA3AF" />
+                            <TextInput
+                                style={styles.lockerSearchInput}
+                                placeholder={`Search ${selectedCarrier.name} lockers...`}
+                                placeholderTextColor="#9CA3AF"
+                                value={lockerSearch}
+                                onChangeText={(text: string) => {
+                                    setLockerSearch(text);
+                                    if (text.length >= 2) {
+                                        const prefix = selectedCarrier.name.toUpperCase().slice(0, 3);
+                                        const searchCity = city || 'City';
+                                        const mockLockers = [
+                                            { id: `${prefix}001`, address: `${searchCity}, Main Street 15`, hint: 'Near the shopping centre entrance' },
+                                            { id: `${prefix}002`, address: `${searchCity}, Station Road 8`, hint: 'Next to the train station' },
+                                            { id: `${prefix}003`, address: `${searchCity}, Market Square 3`, hint: 'By the supermarket parking lot' },
+                                            { id: `${prefix}004`, address: `${searchCity}, Park Avenue 22`, hint: 'Opposite the park gate' },
+                                            { id: `${prefix}005`, address: `${searchCity}, University Lane 1`, hint: 'Inside the campus lobby' },
+                                        ].filter(l =>
+                                            l.address.toLowerCase().includes(text.toLowerCase()) ||
+                                            l.id.toLowerCase().includes(text.toLowerCase())
+                                        );
+                                        setLockerResults(mockLockers.length > 0 ? mockLockers : [
+                                            { id: `${prefix}001`, address: `${text}, Central Location`, hint: 'Main locker point' },
+                                        ]);
+                                    } else {
+                                        setLockerResults([]);
+                                    }
+                                }}
+                                autoCorrect={false}
+                            />
+                        </View>
+
+                        {/* Locker Results */}
+                        {lockerResults.map((locker) => (
+                            <TouchableOpacity
+                                key={locker.id}
+                                style={[
+                                    styles.lockerItem,
+                                    selectedLocker?.id === locker.id && styles.lockerItemSelected,
+                                ]}
+                                onPress={() => setSelectedLocker(locker)}
+                            >
+                                <View style={styles.lockerItemContent}>
+                                    <Text style={styles.lockerId}>{locker.id}</Text>
+                                    <Text style={styles.lockerAddress}>{locker.address}</Text>
+                                    <Text style={styles.lockerHint}>{locker.hint}</Text>
+                                </View>
+                                {selectedLocker?.id === locker.id && (
+                                    <View style={styles.lockerCheck}>
+                                        <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>✓</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        ))}
+
+                        {/* Selected Locker Confirmation */}
+                        {selectedLocker && (
+                            <View style={styles.lockerConfirm}>
+                                <Text style={styles.lockerConfirmText}>
+                                    ✅ Delivering to: {selectedLocker.id} — {selectedLocker.address}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {/* Seller doesn't ship to this zone */}
+                {sellerShipping && country && !sellerShipsToZone(sellerShipping, shippingZone) && (
+                    <View style={[styles.zoneInfoBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                        <Text style={[styles.zoneInfoText, { color: '#DC2626' }]}>
+                            ⚠️ This seller doesn't ship to {country}. Please contact them or choose a different address.
+                        </Text>
+                    </View>
+                )}
             </View>
 
             {/* Notes */}
@@ -1549,7 +1868,7 @@ const Checkout = () => {
                 {renderHeader()}
                 {renderProgressBar()}
 
-                <ScrollView contentContainerStyle={styles.content}>
+                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
                     {step === 1 && renderDeliveryStep()}
                     {step === 2 && renderPaymentStep()}
                     {step === 3 && renderReviewStep()}
@@ -2059,7 +2378,133 @@ const styles = StyleSheet.create({
     actionButtonText: {
         fontSize: 14,
         fontWeight: '600',
-    }
+    },
+
+    // Shipping Zone & Weight Styles
+    weightSummaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#F3F4F6',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 12,
+    },
+    weightSummaryLabel: {
+        fontSize: 13,
+        color: '#6B7280',
+        fontWeight: '500',
+    },
+    weightSummaryValue: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    zoneInfoBox: {
+        backgroundColor: '#F0FDF4',
+        borderWidth: 1,
+        borderColor: '#BBF7D0',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 12,
+    },
+    zoneInfoText: {
+        fontSize: 13,
+        color: '#166534',
+        lineHeight: 18,
+    },
+
+    // Locker Selection Styles
+    lockerSection: {
+        marginTop: 12,
+        backgroundColor: '#FAFAFA',
+        borderRadius: 12,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    lockerTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 2,
+    },
+    lockerSubtitle: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginBottom: 12,
+    },
+    lockerSearchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        marginBottom: 8,
+    },
+    lockerSearchInput: {
+        flex: 1,
+        marginLeft: 8,
+        fontSize: 15,
+        color: '#111827',
+    },
+    lockerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 6,
+    },
+    lockerItemSelected: {
+        borderColor: Colors.primary[500],
+        backgroundColor: Colors.primary[50],
+    },
+    lockerItemContent: {
+        flex: 1,
+    },
+    lockerId: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    lockerAddress: {
+        fontSize: 13,
+        color: '#4B5563',
+        marginTop: 2,
+    },
+    lockerHint: {
+        fontSize: 11,
+        color: '#9CA3AF',
+        fontStyle: 'italic',
+        marginTop: 2,
+    },
+    lockerCheck: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: Colors.primary[500],
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    lockerConfirm: {
+        marginTop: 8,
+        padding: 10,
+        backgroundColor: '#F0FDF4',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#BBF7D0',
+    },
+    lockerConfirmText: {
+        fontSize: 13,
+        color: '#166534',
+        fontWeight: '500',
+    },
 });
 
 export default Checkout;

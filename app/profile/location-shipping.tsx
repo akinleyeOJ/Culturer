@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import {
     ChevronLeftIcon,
     PlusIcon,
@@ -310,7 +311,7 @@ export default function LocationShippingScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView contentContainerStyle={styles.formContent}>
+                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
                     <View style={styles.formSection}>
                         <Text style={styles.sectionLabel}>Contact</Text>
                         <View style={styles.row}>
@@ -339,9 +340,64 @@ export default function LocationShippingScreen() {
                             <ChevronRightIcon size={20} color="#9CA3AF" />
                         </TouchableOpacity>
 
-                        <View style={styles.fullInput}>
+                        <View style={[styles.fullInput, { zIndex: 100 }]}>
                             <Text style={styles.label}>Address Line 1</Text>
-                            <TextInput style={styles.input} value={line1} onChangeText={setLine1} placeholder="Street address" />
+                            <GooglePlacesAutocomplete
+                                placeholder="Search or enter Address Line 1"
+                                onPress={(data, details = null) => {
+                                    if (details) {
+                                        // Extract address components
+                                        let streetNumber = '';
+                                        let route = '';
+                                        let locality = '';
+                                        let postalCode = '';
+                                        let countryCode = '';
+
+                                        details.address_components.forEach(component => {
+                                            const types = component.types;
+                                            if (types.includes('street_number')) streetNumber = component.long_name;
+                                            if (types.includes('route')) route = component.long_name;
+                                            if (types.includes('locality')) locality = component.long_name;
+                                            if (types.includes('postal_code')) postalCode = component.long_name;
+                                            if (types.includes('country')) countryCode = component.short_name;
+                                        });
+
+                                        setLine1(`${streetNumber} ${route}`.trim() || data.description);
+                                        if (locality) setCity(locality);
+                                        if (postalCode) setZipCode(postalCode);
+                                        if (countryCode) setCountry(countryCode);
+                                    } else {
+                                        setLine1(data.description);
+                                    }
+                                }}
+                                query={{
+                                    key: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+                                    language: 'en',
+                                }}
+                                fetchDetails={true}
+                                styles={{
+                                    container: { flex: 0, width: '100%', marginBottom: 12 },
+                                    textInputContainer: { width: '100%' },
+                                    textInput: styles.input,
+                                    listView: {
+                                        position: 'absolute',
+                                        top: 48,
+                                        zIndex: 1000,
+                                        elevation: 5,
+                                        backgroundColor: 'white',
+                                        borderRadius: 10,
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: 0.1,
+                                        shadowRadius: 4,
+                                    },
+                                }}
+                                textInputProps={{
+                                    value: line1,
+                                    onChangeText: setLine1,
+                                    placeholderTextColor: Colors.neutral[400]
+                                }}
+                            />
                         </View>
                         <View style={styles.fullInput}>
                             <Text style={styles.label}>Address Line 2 (Optional)</Text>
