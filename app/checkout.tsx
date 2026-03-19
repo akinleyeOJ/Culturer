@@ -46,7 +46,6 @@ import Animated, {
     FadeInDown,
 } from 'react-native-reanimated';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
-import { shippingUtils, WeightTier, CarrierConfig, SellerShippingConfig } from '../lib/shippingUtils';
 import {
     ChevronLeftIcon,
     DevicePhoneMobileIcon,
@@ -1208,7 +1207,7 @@ const Checkout = () => {
                         textInputProps={{
                             value: address1,
                             onChangeText: setAddress1,
-                            placeholderTextColor: Colors.text.placeholder
+                            placeholderTextColor: Colors.neutral[400]
                         }}
                     />
                 </View>
