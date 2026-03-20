@@ -466,7 +466,12 @@ const OrderDetailsScreen = () => {
                             {order.status === 'paid' && (
                                 <TouchableOpacity
                                     style={[styles.primaryActionButton]}
-                                    onPress={() => setShowShipModal(true)}
+                                    onPress={() => {
+                                        if (order.carrier_name) {
+                                            setShipCarrier(order.carrier_name);
+                                        }
+                                        setShowShipModal(true);
+                                    }}
                                 >
                                     <Text style={styles.primaryActionButtonText}>Mark as Shipped</Text>
                                 </TouchableOpacity>
@@ -551,24 +556,31 @@ const OrderDetailsScreen = () => {
                         <Text style={styles.bottomSheetSubtitle}>Select the carrier and enter the tracking number</Text>
 
                         {/* Carrier Selection */}
-                        <Text style={styles.shipFieldLabel}>Carrier</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carrierChipsScroll}>
-                            {CARRIER_OPTIONS.map((c) => (
-                                <TouchableOpacity
-                                    key={c}
-                                    style={[
-                                        styles.carrierChip,
-                                        shipCarrier === c && styles.carrierChipActive,
-                                    ]}
-                                    onPress={() => setShipCarrier(c)}
-                                >
-                                    <Text style={[
-                                        styles.carrierChipText,
-                                        shipCarrier === c && styles.carrierChipTextActive,
-                                    ]}>{c}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                        {/* Carrier Selection */}
+                        <Text style={styles.shipFieldLabel}>Carrier (Chosen by Buyer)</Text>
+                        {order.carrier_name ? (
+                            <View style={[styles.carrierChip, styles.carrierChipActive, { alignSelf: 'flex-start', marginVertical: 8 }]}>
+                                <Text style={[styles.carrierChipText, styles.carrierChipTextActive]}>{order.carrier_name}</Text>
+                            </View>
+                        ) : (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carrierChipsScroll}>
+                                {CARRIER_OPTIONS.map((c) => (
+                                    <TouchableOpacity
+                                        key={c}
+                                        style={[
+                                            styles.carrierChip,
+                                            shipCarrier === c && styles.carrierChipActive,
+                                        ]}
+                                        onPress={() => setShipCarrier(c)}
+                                    >
+                                        <Text style={[
+                                            styles.carrierChipText,
+                                            shipCarrier === c && styles.carrierChipTextActive,
+                                        ]}>{c}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        )}
 
                         {/* Tracking Number */}
                         <Text style={[styles.shipFieldLabel, { marginTop: 16 }]}>Tracking Number</Text>
