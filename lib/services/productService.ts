@@ -644,6 +644,7 @@ export const fetchProductById = async (productId: string, userId?: string) => {
     shipping_days_max: (product as any).shipping_days_max || 5,
     stock_quantity: typeof (product as any).stock_quantity === 'number' ? (product as any).stock_quantity : 10,
     cultural_story: (product as any).cultural_story || '',
+    weight_tier: (product as any).weight_tier || 'medium',
   };
 };
 
