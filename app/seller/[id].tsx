@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 import { fetchPublicSellerProfile, getFollowStatus, toggleFollowSeller } from '../../lib/services/profileService';
 import { fetchSellerInventory, FilterOptions, toggleFavorite } from '../../lib/services/productService';
+import { fetchSellerReviews, ReviewWithDetails } from '../../lib/services/reviewService';
 import { ProductCard } from '../../components/Card';
 import { useCart } from '../../contexts/CartContext';
 import { addToCart } from '../../lib/services/cartService';
@@ -27,7 +28,7 @@ import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
-type StoreTab = 'shop' | 'policies';
+type StoreTab = 'shop' | 'policies' | 'reviews';
 
 export default function PublicSellerProfileScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -48,6 +49,10 @@ export default function PublicSellerProfileScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filters, setFilters] = useState<FilterOptions>({});
     
+    // Reviews State
+    const [reviews, setReviews] = useState<ReviewWithDetails[]>([]);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
+    
     const { refreshCartCount } = useCart();
     const [showVerificationModal, setShowVerificationModal] = useState(false);
     
@@ -59,6 +64,7 @@ export default function PublicSellerProfileScreen() {
         if (!id) return;
         loadProfile();
         checkFollowStatus();
+        loadReviews();
     }, [id]);
 
     useEffect(() => {
@@ -94,6 +100,15 @@ export default function PublicSellerProfileScreen() {
         }
         
         setInventoryLoading(false);
+    };
+
+    const loadReviews = async () => {
+        if (!id) return;
+        setReviewsLoading(true);
+        const data = await fetchSellerReviews(id);
+        // User requested: "item review should not be visible on seller reviews tab"
+        setReviews(data.filter(r => r.type === 'shop'));
+        setReviewsLoading(false);
     };
 
     const handleFollowPress = async () => {
@@ -293,6 +308,12 @@ export default function PublicSellerProfileScreen() {
                     >
                         <Text style={[styles.tabText, activeTab === 'policies' && styles.activeTabText]}>Policies</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.tab, activeTab === 'reviews' && styles.activeTab]}
+                        onPress={() => setActiveTab('reviews')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'reviews' && styles.activeTabText]}>Reviews</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Content Area */}
@@ -370,7 +391,7 @@ export default function PublicSellerProfileScreen() {
                                 </View>
                             )}
                         </View>
-                    ) : (
+                    ) : activeTab === 'policies' ? (
                         <ScrollView style={styles.policiesContainer} showsVerticalScrollIndicator={false}>
                             {seller.shop_policies && Object.keys(seller.shop_policies).length > 0 ? (
                                 <View style={styles.policyCard}>
@@ -437,6 +458,50 @@ export default function PublicSellerProfileScreen() {
                                 </View>
                             )}
                         </ScrollView>
+                    ) : (
+                        <View style={styles.reviewsContainer}>
+                            {reviewsLoading ? (
+                                <ActivityIndicator size="large" color={Colors.primary[500]} style={{ marginTop: 40 }} />
+                            ) : reviews.length === 0 ? (
+                                <View style={styles.emptyContainer}>
+                                    <Text style={styles.emptyText}>No reviews yet for this shop.</Text>
+                                </View>
+                            ) : (
+                                reviews.map(item => (
+                                    <View key={item.id} style={styles.buyerReviewCard}>
+                                        <View style={styles.reviewHeader}>
+                                            <View style={styles.buyerInfo}>
+                                                <Text style={styles.buyerRowName}>{item.buyer_name}</Text>
+                                                <View style={styles.ratingRow}>
+                                                    {[1, 2, 3, 4, 5].map(star => (
+                                                        <StarIcon 
+                                                            key={star} 
+                                                            size={12} 
+                                                            color={star <= item.rating ? "#F59E0B" : Colors.neutral[300]} 
+                                                        />
+                                                    ))}
+                                                </View>
+                                            </View>
+                                            <Text style={styles.reviewDate}>
+                                                {new Date(item.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.reviewComment}>{item.comment}</Text>
+                                        {item.type === 'product' && (
+                                            <View style={styles.reviewedItemBadge}>
+                                                <Text style={styles.reviewedItemText}>Item: {item.product_name}</Text>
+                                            </View>
+                                        )}
+                                        {item.seller_reply && (
+                                            <View style={styles.sellerReply}>
+                                                <Text style={styles.replyLabel}>Seller Response</Text>
+                                                <Text style={styles.replyContent}>{item.seller_reply}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                ))
+                            )}
+                        </View>
                     )}
                 </View>
             </ScrollView>
@@ -836,9 +901,83 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     modalCloseButtonText: {
-        color: '#FFF',
         fontSize: 16,
-        fontWeight: '600',
+        color: '#FFF',
+        fontWeight: '700',
+    },
+    // Reviews Section Styles
+    reviewsContainer: {
+        padding: 20,
+    },
+    buyerReviewCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: Colors.neutral[200],
+    },
+    reviewHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    buyerInfo: {
+        flex: 1,
+    },
+    buyerRowName: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        marginBottom: 2,
+    },
+    ratingRow: {
+        flexDirection: 'row',
+        gap: 2,
+    },
+    reviewDate: {
+        fontSize: 12,
+        color: Colors.text.tertiary,
+    },
+    reviewComment: {
+        fontSize: 14,
+        color: Colors.text.secondary,
+        lineHeight: 20,
+        marginBottom: 10,
+    },
+    reviewedItemBadge: {
+        backgroundColor: Colors.neutral[50],
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        alignSelf: 'flex-start',
+        marginBottom: 8,
+    },
+    reviewedItemText: {
+        fontSize: 11,
+        color: Colors.text.tertiary,
+        fontWeight: '500',
+    },
+    sellerReply: {
+        backgroundColor: Colors.primary[50],
+        borderRadius: 8,
+        padding: 10,
+        marginTop: 4,
+        borderLeftWidth: 3,
+        borderLeftColor: Colors.primary[300],
+    },
+    replyLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: Colors.primary[700],
+        textTransform: 'uppercase',
+        marginBottom: 2,
+    },
+    replyContent: {
+        fontSize: 13,
+        color: Colors.text.secondary,
+        lineHeight: 18,
     },
     // FAQ Styles
     faqSection: {

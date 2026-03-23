@@ -36,6 +36,8 @@ export interface Database {
           verification_document_url: string | null
           role: 'user' | 'admin'
           verification_rejection_reason: string | null
+          seller_rating: number | null
+          seller_reviews_count: number | null
         }
         Insert: {
           id: string
@@ -61,6 +63,8 @@ export interface Database {
           is_verified?: boolean
           verification_status?: 'none' | 'pending' | 'verified' | 'rejected'
           verification_document_url?: string | null
+          seller_rating?: number | null
+          seller_reviews_count?: number | null
         }
         Update: {
           id?: string
@@ -86,6 +90,8 @@ export interface Database {
           is_verified?: boolean
           verification_status?: 'none' | 'pending' | 'verified' | 'rejected'
           verification_document_url?: string | null
+          seller_rating?: number | null
+          seller_reviews_count?: number | null
         }
         Relationships: [
           {

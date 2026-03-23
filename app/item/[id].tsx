@@ -28,7 +28,7 @@ import {
     toggleFavorite,
     trackProductView,
 } from '../../lib/services/productService';
-import { fetchProductReviews, ReviewWithDetails } from '../../lib/services/reviewService';
+import { fetchProductReviews, fetchSellerReviews, ReviewWithDetails } from '../../lib/services/reviewService';
 import { addToCart } from '../../lib/services/cartService';
 import { useCart } from '../../contexts/CartContext';
 import { CartToast } from '../../components/CartToast';
@@ -44,6 +44,7 @@ const ItemDetail = () => {
     const [sellerProducts, setSellerProducts] = useState<any[]>([]);
     const [similarProducts, setSimilarProducts] = useState<any[]>([]);
     const [reviews, setReviews] = useState<ReviewWithDetails[]>([]);
+    const [showAllReviews, setShowAllReviews] = useState(false);
     const [loading, setLoading] = useState(true);
     const [quantity, setQuantity] = useState(1);
 
@@ -83,7 +84,7 @@ const ItemDetail = () => {
                     8,
                     user?.id
                 ),
-                fetchProductReviews(id),
+                fetchProductReviews(id)
             ]);
 
             setSellerProducts(seller);
@@ -434,16 +435,16 @@ const ItemDetail = () => {
                     {reviews.length > 0 && (
                         <View style={styles.section}>
                             <View style={styles.reviewsHeaderRow}>
-                                <Text style={styles.sectionTitle}>Reviews</Text>
+                                <Text style={styles.sectionTitle}>Product Reviews</Text>
                                 <View style={styles.reviewsBadge}>
                                     <StarSolid size={14} color="#F59E0B" />
                                     <Text style={styles.reviewsBadgeText}>
-                                        {(reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)} ({reviews.length})
+                                        {(reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)} ({reviews.length} {reviews.length === 1 ? 'review' : 'reviews'})
                                     </Text>
                                 </View>
                             </View>
 
-                            {reviews.map(review => (
+                            {reviews.slice(0, showAllReviews ? reviews.length : 5).map(review => (
                                 <View key={review.id} style={styles.publicReviewCard}>
                                     <View style={styles.publicReviewHeader}>
                                         <View style={styles.buyerInfo}>
@@ -474,6 +475,15 @@ const ItemDetail = () => {
                                     )}
                                 </View>
                             ))}
+
+                            {reviews.length > 5 && !showAllReviews && (
+                                <TouchableOpacity 
+                                    style={styles.loadMoreBtn}
+                                    onPress={() => setShowAllReviews(true)}
+                                >
+                                    <Text style={styles.loadMoreText}>Load more reviews ({reviews.length - 5} more)</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     )}
 
@@ -481,7 +491,7 @@ const ItemDetail = () => {
                     {sellerProducts.length > 0 && (
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>Other items by this seller</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+                            <View style={styles.sellerProductsGrid}>
                                 {sellerProducts.map((item) => (
                                     <ProductCard
                                         key={item.id}
@@ -495,13 +505,20 @@ const ItemDetail = () => {
                                         isLiked={item.isFavorited}
                                         onLike={() => handleToggleRecommendationFavorite(item.id)}
                                         onPress={() => router.push(`/item/${item.id}`)}
-                                        style={{ width: 160, marginRight: 12 }}
+                                        style={styles.gridProductCard}
                                         hideFavoriteButton={user?.id === item.seller_id}
                                     />
                                 ))}
-                            </ScrollView>
+                            </View>
+                            <TouchableOpacity 
+                                style={styles.viewAllListingsBtn}
+                                onPress={() => router.push(`/seller/${product.seller_id}` as any)}
+                            >
+                                <Text style={styles.viewAllListingsText}>View all seller's listings</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
+
 
                     {/* Similar items */}
                     {similarProducts.length > 0 && (
@@ -923,6 +940,45 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: "700",
         color: "#FFFFFF",
+    },
+    loadMoreBtn: {
+        marginTop: 8,
+        alignItems: 'center',
+        paddingVertical: 12,
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.neutral[200],
+    },
+    loadMoreText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.text.primary,
+    },
+    sellerProductsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        // Removed gap for compatibility with older RN versions
+    },
+    gridProductCard: {
+        width: '48.5%', // Slightly more width but allowing for space-between
+        marginRight: 0, // Explicitly reset common card margins
+        marginBottom: 12,
+    },
+    viewAllListingsBtn: {
+        marginTop: 16,
+        alignItems: 'center',
+        paddingVertical: 12,
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.neutral[200],
+    },
+    viewAllListingsText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.text.primary,
     },
 });
 

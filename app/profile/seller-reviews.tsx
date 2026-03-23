@@ -16,10 +16,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeftIcon, StarIcon, PaperAirplaneIcon } from 'react-native-heroicons/solid';
-import { StarIcon as StarOutline } from 'react-native-heroicons/outline';
+import { StarIcon as StarOutline, ShoppingBagIcon } from 'react-native-heroicons/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/color';
-import { fetchSellerReviews, replyToReview, ReviewWithDetails } from '../../lib/services/reviewService';
+import { fetchSellerReviews, replyToReview, deleteReviewReply, ReviewWithDetails } from '../../lib/services/reviewService';
+import { PencilSquareIcon, TrashIcon } from 'react-native-heroicons/outline';
 
 const SellerReviewsScreen = () => {
     const router = useRouter();
@@ -92,6 +93,32 @@ const SellerReviewsScreen = () => {
         setIsSubmitting(false);
     };
 
+    const handleDeleteReply = async (reviewId: string) => {
+        Alert.alert(
+            'Delete Reply',
+            'Are you sure you want to delete your response? This cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setIsSubmitting(true);
+                        const { success } = await deleteReviewReply(reviewId);
+                        if (success) {
+                            setReviews(prev => prev.map(r =>
+                                r.id === reviewId ? { ...r, seller_reply: null, seller_replied_at: null } : r
+                            ));
+                        } else {
+                            Alert.alert('Error', 'Failed to delete reply.');
+                        }
+                        setIsSubmitting(false);
+                    }
+                }
+            ]
+        );
+    };
+
     const renderStars = (rating: number) => {
         return (
             <View style={{ flexDirection: 'row', gap: 2 }}>
@@ -111,13 +138,21 @@ const SellerReviewsScreen = () => {
             <View style={styles.reviewCard}>
                 {/* Header: Product Info & Stars */}
                 <View style={styles.cardHeader}>
-                    <Image
-                        source={{ uri: item.product_image || 'https://via.placeholder.com/40' }}
-                        style={styles.productBadge}
-                    />
+                    {item.type === 'shop' ? (
+                        <View style={[styles.productBadge, { backgroundColor: Colors.primary[50], justifyContent: 'center', alignItems: 'center' }]}>
+                            <ShoppingBagIcon size={20} color={Colors.primary[600]} />
+                        </View>
+                    ) : (
+                        <Image
+                            source={{ uri: item.product_image || 'https://via.placeholder.com/40' }}
+                            style={styles.productBadge}
+                        />
+                    )}
                     <View style={styles.cardHeaderInfo}>
                         <Text style={styles.buyerName}>{item.buyer_name}</Text>
-                        <Text style={styles.productName} numberOfLines={1}>For {item.product_name}</Text>
+                        <Text style={styles.productName} numberOfLines={1}>
+                            {item.type === 'shop' ? 'Shop Feedback' : `For ${item.product_name}`}
+                        </Text>
                     </View>
                     <View style={styles.ratingBox}>
                         {renderStars(item.rating)}
@@ -133,56 +168,73 @@ const SellerReviewsScreen = () => {
                 </Text>
 
                 {/* Seller Reply Section */}
-                {item.seller_reply ? (
+                {isReplying ? (
+                    <View style={styles.replyInputContainer}>
+                        <TextInput
+                            style={styles.replyInput}
+                            placeholder="Type your response..."
+                            value={replyText}
+                            onChangeText={setReplyText}
+                            multiline
+                            autoFocus
+                            maxLength={500}
+                        />
+                        <View style={styles.replyActionButtons}>
+                            <TouchableOpacity
+                                style={styles.cancelReplyBtn}
+                                onPress={() => setReplyingTo(null)}
+                                disabled={isSubmitting}
+                            >
+                                <Text style={styles.cancelReplyText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.sendReplyBtn, (!replyText.trim() || isSubmitting) && styles.sendReplyBtnDisabled]}
+                                onPress={() => handleReplySubmit(item.id)}
+                                disabled={!replyText.trim() || isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                ) : (
+                                    <Text style={styles.sendReplyText}>Post Reply</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ) : item.seller_reply ? (
                     <View style={styles.replyBox}>
-                        <Text style={styles.replyLabel}>Your Reply</Text>
+                        <View style={styles.replyHeaderRow}>
+                            <Text style={styles.replyLabel}>Your Reply</Text>
+                            <View style={styles.replyActions}>
+                                <TouchableOpacity 
+                                    onPress={() => {
+                                        setReplyingTo(item.id);
+                                        setReplyText(item.seller_reply || '');
+                                    }}
+                                    style={styles.replyIconBtn}
+                                >
+                                    <PencilSquareIcon size={16} color={Colors.text.tertiary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    onPress={() => handleDeleteReply(item.id)}
+                                    style={styles.replyIconBtn}
+                                >
+                                    <TrashIcon size={16} color="#EF4444" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
                         <Text style={styles.replyText}>{item.seller_reply}</Text>
                     </View>
                 ) : (
                     <View style={styles.actionRow}>
-                        {!isReplying ? (
-                            <TouchableOpacity
-                                style={styles.replyButton}
-                                onPress={() => {
-                                    setReplyingTo(item.id);
-                                    setReplyText('');
-                                }}
-                            >
-                                <Text style={styles.replyButtonText}>Reply to buyer</Text>
-                            </TouchableOpacity>
-                        ) : (
-                            <View style={styles.replyInputContainer}>
-                                <TextInput
-                                    style={styles.replyInput}
-                                    placeholder="Type your response..."
-                                    value={replyText}
-                                    onChangeText={setReplyText}
-                                    multiline
-                                    autoFocus
-                                    maxLength={500}
-                                />
-                                <View style={styles.replyActionButtons}>
-                                    <TouchableOpacity
-                                        style={styles.cancelReplyBtn}
-                                        onPress={() => setReplyingTo(null)}
-                                        disabled={isSubmitting}
-                                    >
-                                        <Text style={styles.cancelReplyText}>Cancel</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.sendReplyBtn, (!replyText.trim() || isSubmitting) && styles.sendReplyBtnDisabled]}
-                                        onPress={() => handleReplySubmit(item.id)}
-                                        disabled={!replyText.trim() || isSubmitting}
-                                    >
-                                        {isSubmitting ? (
-                                            <ActivityIndicator size="small" color="#FFF" />
-                                        ) : (
-                                            <Text style={styles.sendReplyText}>Post Reply</Text>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        )}
+                        <TouchableOpacity
+                            style={styles.replyButton}
+                            onPress={() => {
+                                setReplyingTo(item.id);
+                                setReplyText('');
+                            }}
+                        >
+                            <Text style={styles.replyButtonText}>Reply to buyer</Text>
+                        </TouchableOpacity>
                     </View>
                 )}
             </View>
@@ -443,6 +495,19 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderLeftWidth: 3,
         borderLeftColor: Colors.primary[500],
+    },
+    replyHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    replyActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    replyIconBtn: {
+        padding: 4,
     },
     replyLabel: {
         fontSize: 12,

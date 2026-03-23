@@ -52,8 +52,8 @@ const SellerHubScreen = () => {
         totalItems: 0,
         activeItems: 0,
         totalOrders: 0,
-        followers: 5, // Mocked for design
-        rating: 4.9 // Mocked for design
+        followers: 0, 
+        rating: 0.0 
     });
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -73,6 +73,11 @@ const SellerHubScreen = () => {
 
             if (profileData) {
                 setProfile(profileData);
+                // Use real rating from profile
+                setStats(prev => ({
+                    ...prev,
+                    rating: profileData.seller_rating || 0
+                }));
             }
 
             // 2. Count active items
@@ -122,13 +127,8 @@ const SellerHubScreen = () => {
     const StatsSection = () => (
         <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-                <Text style={styles.statValue}>{stats.totalItems}</Text>
-                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Total</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
                 <Text style={styles.statValue}>{stats.activeItems}</Text>
-                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Active</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Active listings</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
@@ -137,12 +137,7 @@ const SellerHubScreen = () => {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-                <Text style={styles.statValue}>{stats.followers}</Text>
-                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Followers</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-                <Text style={styles.statValue}>{stats.rating}</Text>
+                <Text style={styles.statValue}>{stats.rating.toFixed(1)}</Text>
                 <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Rating</Text>
             </View>
         </View>

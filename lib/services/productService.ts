@@ -608,7 +608,7 @@ export const fetchProductById = async (productId: string, userId?: string) => {
   if ((product as any).user_id) {
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, avatar_url, spoken_languages, shipping_regions, cultures, is_verified')
+      .select('full_name, avatar_url, spoken_languages, shipping_regions, cultures, is_verified, seller_rating, seller_reviews_count, location')
       .eq('id', (product as any).user_id)
       .single();
     sellerProfile = data;
@@ -630,9 +630,9 @@ export const fetchProductById = async (productId: string, userId?: string) => {
     seller_name: sellerProfile?.full_name || 'Unknown Seller',
     seller_id: (product as any).user_id,
     seller_avatar: sellerProfile?.avatar_url,
-    seller_rating: (product as any).seller_rating || 4.5,
-    seller_reviews_count: (product as any).seller_reviews_count || 0,
-    seller_location: (product as any).seller_location || 'Berlin',
+    seller_rating: sellerProfile?.seller_rating ?? (product as any).seller_rating ?? 4.5,
+    seller_reviews_count: sellerProfile?.seller_reviews_count ?? (product as any).seller_reviews_count ?? 0,
+    seller_location: sellerProfile?.location ?? (product as any).seller_location ?? 'Berlin',
     is_verified: !!sellerProfile?.is_verified,
     seller_spoken_languages: sellerProfile?.spoken_languages || [],
     seller_shipping_regions: sellerProfile?.shipping_regions || [],

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,7 @@ import {
     Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import {
     ChevronLeftIcon,
     ChatBubbleLeftRightIcon,
@@ -84,9 +84,11 @@ const OrderDetailsScreen = () => {
         'Poste Italiane', 'BRT', 'Colissimo', 'Correos', 'PostNL',
     ];
 
-    useEffect(() => {
-        fetchOrderDetails();
-    }, [id]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchOrderDetails();
+        }, [id])
+    );
 
     const fetchOrderDetails = async () => {
         try {

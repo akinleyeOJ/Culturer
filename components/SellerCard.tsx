@@ -48,7 +48,7 @@ export const SellerCard = ({
                     <View style={styles.ratingRow}>
                         <StarRating rating={sellerRating} size={12} color="#F59E0B" />
                         <Text style={styles.reviewCount}>
-                            {sellerRating.toFixed(1)} · {sellerReviewsCount} reviews
+                            {sellerRating.toFixed(1)} · {sellerReviewsCount} {sellerReviewsCount === 1 ? 'review' : 'reviews'}
                         </Text>
                     </View>
                     {sellerLocation && (
