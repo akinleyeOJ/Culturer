@@ -60,12 +60,18 @@ const QUICK_REPLIES = [
 ];
 
 export default function ConversationScreen() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    const { id, prefill } = useLocalSearchParams<{ id: string, prefill?: string }>();
     const { user } = useAuth();
     const { refreshUnreadCounts } = useInbox();
     const [messages, setMessages] = useState<Message[]>([]);
     const [conversationDetails, setConversationDetails] = useState<ConversationDetails | null>(null);
-    const [newMessage, setNewMessage] = useState('');
+    const [newMessage, setNewMessage] = useState(prefill || '');
+
+    useEffect(() => {
+        if (prefill && messages.length === 0) {
+            setNewMessage(prefill);
+        }
+    }, [prefill, messages.length]);
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);

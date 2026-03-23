@@ -21,12 +21,15 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { Colors } from '../../../constants/color';
 
 const ReviewProductScreen = () => {
-    const { id, orderId, productName, productImage, price } = useLocalSearchParams<{
-        id: string; // product_id
+    const { id, orderId, sellerId, type, productName, productImage, price, shopName } = useLocalSearchParams<{
+        id: string; // product_id or 'shop'
         orderId: string;
-        productName: string;
-        productImage: string;
-        price: string;
+        sellerId: string;
+        type: 'product' | 'shop';
+        productName?: string;
+        productImage?: string;
+        price?: string;
+        shopName?: string;
     }>();
 
     const router = useRouter();
@@ -51,7 +54,10 @@ const ReviewProductScreen = () => {
                 .from('reviews' as any)
                 .insert({
                     user_id: user.id,
-                    product_id: id,
+                    product_id: type === 'product' ? id : null,
+                    order_id: orderId,
+                    seller_id: sellerId,
+                    type: type,
                     rating: rating,
                     comment: comment,
                 });
@@ -92,21 +98,32 @@ const ReviewProductScreen = () => {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                {/* Product Summary */}
+                {/* Product/Shop Summary */}
                 <View style={styles.productCard}>
-                    <Image
-                        source={{ uri: productImage || 'https://via.placeholder.com/100' }}
-                        style={styles.productImage}
-                    />
-                    <View style={styles.productInfo}>
-                        <Text style={styles.productName}>{productName}</Text>
-                        <Text style={styles.productPrice}>${Number(price).toFixed(2)}</Text>
-                    </View>
+                    {type === 'product' ? (
+                        <>
+                            <Image
+                                source={{ uri: productImage || 'https://via.placeholder.com/100' }}
+                                style={styles.productImage}
+                            />
+                            <View style={styles.productInfo}>
+                                <Text style={styles.productName}>{productName}</Text>
+                                <Text style={styles.productPrice}>${Number(price).toFixed(2)}</Text>
+                            </View>
+                        </>
+                    ) : (
+                        <View style={styles.productInfo}>
+                            <Text style={styles.productName}>Rate your experience with {shopName}</Text>
+                            <Text style={styles.productPrice}>Order #{orderId?.slice(0, 8).toUpperCase()}</Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Rating Input */}
                 <View style={styles.section}>
-                    <Text style={styles.label}>Rate this product</Text>
+                    <Text style={styles.label}>
+                        {type === 'product' ? 'Rate this product' : 'Rate this seller'}
+                    </Text>
                     <View style={styles.starsContainer}>
                         {[1, 2, 3, 4, 5].map((star) => (
                             <TouchableOpacity

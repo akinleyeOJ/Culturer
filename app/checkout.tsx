@@ -427,12 +427,12 @@ const Checkout = () => {
             try {
                 const { data: profile, error } = await supabase
                     .from('profiles' as any)
-                    .select('shipping_settings')
+                    .select('shop_shipping')
                     .eq('id', sellerId)
                     .single();
 
-                if (!error && (profile as any)?.shipping_settings) {
-                    const config = (profile as any).shipping_settings as SellerShippingConfig;
+                if (!error && (profile as any)?.shop_shipping) {
+                    const config = (profile as any).shop_shipping as SellerShippingConfig;
                     setSellerShipping(config);
 
                     // Auto-select first enabled carrier
@@ -1385,22 +1385,18 @@ const Checkout = () => {
                                 value={lockerSearch}
                                 onChangeText={(text: string) => {
                                     setLockerSearch(text);
-                                    if (text.length >= 2) {
+                                    if (text.trim().length >= 2) {
                                         const prefix = selectedCarrier.name.toUpperCase().slice(0, 3);
-                                        const searchCity = city || 'City';
+                                        const searchCity = text.trim();
+                                        // Dynamically generate 5 lockers based on whatever they type
                                         const mockLockers = [
                                             { id: `${prefix}001`, address: `${searchCity}, Main Street 15`, hint: 'Near the shopping centre entrance' },
                                             { id: `${prefix}002`, address: `${searchCity}, Station Road 8`, hint: 'Next to the train station' },
                                             { id: `${prefix}003`, address: `${searchCity}, Market Square 3`, hint: 'By the supermarket parking lot' },
                                             { id: `${prefix}004`, address: `${searchCity}, Park Avenue 22`, hint: 'Opposite the park gate' },
                                             { id: `${prefix}005`, address: `${searchCity}, University Lane 1`, hint: 'Inside the campus lobby' },
-                                        ].filter(l =>
-                                            l.address.toLowerCase().includes(text.toLowerCase()) ||
-                                            l.id.toLowerCase().includes(text.toLowerCase())
-                                        );
-                                        setLockerResults(mockLockers.length > 0 ? mockLockers : [
-                                            { id: `${prefix}001`, address: `${text}, Central Location`, hint: 'Main locker point' },
-                                        ]);
+                                        ];
+                                        setLockerResults(mockLockers);
                                     } else {
                                         setLockerResults([]);
                                     }

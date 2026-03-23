@@ -21,6 +21,7 @@ import {
     XCircleIcon,
     StarIcon,
     TruckIcon,
+    CheckCircleIcon,
 } from 'react-native-heroicons/outline';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -57,6 +58,7 @@ interface Order {
     carrier_name: string | null;
     tracking_number: string | null;
     shipping_method_details: any | null;
+    seller_name?: string;
     shipping_zone: string | null;
     created_at: string;
     updated_at?: string;
@@ -73,6 +75,7 @@ const OrderDetailsScreen = () => {
     const [shipCarrier, setShipCarrier] = useState('');
     const [shipTrackingNumber, setShipTrackingNumber] = useState('');
     const [shipProcessing, setShipProcessing] = useState(false);
+    const [existingReviews, setExistingReviews] = useState<any[]>([]);
 
     // Common carriers for the dropdown
     const CARRIER_OPTIONS = [
@@ -98,7 +101,30 @@ const OrderDetailsScreen = () => {
                 .single();
 
             if (error) throw error;
-            setOrder(data as unknown as Order);
+            
+            const fetchedOrder = data as any;
+
+            // Fetch seller profile to get the name
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', fetchedOrder.seller_id)
+                .single();
+
+            setOrder({
+                ...fetchedOrder,
+                seller_name: profileData?.full_name || 'Seller'
+            } as unknown as Order);
+
+            // Fetch any reviews for this order
+            const { data: reviewsData } = await supabase
+                .from('reviews' as any)
+                .select('*')
+                .eq('order_id', id);
+            
+            if (reviewsData) {
+                setExistingReviews(reviewsData);
+            }
         } catch (error) {
             console.error('Error fetching order details:', error);
             Alert.alert('Error', 'Failed to load order details');
@@ -229,6 +255,11 @@ const OrderDetailsScreen = () => {
         }
 
         try {
+            // New conversation template logic
+            const initialMessage = isSeller
+                ? `Hi, I'm contacting you regarding Order #${order.id.slice(0, 8)}`
+                : `Hi, I have a question about my order #${order.id.slice(0, 8)}`;
+
             // Check for any conversation between these two users regarding this product
             // Since conversation roles are fixed (buyer_id is always the one who bought, seller_id is always the one who sold),
             // we can just query directly.
@@ -244,14 +275,15 @@ const OrderDetailsScreen = () => {
             if (error) throw error;
 
             if (conversations && conversations.length > 0) {
-                router.push(`/conversation/${(conversations[0] as any).id}` as any);
+                const convId = (conversations[0] as any).id;
+                router.push({
+                    pathname: `/conversation/${convId}`,
+                    params: { prefill: initialMessage }
+                } as any);
                 return;
             }
 
             // Create new conversation if none exists
-            const initialMessage = isSeller
-                ? `Hi, I'm contacting you regarding Order #${order.id.slice(0, 8)}`
-                : `Hi, I have a question about my order #${order.id.slice(0, 8)}`;
 
             const { data: newConv, error: createError } = await supabase
                 .from('conversations' as any)
@@ -259,7 +291,7 @@ const OrderDetailsScreen = () => {
                     product_id: firstItem.product_id,
                     buyer_id: order.user_id,
                     seller_id: order.seller_id,
-                    last_message: initialMessage,
+                    // last_message: initialMessage, // Remove auto-send in inbox
                 })
                 .select()
                 .single();
@@ -267,15 +299,11 @@ const OrderDetailsScreen = () => {
             if (createError) throw createError;
 
             if (newConv) {
-                // Also insert the message into the messages table so it appears in the chat
-                await supabase.from('messages' as any).insert({
-                    conversation_id: (newConv as any).id,
-                    sender_id: user.id,
-                    content: initialMessage,
-                    is_read: false
-                });
-
-                router.push(`/conversation/${(newConv as any).id}` as any);
+                // Open the new conversation and pre-fill the message
+                router.push({
+                    pathname: `/conversation/${(newConv as any).id}`,
+                    params: { prefill: initialMessage }
+                } as any);
             }
         } catch (err) {
             console.error('Error opening chat:', err);
@@ -371,25 +399,38 @@ const OrderDetailsScreen = () => {
                                 </View>
                                 <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
                             </TouchableOpacity>
-                            {/* Review Button - Only if delivered and I'm the buyer */}
-                            {(order.status === 'delivered') && user?.id === order.user_id && (
-                                <TouchableOpacity
-                                    style={styles.reviewButton}
-                                    onPress={() => router.push({
-                                        pathname: `/profile/review/${item.product_id}`,
-                                        params: {
-                                            orderId: order.id,
-                                            productName: item.product_name,
-                                            productImage: item.product_image,
-                                            price: item.price.toString()
-                                        }
-                                    } as any)}
-                                >
-                                    <StarIcon size={16} color={Colors.primary[500]} />
-                                    <Text style={styles.reviewButtonText}>Write a Review</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
+
+                             {/* Review Button - Only if delivered and I'm the buyer */}
+                             {(order.status === 'delivered') && user?.id === order.user_id && (
+                                 (() => {
+                                     const hasReviewedItem = existingReviews.some(r => r.product_id === item.product_id && r.type === 'product');
+                                     return hasReviewedItem ? (
+                                         <View style={styles.reviewedBadge}>
+                                             <CheckCircleIcon size={16} color={Colors.success[500]} />
+                                             <Text style={styles.reviewedBadgeText}>Reviewed Item</Text>
+                                         </View>
+                                     ) : (
+                                         <TouchableOpacity
+                                             style={styles.reviewButton}
+                                             onPress={() => router.push({
+                                                 pathname: `/profile/review/${item.product_id}`,
+                                                 params: {
+                                                     orderId: order.id,
+                                                     sellerId: order.seller_id,
+                                                     type: 'product',
+                                                     productName: item.product_name,
+                                                     productImage: item.product_image,
+                                                     price: item.price.toString()
+                                                 }
+                                             } as any)}
+                                         >
+                                             <StarIcon size={16} color={Colors.primary[500]} />
+                                             <Text style={styles.reviewButtonText}>Write an Item Review</Text>
+                                         </TouchableOpacity>
+                                     );
+                                 })()
+                             )}
+                         </View>
                     ))}
                 </View>
 
@@ -449,7 +490,9 @@ const OrderDetailsScreen = () => {
                                         onPress={() => Linking.openURL(url)}
                                     >
                                         <TruckIcon size={18} color="#FFF" />
-                                        <Text style={styles.trackButtonText}>Track My Package</Text>
+                                        <Text style={styles.trackButtonText}>
+                                            {user?.id === order.seller_id ? 'Track Shipment' : 'Track My Package'}
+                                        </Text>
                                     </TouchableOpacity>
                                 ) : null;
                             })()}
@@ -463,7 +506,7 @@ const OrderDetailsScreen = () => {
                         // Seller Actions
                         <>
                             <Text style={styles.actionTitle}>Seller Controls</Text>
-                            {order.status === 'paid' && (
+                            {currentStatusIndex === 1 && (
                                 <TouchableOpacity
                                     style={[styles.primaryActionButton]}
                                     onPress={() => {
@@ -509,13 +552,50 @@ const OrderDetailsScreen = () => {
                                 </View>
                             )}
 
-                            <TouchableOpacity
-                                style={styles.actionButton}
-                                onPress={handleContactUser}
-                            >
-                                <ChatBubbleLeftRightIcon size={20} color={Colors.text.primary} />
-                                <Text style={styles.actionButtonText}>Contact Seller</Text>
-                            </TouchableOpacity>
+                            {order.status === 'shipped' && (
+                                <TouchableOpacity
+                                    style={styles.primaryActionButton}
+                                    onPress={() => handleUpdateStatus('delivered')}
+                                >
+                                    <Text style={styles.primaryActionButtonText}>Mark as Received</Text>
+                                </TouchableOpacity>
+                            )}
+
+                             {order.status === 'delivered' && user?.id === order.user_id && (
+                                 (() => {
+                                     const hasReviewedShop = existingReviews.some(r => r.type === 'shop');
+                                     return hasReviewedShop ? (
+                                         <View style={[styles.actionButton, { backgroundColor: '#F3F4F6' }]}>
+                                             <CheckCircleIcon size={20} color={Colors.success[500]} />
+                                             <Text style={[styles.actionButtonText, { color: Colors.success[600] }]}>Shop Review Submitted</Text>
+                                         </View>
+                                     ) : (
+                                         <TouchableOpacity
+                                             style={[styles.actionButton, { backgroundColor: Colors.primary[50] }]}
+                                             onPress={() => router.push({
+                                                 pathname: `/profile/review/shop`,
+                                                 params: {
+                                                     orderId: order.id,
+                                                     sellerId: order.seller_id,
+                                                     type: 'shop',
+                                                     shopName: order.seller_name || 'this shop'
+                                                 }
+                                             } as any)}
+                                         >
+                                             <StarIcon size={20} color={Colors.primary[600]} />
+                                             <Text style={[styles.actionButtonText, { color: Colors.primary[700] }]}>Rate Shop Experience</Text>
+                                         </TouchableOpacity>
+                                     );
+                                 })()
+                             )}
+
+                             <TouchableOpacity
+                                 style={styles.actionButton}
+                                 onPress={handleContactUser}
+                             >
+                                 <ChatBubbleLeftRightIcon size={20} color={Colors.text.primary} />
+                                 <Text style={styles.actionButtonText}>Contact Seller</Text>
+                             </TouchableOpacity>
 
                             <TouchableOpacity
                                 style={styles.actionButton}
@@ -1023,6 +1103,24 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#9CA3AF',
+    },
+    reviewedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F0FDF4',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: '#DCFCE7',
+    },
+    reviewedBadgeText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.success[700],
+        marginLeft: 6,
     },
 });
 
