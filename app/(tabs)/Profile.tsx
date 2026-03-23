@@ -39,9 +39,6 @@ import { supabase } from "../../lib/supabase";
 import { FontAwesome } from "@expo/vector-icons";
 
 interface UserStats {
-  listings: number;
-  orders: number;
-  rating: number;
   followers: number;
   following: number;
 }
@@ -70,26 +67,13 @@ const Profile = () => {
         setProfile(profileData);
       }
 
-      // 2. Fetch Orders count
-      const { count: ordersCount } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-
-      // 3. Fetch Listings count (only active)
-      const { count: listingsCount } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('seller_id', user.id)
-        .eq('status', 'active');
-
-      // 4. Fetch Followers count
+      // 1. Fetch Followers count
       const { count: followersCount } = await supabase
         .from('user_follows')
         .select('*', { count: 'exact', head: true })
         .eq('following_id', user.id);
 
-      // 5. Fetch Following count
+      // 2. Fetch Following count
       const { count: followingCount } = await supabase
         .from('user_follows')
         .select('*', { count: 'exact', head: true })
@@ -102,9 +86,6 @@ const Profile = () => {
       }
 
       setStats({
-        orders: ordersCount || 0,
-        listings: listingsCount || 0,
-        rating: 4.9,
         followers: followersCount || 0,
         following: followingCount || 0,
       });
@@ -261,23 +242,6 @@ const Profile = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Stats */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats ? stats.listings : '--'}</Text>
-              <Text style={styles.statLabel}>Active listings</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats ? stats.orders : '--'}</Text>
-              <Text style={styles.statLabel}>Orders</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats ? stats.rating.toFixed(1) : '--'}</Text>
-              <Text style={styles.statLabel}>Rating</Text>
-            </View>
-          </View>
         </View>
 
         {/* Account Section */}
@@ -423,7 +387,7 @@ const styles = StyleSheet.create({
   profileCard: {
     backgroundColor: '#FFF',
     padding: 20,
-    marginBottom: 24,
+    marginBottom: 4, // Reduced from 24 to keep it tight
   },
   profileInfo: {
     flexDirection: 'row',
@@ -472,7 +436,7 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 24,
+    marginBottom: 8, // Reduced from 24 since stats are gone
   },
   actionBtn: {
     flex: 1,
@@ -489,33 +453,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#374151',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF9F5',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#FED7AA',
-    marginHorizontal: 8,
   },
   section: {
     backgroundColor: '#FFF',

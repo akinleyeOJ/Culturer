@@ -180,6 +180,26 @@ const OrdersScreen = () => {
         );
     };
 
+    const PurchaseSummary = () => {
+        if (activeTab !== 'buying' || orders.length === 0) return null;
+
+        const totalSpent = orders.reduce((sum, order) => sum + order.total_amount, 0);
+
+        return (
+            <View style={styles.summaryContainer}>
+                <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNumber}>{orders.length}</Text>
+                    <Text style={styles.summaryLabel}>Total Purchases</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNumber}>${totalSpent.toFixed(2)}</Text>
+                    <Text style={styles.summaryLabel}>Total Spent</Text>
+                </View>
+            </View>
+        );
+    };
+
     const renderEmptyState = () => {
         const isSelling = activeTab === 'selling';
 
@@ -270,6 +290,7 @@ const OrdersScreen = () => {
                     data={orders}
                     renderItem={renderOrderItem}
                     keyExtractor={(item) => item.id}
+                    ListHeaderComponent={PurchaseSummary}
                     contentContainerStyle={styles.listContent}
                     keyboardDismissMode="on-drag"
                     initialNumToRender={10}
@@ -477,6 +498,35 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
         color: '#FFF',
+    },
+    summaryContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#F0F9FF', // Light blue for buying context
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#BAE6FD',
+    },
+    summaryItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    summaryNumber: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#0369A1',
+        marginBottom: 2,
+    },
+    summaryLabel: {
+        fontSize: 12,
+        color: '#075985',
+        fontWeight: '500',
+    },
+    summaryDivider: {
+        width: 1,
+        backgroundColor: '#BAE6FD',
+        marginHorizontal: 8,
     },
 });
 

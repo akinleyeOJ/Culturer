@@ -93,11 +93,12 @@ const SellerHubScreen = () => {
                 .select('*', { count: 'exact', head: true })
                 .eq('seller_id', user.id);
 
-            // 4. Fetch real order count
+            // 4. Fetch real order count (Active orders only - excluding delivered and cancelled)
             const { count: orderCount } = await supabase
                 .from('orders')
                 .select('*', { count: 'exact', head: true })
-                .eq('seller_id', user.id);
+                .eq('seller_id', user.id)
+                .not('status', 'in', '("delivered", "cancelled")');
 
             setStats(prev => ({
                 ...prev,
@@ -133,7 +134,7 @@ const SellerHubScreen = () => {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
                 <Text style={styles.statValue}>{stats.totalOrders}</Text>
-                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Orders</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>{stats.totalOrders === 1 ? 'Order' : 'Orders'}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
