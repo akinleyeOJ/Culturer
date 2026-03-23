@@ -121,7 +121,7 @@ export default function NotificationSettingsScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Activity</Text>
                     <SettingItem

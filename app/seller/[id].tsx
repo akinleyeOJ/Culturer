@@ -181,7 +181,7 @@ export default function PublicSellerProfileScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+            <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardDismissMode="on-drag">
                 {/* Header / Banner Area */}
                 <View style={styles.bannerContainer}>
                     {seller.cover_url ? (

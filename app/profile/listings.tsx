@@ -310,6 +310,7 @@ const ListingsScreen = () => {
                 renderSectionHeader={renderSectionHeader}
                 contentContainerStyle={styles.listContent}
                 stickySectionHeadersEnabled={false}
+                keyboardDismissMode="on-drag"
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }

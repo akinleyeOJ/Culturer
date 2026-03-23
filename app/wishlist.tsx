@@ -595,6 +595,7 @@ const Wishlist = () => {
 
       <FlatList
         data={filteredItems}
+        keyboardDismissMode="on-drag"
         renderItem={({ item }) => (
           <WishlistItem
             item={item}

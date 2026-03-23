@@ -82,7 +82,7 @@ const SettingsScreen = () => {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
 
                 {/* Account Card */}
                 <View style={styles.accountCard}>

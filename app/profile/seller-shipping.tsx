@@ -337,7 +337,7 @@ export default function SellerShippingScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
                 <View style={styles.infoBox}>
                     <InformationCircleIcon size={20} color={Colors.primary[600]} />
                     <Text style={styles.infoText}>

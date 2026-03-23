@@ -485,6 +485,7 @@ const AuthScreen = () => {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
         >
           {/* App Logo */}
           <View style={styles.logoContainer}>

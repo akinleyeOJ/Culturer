@@ -226,7 +226,7 @@ const VerificationScreen = () => {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
                 {/* Status Hero */}
                 <View style={[styles.statusHero, { backgroundColor: status.bgColor }]}>
                     <View style={[styles.iconContainer, { backgroundColor: '#FFF' }]}>

@@ -348,7 +348,7 @@ const OrderDetailsScreen = () => {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
                 {/* Status Tracker */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Order Status</Text>
@@ -399,38 +399,36 @@ const OrderDetailsScreen = () => {
                                 </View>
                                 <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
                             </TouchableOpacity>
-
-                             {/* Review Button - Only if delivered and I'm the buyer */}
-                             {(order.status === 'delivered') && user?.id === order.user_id && (
-                                 (() => {
-                                     const hasReviewedItem = existingReviews.some(r => r.product_id === item.product_id && r.type === 'product');
-                                     return hasReviewedItem ? (
-                                         <View style={styles.reviewedBadge}>
-                                             <CheckCircleIcon size={16} color={Colors.success[500]} />
-                                             <Text style={styles.reviewedBadgeText}>Reviewed Item</Text>
-                                         </View>
-                                     ) : (
-                                         <TouchableOpacity
-                                             style={styles.reviewButton}
-                                             onPress={() => router.push({
-                                                 pathname: `/profile/review/${item.product_id}`,
-                                                 params: {
-                                                     orderId: order.id,
-                                                     sellerId: order.seller_id,
-                                                     type: 'product',
-                                                     productName: item.product_name,
-                                                     productImage: item.product_image,
-                                                     price: item.price.toString()
-                                                 }
-                                             } as any)}
-                                         >
-                                             <StarIcon size={16} color={Colors.primary[500]} />
-                                             <Text style={styles.reviewButtonText}>Write an Item Review</Text>
-                                         </TouchableOpacity>
-                                     );
-                                 })()
-                             )}
-                         </View>
+                            {(order.status === 'delivered') && user?.id === order.user_id && (
+                                (() => {
+                                    const hasReviewedItem = existingReviews.some(r => r.product_id === item.product_id && r.type === 'product');
+                                    return hasReviewedItem ? (
+                                        <View style={styles.reviewedBadge}>
+                                            <CheckCircleIcon size={16} color={Colors.success[500]} />
+                                            <Text style={styles.reviewedBadgeText}>Reviewed Item</Text>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={styles.reviewButton}
+                                            onPress={() => router.push({
+                                                pathname: `/profile/review/${item.product_id}`,
+                                                params: {
+                                                    orderId: order.id,
+                                                    sellerId: order.seller_id,
+                                                    type: 'product',
+                                                    productName: item.product_name,
+                                                    productImage: item.product_image,
+                                                    price: item.price.toString()
+                                                }
+                                            } as any)}
+                                        >
+                                            <StarIcon size={16} color={Colors.primary[500]} />
+                                            <Text style={styles.reviewButtonText}>Write an Item Review</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })()
+                            )}
+                        </View>
                     ))}
                 </View>
 
@@ -561,33 +559,33 @@ const OrderDetailsScreen = () => {
                                 </TouchableOpacity>
                             )}
 
-                             {order.status === 'delivered' && user?.id === order.user_id && (
-                                 (() => {
-                                     const hasReviewedShop = existingReviews.some(r => r.type === 'shop');
-                                     return hasReviewedShop ? (
-                                         <View style={[styles.actionButton, { backgroundColor: '#F3F4F6' }]}>
-                                             <CheckCircleIcon size={20} color={Colors.success[500]} />
-                                             <Text style={[styles.actionButtonText, { color: Colors.success[600] }]}>Shop Review Submitted</Text>
-                                         </View>
-                                     ) : (
-                                         <TouchableOpacity
-                                             style={[styles.actionButton, { backgroundColor: Colors.primary[50] }]}
-                                             onPress={() => router.push({
-                                                 pathname: `/profile/review/shop`,
-                                                 params: {
-                                                     orderId: order.id,
-                                                     sellerId: order.seller_id,
-                                                     type: 'shop',
-                                                     shopName: order.seller_name || 'this shop'
-                                                 }
-                                             } as any)}
-                                         >
-                                             <StarIcon size={20} color={Colors.primary[600]} />
-                                             <Text style={[styles.actionButtonText, { color: Colors.primary[700] }]}>Rate Shop Experience</Text>
-                                         </TouchableOpacity>
-                                     );
-                                 })()
-                             )}
+                            {order.status === 'delivered' && user?.id === order.user_id && (
+                                (() => {
+                                    const hasReviewedShop = existingReviews.some(r => r.type === 'shop');
+                                    return hasReviewedShop ? (
+                                        <View style={[styles.actionButton, { backgroundColor: '#F3F4F6' }]}>
+                                            <CheckCircleIcon size={20} color={Colors.success[500]} />
+                                            <Text style={[styles.actionButtonText, { color: Colors.success[600] }]}>Shop Review Submitted</Text>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, { backgroundColor: Colors.primary[50] }]}
+                                            onPress={() => router.push({
+                                                pathname: `/profile/review/shop`,
+                                                params: {
+                                                    orderId: order.id,
+                                                    sellerId: order.seller_id,
+                                                    type: 'shop',
+                                                    shopName: order.seller_name || 'this shop'
+                                                }
+                                            } as any)}
+                                        >
+                                            <StarIcon size={20} color={Colors.primary[600]} />
+                                            <Text style={[styles.actionButtonText, { color: Colors.primary[700] }]}>Rate Shop Experience</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })()
+                            )}
 
                              <TouchableOpacity
                                  style={styles.actionButton}

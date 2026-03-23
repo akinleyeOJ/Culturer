@@ -121,7 +121,7 @@ const CancelOrderScreen = () => {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
                 <Text style={styles.title}>Why are you cancelling?</Text>
                 <Text style={styles.subtitle}>Please select a reason for cancellation to help us improve.</Text>
 

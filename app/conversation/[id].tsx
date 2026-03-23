@@ -363,6 +363,7 @@ export default function ConversationScreen() {
                 keyExtractor={(item) => item.id}
                 inverted={true}
                 contentContainerStyle={styles.messagesList}
+                keyboardDismissMode="on-drag"
             />
 
             {messages.length === 0 && (

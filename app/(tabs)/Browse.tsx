@@ -556,6 +556,7 @@ const Browse = () => {
 
       <Animated.FlatList
         data={isLoading && products.length === 0 ? Array.from({ length: 6 }).map((_, i) => ({ id: `skeleton-${i}`, skeleton: true } as any)) : products}
+        keyboardDismissMode="on-drag"
         renderItem={({ item }) => {
           if (item.skeleton) {
             return <ProductCardSkeleton style={{ width: COLUMN_WIDTH, marginBottom: 16 }} />;

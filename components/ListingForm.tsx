@@ -248,6 +248,7 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 24 }}
+                keyboardDismissMode="on-drag"
             >
                 {/* Image Collection */}
                 <View style={styles.imageSection}>

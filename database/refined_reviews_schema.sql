@@ -4,6 +4,10 @@ ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES pub
 ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS seller_id UUID REFERENCES public.profiles(id);
 ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS type TEXT CHECK (type IN ('product', 'shop')) DEFAULT 'product';
 
+-- Add rating columns to profiles to support aggregate storage
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS seller_rating DECIMAL(3,2) DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS seller_reviews_count INTEGER DEFAULT 0;
+
 -- 2. Constraints to prevent duplicate reviews
 -- One review per product per order
 DROP INDEX IF EXISTS idx_reviews_product_unique;

@@ -186,7 +186,7 @@ const Cart = () => {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
                 {/* Delivery/Pickup Toggle (Future feature) */}
                 {/* <View style={styles.deliveryToggle}>
                     <TouchableOpacity style={styles.deliveryButton}>

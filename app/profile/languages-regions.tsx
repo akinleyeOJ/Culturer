@@ -136,7 +136,7 @@ export default function LanguagesRegionsScreen() {
                     <ActivityIndicator size="large" color={Colors.primary[500]} />
                 </View>
             ) : (
-                <ScrollView contentContainerStyle={styles.content}>
+                <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
                     <Text style={styles.description}>
                         Help buyers know how to communicate with you and where you ship your items.
                     </Text>

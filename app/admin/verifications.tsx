@@ -163,7 +163,7 @@ const AdminVerificationsScreen = () => {
                             </TouchableOpacity>
                         </View>
                         
-                        <ScrollView contentContainerStyle={styles.reviewScroll}>
+                        <ScrollView contentContainerStyle={styles.reviewScroll} keyboardDismissMode="on-drag">
                             <View style={styles.reviewUserInfo}>
                                 <Text style={styles.reviewLabel}>User</Text>
                                 <Text style={styles.reviewValue}>{selectedRequest.full_name} (@{selectedRequest.username})</Text>

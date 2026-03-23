@@ -271,6 +271,7 @@ const OrdersScreen = () => {
                     renderItem={renderOrderItem}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.listContent}
+                    keyboardDismissMode="on-drag"
                     initialNumToRender={10}
                     ListEmptyComponent={renderEmptyState}
                     refreshControl={

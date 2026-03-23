@@ -277,6 +277,7 @@ const EditListingScreen = () => {
                     <ScrollView
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 24 }}
+                        keyboardDismissMode="on-drag"
                     >
                         {/* Same Form Sections as sell.tsx */}
                         <View style={styles.imageSection}>

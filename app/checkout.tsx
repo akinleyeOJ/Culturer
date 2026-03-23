@@ -1863,7 +1863,11 @@ const Checkout = () => {
                 {renderHeader()}
                 {renderProgressBar()}
 
-                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+                <ScrollView 
+                    keyboardShouldPersistTaps="handled" 
+                    contentContainerStyle={styles.content}
+                    keyboardDismissMode="on-drag"
+                >
                     {step === 1 && renderDeliveryStep()}
                     {step === 2 && renderPaymentStep()}
                     {step === 3 && renderReviewStep()}

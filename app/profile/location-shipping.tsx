@@ -311,7 +311,7 @@ export default function LocationShippingScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
+                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent} keyboardDismissMode="on-drag">
                     <View style={styles.formSection}>
                         <Text style={styles.sectionLabel}>Contact</Text>
                         <View style={styles.row}>
@@ -546,7 +546,7 @@ export default function LocationShippingScreen() {
                     <ActivityIndicator size="large" color={Colors.primary[500]} />
                 </View>
             ) : (
-                <ScrollView contentContainerStyle={styles.content}>
+                <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
                     {/* SAVED ADDRESSES SECTION */}
                     <View style={styles.sectionContainer}>
                         <Text style={styles.sectionTitle}>SAVED ADDRESSES</Text>

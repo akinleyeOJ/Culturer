@@ -400,7 +400,7 @@ const EditProfileScreen = () => {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView contentContainerStyle={styles.content}>
+                <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
                     {/* Cover Section */}
                     <View style={styles.coverSection}>
                         {coverUrl ? (

@@ -493,7 +493,7 @@ const PromotionsScreen = () => {
                     <View style={{ width: 40 }} />
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
                     {/* Marketing Insights Card */}
                     <View style={styles.insightsCard}>
                         <View style={styles.insightsHeader}>

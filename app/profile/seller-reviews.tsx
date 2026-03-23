@@ -222,6 +222,7 @@ const SellerReviewsScreen = () => {
                         keyExtractor={item => item.id}
                         renderItem={renderReviewItem}
                         contentContainerStyle={styles.listContent}
+                        keyboardDismissMode="on-drag"
                         ListHeaderComponent={
                             <>
                                 <View style={styles.summaryContainer}>

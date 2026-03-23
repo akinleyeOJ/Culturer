@@ -64,7 +64,7 @@ const FilterScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
                 {/* Sort By */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Sort By</Text>

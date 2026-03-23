@@ -193,6 +193,7 @@ const Profile = () => {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary[500]} />}
         contentContainerStyle={styles.scrollContent}
+        keyboardDismissMode="on-drag"
       >
         {/* Profile Card */}
         <View style={styles.profileCard}>

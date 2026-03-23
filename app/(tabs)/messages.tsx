@@ -588,6 +588,7 @@ export default function MessagesScreen() {
             ) : (
                 <SectionList
                     sections={getGroupedData()}
+                    keyboardDismissMode="on-drag"
                     renderSectionHeader={({ section: { title } }) => (
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionHeaderText}>{title}</Text>

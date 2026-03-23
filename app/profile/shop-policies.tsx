@@ -202,7 +202,7 @@ export default function ShopPoliciesScreen() {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
                 {/* RETURN & EXCHANGE SECTION */}
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>RETURNS & EXCHANGES</Text>
@@ -454,6 +454,7 @@ export default function ShopPoliciesScreen() {
                             style={styles.modalBody}
                             showsVerticalScrollIndicator={false}
                             keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="on-drag"
                         >
                             <View style={styles.inputGroup}>
                                 <Text style={styles.modalLabel}>QUESTION</Text>

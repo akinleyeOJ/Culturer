@@ -325,6 +325,7 @@ const Home = () => {
 
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

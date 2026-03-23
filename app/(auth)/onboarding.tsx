@@ -101,6 +101,7 @@ const Onboarding = () => {
           <ScrollView
             style={styles.interestsScrollView}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
           >
             <View style={styles.interestsContainer}>
               {culturalInterests.map((interest) => (
