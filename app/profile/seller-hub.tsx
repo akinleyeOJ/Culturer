@@ -168,7 +168,7 @@ const SellerHubScreen = () => {
         try {
             if (!user) return;
             const displayName = profile?.full_name || user?.user_metadata?.full_name || 'Seller';
-            const shareUrl = `culturar://seller/${user.id}`;
+            const shareUrl = `https://culturar.netlify.app/seller/${user.id}`;
             await Share.share({
                 message: `Check out ${displayName}'s shop on Culturar!\n\n${shareUrl}`,
                 url: shareUrl,

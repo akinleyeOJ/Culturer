@@ -534,6 +534,13 @@ const OrderDetailsScreen = () => {
                                 <ChatBubbleLeftRightIcon size={20} color={Colors.text.primary} />
                                 <Text style={styles.actionButtonText}>Contact Buyer</Text>
                             </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.actionButton}
+                                onPress={() => router.push(`/profile/order-issue/${order.id}` as any)}
+                            >
+                                <QuestionMarkCircleIcon size={20} color={Colors.text.primary} />
+                                <Text style={styles.actionButtonText}>Need Help from Culturar?</Text>
+                            </TouchableOpacity>
                         </>
                     ) : (
                         // Buyer Actions

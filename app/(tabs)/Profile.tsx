@@ -114,7 +114,7 @@ const Profile = () => {
       if (!user) return;
       
       const displayName = profile?.full_name || profile?.display_name || user.email?.split('@')[0] || 'User';
-      const shareUrl = `culturar://seller/${user.id}`;
+      const shareUrl = `https://culturar.netlify.app/seller/${user.id}`;
       
       await Share.share({
         message: `Check out ${displayName}'s profile on Culturar!\n\n${shareUrl}`,
@@ -351,6 +351,12 @@ const Profile = () => {
               label="Verification Review"
               subtitle="Review pending identity documents"
               onPress={() => router.push('/admin/verifications' as any)}
+            />
+            <MenuItem
+              icon={BellIcon}
+              label="Reports Management"
+              subtitle="Review user-reported issues"
+              onPress={() => router.push('/admin/reports' as any)}
               showBorder={false}
             />
           </View>

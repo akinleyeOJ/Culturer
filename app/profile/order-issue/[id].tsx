@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -18,13 +18,22 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Colors } from '../../../constants/color';
 
-const ISSUE_TYPES = [
+const BUYER_ISSUE_TYPES = [
     'Missing item',
     'Item not as described',
     'Damaged item',
     'Did not receive order',
     'Payment issue',
     'Return/Refund request',
+    'Other'
+];
+
+const SELLER_ISSUE_TYPES = [
+    'Buyer requested cancellation',
+    'Incorrect shipping address',
+    'Payment not confirmed',
+    'Buyer is unresponsive',
+    'Issue with postage label',
     'Other'
 ];
 
@@ -37,6 +46,30 @@ const OrderIssueScreen = () => {
     const [details, setDetails] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    const [orderData, setOrderData] = useState<any>(null);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchOrder = async () => {
+            if (!id || !user) return;
+            try {
+                const { data, error } = await supabase
+                    .from('orders' as any)
+                    .select('user_id, seller_id')
+                    .eq('id', id)
+                    .single();
+                
+                if (data) {
+                    setOrderData(data);
+                }
+            } catch (error) {
+                console.error('Error fetching order for report:', error);
+            } finally {
+                setIsInitialLoading(false);
+            }
+        };
+        fetchOrder();
+    }, [id, user]);
 
     const handleSubmit = async () => {
         if (!selectedIssue) {
@@ -51,14 +84,22 @@ const OrderIssueScreen = () => {
 
         setLoading(true);
         try {
-            // Create a support ticket / message in the database
-            // For now, we'll log it or send a notification to system
-            const { error } = await supabase.from('notifications' as any).insert({
-                user_id: 'system', // or a dedicated support ID
-                type: 'system',
-                title: `Order Issue: #${id?.slice(0, 8).toUpperCase()}`,
-                body: `User ${user?.email} reported: ${selectedIssue}. Details: ${details}`,
-                data: { orderId: id, issueType: selectedIssue, userEmail: user?.email }
+            if (!orderData) {
+                Alert.alert('Error', 'Order information not found. Please try again.');
+                return;
+            }
+
+            const reportedUserId = user?.id === orderData.user_id 
+                ? orderData.seller_id 
+                : orderData.user_id;
+
+            const { error } = await supabase.from('reports' as any).insert({
+                reporter_id: user?.id,
+                reported_user_id: reportedUserId,
+                content_id: id, // Order UUID
+                reason: selectedIssue,
+                details: details,
+                status: 'pending'
             });
 
             if (error) throw error;
@@ -95,6 +136,17 @@ const OrderIssueScreen = () => {
         );
     }
 
+    if (isInitialLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerContainer}>
+                    <ActivityIndicator size="large" color={Colors.primary[500]} />
+                    <Text style={styles.loadingText}>Loading order details...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
@@ -116,7 +168,7 @@ const OrderIssueScreen = () => {
                     <View style={styles.issueSection}>
                         <Text style={styles.inputLabel}>Issue Type</Text>
                         <View style={styles.issueTypeContainer}>
-                            {ISSUE_TYPES.map((type) => (
+                            {(user?.id === orderData?.user_id ? BUYER_ISSUE_TYPES : SELLER_ISSUE_TYPES).map((type) => (
                                 <TouchableOpacity
                                     key={type}
                                     style={[
@@ -328,6 +380,17 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
         color: '#FFF',
+    },
+    centerContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 15,
+        color: '#6B7280',
     },
 });
 

@@ -238,7 +238,7 @@ export default function PublicSellerProfileScreen() {
     const handleShareShop = async () => {
         try {
             const displayName = seller?.full_name || 'Seller';
-            const shareUrl = `culturar://seller/${id}`;
+            const shareUrl = `https://culturar.netlify.app/seller/${id}`;
             await Share.share({
                 message: `Check out ${displayName}'s shop on Culturar!\n\n${shareUrl}`,
                 url: shareUrl,
