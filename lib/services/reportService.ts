@@ -26,8 +26,8 @@ export const fetchAllReports = async () => {
         .from('reports' as any)
         .select(`
             *,
-            reporter:profiles!reporter_id(full_name, username, avatar_url),
-            reported_user:profiles!reported_user_id(full_name, username, avatar_url)
+            reporter:reporter_id(full_name, username, avatar_url),
+            reported_user:reported_user_id(full_name, username, avatar_url)
         `)
         .order('created_at', { ascending: false });
 
