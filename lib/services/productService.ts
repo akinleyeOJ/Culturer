@@ -393,12 +393,38 @@ export const trackProductSale = async (productId: string, sellerId: string) => {
 
 
 export const fetchWishlistCount = async (userId: string): Promise<number> => {
-  const { count, error } = await supabase
+  const { data: wishlistData, error } = await supabase
     .from('wishlist')
-    .select('*', { count: 'exact', head: true })
+    .select('product_id')
     .eq('user_id', userId);
-  if (error) return 0;
-  return count || 0;
+
+  if (error || !wishlistData || wishlistData.length === 0) return 0;
+
+  // Fetch paused sellers
+  const { data: pausedSellers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('is_shop_live', false);
+  const pausedIds = new Set(pausedSellers?.map(s => s.id) || []);
+
+  const productIds = wishlistData.map((w: any) => w.product_id);
+  const { data: products } = await supabase
+    .from('products')
+    .select('id, seller_id, user_id')
+    .in('id', productIds)
+    .eq('status', 'active');
+
+  if (!products) return 0;
+
+  let validCount = 0;
+  for (const p of products) {
+    const ownerId = p.seller_id || p.user_id;
+    if (!pausedIds.has(ownerId)) {
+      validCount++;
+    }
+  }
+
+  return validCount;
 };
 
 export type DateRange = '7days' | '30days' | 'year' | 'all';
@@ -598,6 +624,13 @@ export const fetchWishlist = async (userId: string) => {
 
   if (wishlistError || !wishlistData || wishlistData.length === 0) return [];
 
+  // Fetch paused sellers
+  const { data: pausedSellers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('is_shop_live', false);
+  const pausedIds = new Set(pausedSellers?.map(s => s.id) || []);
+
   const productIds = (wishlistData as any[]).map((w: any) => w.product_id);
   const [productsResponse, favoriteIds] = await Promise.all([
     supabase.from('products').select('*').in('id', productIds).eq('status', 'active'),
@@ -610,6 +643,11 @@ export const fetchWishlist = async (userId: string) => {
   return (wishlistData as any[]).map((wl: any) => {
     const product = (products as any[]).find((p: any) => p.id === wl.product_id);
     if (!product) return null;
+    
+    // Hide products if the seller's shop is paused
+    const ownerId = product.seller_id || product.user_id;
+    if (pausedIds.has(ownerId)) return null;
+
     return transformProduct(product, favoriteIds);
   }).filter((p): p is NonNullable<typeof p> => p !== null);
 };

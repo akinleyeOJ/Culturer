@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
     RefreshControl,
     Alert,
+    Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -32,7 +33,8 @@ import {
     MapPinIcon,
     TagIcon,
     UserCircleIcon,
-    CheckBadgeIcon
+    CheckBadgeIcon,
+    ShareIcon,
 } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
@@ -159,6 +161,21 @@ const SellerHubScreen = () => {
             // Toggling ON (Resuming)
             setIsShopLive(true);
             await updateShopStatus(user!.id, true);
+        }
+    };
+    
+    const handleShareShop = async () => {
+        try {
+            if (!user) return;
+            const displayName = profile?.full_name || user?.user_metadata?.full_name || 'Seller';
+            const shareUrl = `culturar://seller/${user.id}`;
+            await Share.share({
+                message: `Check out ${displayName}'s shop on Culturar!\n\n${shareUrl}`,
+                url: shareUrl,
+                title: `${displayName}'s Culturar Shop`
+            });
+        } catch (error) {
+            console.log('Error sharing shop:', error);
         }
     };
 
@@ -396,8 +413,16 @@ const SellerHubScreen = () => {
                     onPress={() => user?.id && router.push(`/seller/${user.id}` as any)}
                 >
                     <EyeIcon size={20} color={Colors.text.primary} />
-                    <Text style={[styles.btnText, { color: Colors.text.primary }]}>View public shop</Text>
+                    <Text style={[styles.btnText, { color: Colors.text.primary }]}>View</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={styles.shareBtn}
+                    onPress={handleShareShop}
+                >
+                    <ShareIcon size={20} color={Colors.text.primary} />
+                </TouchableOpacity>
+
                 <TouchableOpacity
                     style={styles.addListingBtn}
                     onPress={() => router.push('/profile/create-listing')}
@@ -668,7 +693,7 @@ const styles = StyleSheet.create({
         borderTopColor: '#F3F4F6',
     },
     viewShopBtn: {
-        flex: 1.2,
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -677,8 +702,17 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
         borderColor: '#E5E7EB',
-        gap: 4,
-        paddingHorizontal: 4,
+        gap: 6,
+    },
+    shareBtn: {
+        width: 52,
+        height: 52,
+        borderRadius: 12,
+        backgroundColor: '#FFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
     },
     addListingBtn: {
         flex: 1.3,

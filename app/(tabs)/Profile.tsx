@@ -111,11 +111,18 @@ const Profile = () => {
 
   const handleShareProfile = async () => {
     try {
+      if (!user) return;
+      
+      const displayName = profile?.full_name || profile?.display_name || user.email?.split('@')[0] || 'User';
+      const shareUrl = `culturar://seller/${user.id}`;
+      
       await Share.share({
-        message: `Check out my profile on Culturar!`,
+        message: `Check out ${displayName}'s profile on Culturar!\n\n${shareUrl}`,
+        url: shareUrl,
+        title: `${displayName}'s Culturar Profile`
       });
     } catch (error) {
-      console.log(error);
+      console.log('Error sharing profile:', error);
     }
   };
 

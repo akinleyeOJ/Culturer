@@ -10,11 +10,12 @@ import {
     TextInput,
     Dimensions,
     Modal,
+    Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/color';
-import { ChevronLeftIcon, MagnifyingGlassIcon, QuestionMarkCircleIcon, ShoppingBagIcon } from 'react-native-heroicons/outline';
+import { ChevronLeftIcon, MagnifyingGlassIcon, QuestionMarkCircleIcon, ShoppingBagIcon, ShareIcon } from 'react-native-heroicons/outline';
 import { MapPinIcon, GlobeAltIcon, LanguageIcon, StarIcon, CheckBadgeIcon } from 'react-native-heroicons/solid';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence } from 'react-native-reanimated';
 import { useAuth } from '../../contexts/AuthContext';
@@ -234,6 +235,20 @@ export default function PublicSellerProfileScreen() {
         }
     };
 
+    const handleShareShop = async () => {
+        try {
+            const displayName = seller?.full_name || 'Seller';
+            const shareUrl = `culturar://seller/${id}`;
+            await Share.share({
+                message: `Check out ${displayName}'s shop on Culturar!\n\n${shareUrl}`,
+                url: shareUrl,
+                title: `${displayName}'s Culturar Shop`
+            });
+        } catch (error) {
+            console.log('Error sharing shop:', error);
+        }
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -272,6 +287,9 @@ export default function PublicSellerProfileScreen() {
                     <View style={styles.navbarOverlay}>
                         <TouchableOpacity onPress={() => router.back()} style={styles.backButtonOverlay}>
                             <ChevronLeftIcon size={20} color="#000" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={handleShareShop} style={styles.shareButtonOverlay}>
+                            <ShareIcon size={20} color="#000" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -570,7 +588,7 @@ export default function PublicSellerProfileScreen() {
                                                         ))}
                                                     </View>
                                                     {item.order_id && (
-                                                        <View style={styles.verifiedBadge}>
+                                                        <View style={styles.verifiedPurchaseBadge}>
                                                             <CheckBadgeIcon size={12} color="#10B981" />
                                                             <Text style={styles.verifiedText}>Verified</Text>
                                                         </View>
@@ -678,8 +696,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
     },
     backButtonOverlay: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    shareButtonOverlay: {
         width: 36,
         height: 36,
         borderRadius: 18,
@@ -1081,7 +1109,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 2,
     },
-    verifiedBadge: {
+    verifiedPurchaseBadge: {
         flexDirection: 'row',
         alignItems: 'center',
         marginLeft: 8,
