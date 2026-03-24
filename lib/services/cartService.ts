@@ -115,6 +115,16 @@ export const addToCart = async (
 export const fetchCart = async (userId: string): Promise<CartItem[]> => {
     try {
         console.log(`Fetching cart for user ${userId}`);
+        
+        // 1. Fetch paused sellers
+        const { data: pausedSellers } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('is_shop_live', false);
+            
+        const pausedIds = new Set(pausedSellers?.map(s => s.id) || []);
+
+        // 2. Fetch cart items
         const { data, error } = await supabase
             .from('cart')
             .select(`
@@ -129,7 +139,8 @@ export const fetchCart = async (userId: string): Promise<CartItem[]> => {
                     user_id,
                     shipping,
                     out_of_stock,
-                    stock_quantity
+                    stock_quantity,
+                    seller_id
                 )
             `)
             .eq('user_id', userId)
@@ -140,18 +151,24 @@ export const fetchCart = async (userId: string): Promise<CartItem[]> => {
             return [];
         }
 
-        // Filter out items where product might be null (if product was deleted)
-        const validItems = (data || []).filter((item: any) => item.product != null);
+        // Filter out items where product is null or seller is paused
+        const validItems = (data || []).filter((item: any) => {
+            if (!item.product) return false;
+            const sellerId = item.product.seller_id || item.product.user_id;
+            return !pausedIds.has(sellerId);
+        });
+
         console.log(`Fetched ${validItems.length} valid cart items`);
 
         return validItems.map((item: any) => {
             const p = item.product;
+            const sellerId = p.seller_id || p.user_id;
             return {
                 ...item,
                 product: {
                     ...p,
-                    seller_id: p.user_id,
-                    seller_name: 'Seller ' + (p.user_id ? p.user_id.substr(0, 8) : 'Unknown')
+                    seller_id: sellerId,
+                    seller_name: 'Seller ' + (sellerId ? sellerId.substr(0, 8) : 'Unknown')
                 }
             } as CartItem;
         });

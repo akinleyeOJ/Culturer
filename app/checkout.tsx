@@ -217,15 +217,23 @@ const Checkout = () => {
                         return;
                     }
 
-                    // Fetch seller profile separately
+                    // Fetch seller profile separately to get full_name and is_shop_live
                     let sellerName = 'Seller';
                     if (p.user_id) {
                         const { data: profile } = await supabase
                             .from('profiles')
-                            .select('full_name')
+                            .select('full_name, is_shop_live')
                             .eq('id', p.user_id)
                             .single();
-                        if (profile?.full_name) sellerName = profile.full_name;
+                            
+                        if (profile) {
+                            if (profile.is_shop_live === false) {
+                                Alert.alert('Shop on Break', 'The seller is currently away. This item cannot be purchased right now.');
+                                router.back();
+                                return;
+                            }
+                            if (profile.full_name) sellerName = profile.full_name;
+                        }
                     }
 
                     const quantity = paramQuantity ? parseInt(paramQuantity as string) : 1;
