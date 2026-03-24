@@ -9,6 +9,7 @@ import {
     Switch,
     ActivityIndicator,
     RefreshControl,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -36,6 +37,7 @@ import {
 import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { updateShopStatus } from '../../lib/services/profileService';
 
 interface SellerStats {
     totalItems: number;
@@ -43,6 +45,7 @@ interface SellerStats {
     totalOrders: number;
     followers: number;
     rating: number;
+    totalReviews: number;
 }
 
 const SellerHubScreen = () => {
@@ -53,7 +56,8 @@ const SellerHubScreen = () => {
         activeItems: 0,
         totalOrders: 0,
         followers: 0, 
-        rating: 0.0 
+        rating: 0.0,
+        totalReviews: 0
     });
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -73,6 +77,7 @@ const SellerHubScreen = () => {
 
             if (profileData) {
                 setProfile(profileData);
+                setIsShopLive(profileData.is_shop_live ?? true);
                 // Use real rating from profile
                 setStats(prev => ({
                     ...prev,
@@ -100,11 +105,18 @@ const SellerHubScreen = () => {
                 .eq('seller_id', user.id)
                 .not('status', 'in', '("delivered", "cancelled")');
 
+            // 5. Fetch total reviews count
+            const { count: reviewsCount } = await supabase
+                .from('reviews')
+                .select('*', { count: 'exact', head: true })
+                .eq('seller_id', user.id);
+
             setStats(prev => ({
                 ...prev,
                 activeItems: activeCount || 0,
                 totalItems: totalCount || 0,
                 totalOrders: orderCount || 0,
+                totalReviews: reviewsCount || 0,
             }));
         } catch (error) {
             console.error('Error fetching seller stats:', error);
@@ -125,6 +137,31 @@ const SellerHubScreen = () => {
         fetchSellerStats();
     };
 
+    const handlePauseToggle = async (newValue: boolean) => {
+        if (!newValue) {
+            // Toggling OFF (Pausing)
+            Alert.alert(
+                "Pause your shop?",
+                "This will temporarily hide all your active listings from the marketplace. Your account and data will remain safe. You can resume anytime.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { 
+                        text: "Pause Shop", 
+                        style: "destructive",
+                        onPress: async () => {
+                            setIsShopLive(false);
+                            await updateShopStatus(user!.id, false);
+                        }
+                    }
+                ]
+            );
+        } else {
+            // Toggling ON (Resuming)
+            setIsShopLive(true);
+            await updateShopStatus(user!.id, true);
+        }
+    };
+
     const StatsSection = () => (
         <View style={styles.statsContainer}>
             <View style={styles.statItem}>
@@ -138,8 +175,10 @@ const SellerHubScreen = () => {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-                <Text style={styles.statValue}>{stats.rating.toFixed(1)}</Text>
-                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>Rating</Text>
+                <Text style={styles.statValue}>{stats.totalReviews > 0 ? stats.rating.toFixed(1) : '—'}</Text>
+                <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>
+                    {stats.totalReviews > 0 ? 'Rating' : 'New Seller'}
+                </Text>
             </View>
         </View>
     );
@@ -245,7 +284,7 @@ const SellerHubScreen = () => {
                             </View>
                             <Switch
                                 value={isShopLive}
-                                onValueChange={setIsShopLive}
+                                onValueChange={handlePauseToggle}
                                 trackColor={{ false: '#E5E7EB', true: Colors.primary[200] }}
                                 thumbColor={isShopLive ? Colors.primary[500] : '#9CA3AF'}
                                 ios_backgroundColor="#E5E7EB"

@@ -38,6 +38,7 @@ export interface Database {
           verification_rejection_reason: string | null
           seller_rating: number | null
           seller_reviews_count: number | null
+          is_shop_live: boolean
         }
         Insert: {
           id: string
@@ -65,6 +66,7 @@ export interface Database {
           verification_document_url?: string | null
           seller_rating?: number | null
           seller_reviews_count?: number | null
+          is_shop_live?: boolean
         }
         Update: {
           id?: string
@@ -92,6 +94,7 @@ export interface Database {
           verification_document_url?: string | null
           seller_rating?: number | null
           seller_reviews_count?: number | null
+          is_shop_live?: boolean
         }
         Relationships: [
           {

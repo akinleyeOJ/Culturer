@@ -14,8 +14,9 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/color';
-import { ChevronLeftIcon, MagnifyingGlassIcon, CheckBadgeIcon, QuestionMarkCircleIcon } from 'react-native-heroicons/outline';
-import { MapPinIcon, GlobeAltIcon, LanguageIcon, StarIcon } from 'react-native-heroicons/solid';
+import { ChevronLeftIcon, MagnifyingGlassIcon, QuestionMarkCircleIcon, ShoppingBagIcon } from 'react-native-heroicons/outline';
+import { MapPinIcon, GlobeAltIcon, LanguageIcon, StarIcon, CheckBadgeIcon } from 'react-native-heroicons/solid';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence } from 'react-native-reanimated';
 import { useAuth } from '../../contexts/AuthContext';
 
 import { fetchPublicSellerProfile, getFollowStatus, toggleFollowSeller } from '../../lib/services/profileService';
@@ -59,6 +60,68 @@ export default function PublicSellerProfileScreen() {
     // Categories derived from the fetched inventory
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+    const Skeleton = ({ width, height, borderRadius = 4, style }: any) => {
+        const opacity = useSharedValue(0.3);
+
+        useEffect(() => {
+            opacity.value = withRepeat(
+                withSequence(
+                    withTiming(0.7, { duration: 1000 }),
+                    withTiming(0.3, { duration: 1000 })
+                ),
+                -1,
+                true
+            );
+        }, []);
+
+        const animatedStyle = useAnimatedStyle(() => ({
+            opacity: opacity.value,
+        }));
+
+        return (
+            <Animated.View
+                style={[
+                    {
+                        width,
+                        height,
+                        borderRadius,
+                        backgroundColor: '#E5E7EB',
+                    },
+                    animatedStyle,
+                    style,
+                ]}
+            />
+        );
+    };
+
+    const ReviewSkeleton = () => (
+        <View style={styles.buyerReviewCard}>
+            <View style={styles.reviewHeader}>
+                <View style={styles.buyerInfo}>
+                    <Skeleton width={80} height={16} style={{ marginBottom: 4 }} />
+                    <View style={{ flexDirection: 'row' }}>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                            <StarIcon key={i} size={12} color="#E5E7EB" style={{ marginRight: 2 }} />
+                        ))}
+                    </View>
+                </View>
+                <Skeleton width={60} height={12} />
+            </View>
+            <Skeleton width="100%" height={14} style={{ marginTop: 12 }} />
+            <Skeleton width="80%" height={14} style={{ marginTop: 6 }} />
+        </View>
+    );
+
+    const ProductSkeleton = () => (
+        <View style={styles.gridItem}>
+            <View style={{ backgroundColor: '#FFF', borderRadius: 12, padding: 8, borderWidth: 1, borderColor: '#F3F4FB' }}>
+                <Skeleton width="100%" height={150} borderRadius={8} />
+                <Skeleton width="90%" height={16} style={{ marginTop: 10 }} />
+                <Skeleton width="60%" height={20} style={{ marginTop: 8 }} />
+            </View>
+        </View>
+    );
 
     useEffect(() => {
         if (!id) return;
@@ -320,7 +383,20 @@ export default function PublicSellerProfileScreen() {
                 <View style={styles.tabContent}>
                     {activeTab === 'shop' ? (
                         <View style={styles.shopContainer}>
-                            {/* Search & Filters */}
+                            {seller && !seller.is_shop_live ? (
+                                <View style={styles.pausedContainer}>
+                                    <View style={styles.pausedIconCircle}>
+                                        <ShoppingBagIcon size={40} color={Colors.text.tertiary} />
+                                    </View>
+                                    <View style={styles.pausedBadge}>
+                                        <Text style={styles.pausedBadgeText}>On a Break</Text>
+                                    </View>
+                                    <Text style={styles.pausedTitle}>{seller.full_name} has paused their shop</Text>
+                                    <Text style={styles.pausedSub}>Items are temporarily hidden but will be back soon!{'\n'}Feel free to check out the reviews or policies.</Text>
+                                </View>
+                            ) : (
+                                <>
+                                    {/* Search & Filters */}
                             <View style={styles.filterSection}>
                                 <View style={styles.searchBar}>
                                     <MagnifyingGlassIcon size={20} color={Colors.text.tertiary} />
@@ -359,7 +435,12 @@ export default function PublicSellerProfileScreen() {
 
                             {/* Inventory Grid */}
                             {inventoryLoading ? (
-                                <ActivityIndicator size="large" color={Colors.primary[500]} style={{ marginTop: 40 }} />
+                                <View style={styles.grid}>
+                                    <ProductSkeleton />
+                                    <ProductSkeleton />
+                                    <ProductSkeleton />
+                                    <ProductSkeleton />
+                                </View>
                             ) : inventory.length === 0 ? (
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>No items found in this shop.</Text>
@@ -389,6 +470,8 @@ export default function PublicSellerProfileScreen() {
                                         </View>
                                     ))}
                                 </View>
+                            )}
+                                </>
                             )}
                         </View>
                     ) : activeTab === 'policies' ? (
@@ -461,7 +544,11 @@ export default function PublicSellerProfileScreen() {
                     ) : (
                         <View style={styles.reviewsContainer}>
                             {reviewsLoading ? (
-                                <ActivityIndicator size="large" color={Colors.primary[500]} style={{ marginTop: 40 }} />
+                                <>
+                                    <ReviewSkeleton />
+                                    <ReviewSkeleton />
+                                    <ReviewSkeleton />
+                                </>
                             ) : reviews.length === 0 ? (
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>No reviews yet for this shop.</Text>
@@ -472,14 +559,22 @@ export default function PublicSellerProfileScreen() {
                                         <View style={styles.reviewHeader}>
                                             <View style={styles.buyerInfo}>
                                                 <Text style={styles.buyerRowName}>{item.buyer_name}</Text>
-                                                <View style={styles.ratingRow}>
-                                                    {[1, 2, 3, 4, 5].map(star => (
-                                                        <StarIcon 
-                                                            key={star} 
-                                                            size={12} 
-                                                            color={star <= item.rating ? "#F59E0B" : Colors.neutral[300]} 
-                                                        />
-                                                    ))}
+                                                <View style={styles.reviewMetaRow}>
+                                                    <View style={styles.ratingRow}>
+                                                        {[1, 2, 3, 4, 5].map(star => (
+                                                            <StarIcon 
+                                                                key={star} 
+                                                                size={12} 
+                                                                color={star <= item.rating ? "#F59E0B" : Colors.neutral[300]} 
+                                                            />
+                                                        ))}
+                                                    </View>
+                                                    {item.order_id && (
+                                                        <View style={styles.verifiedBadge}>
+                                                            <CheckBadgeIcon size={12} color="#10B981" />
+                                                            <Text style={styles.verifiedText}>Verified</Text>
+                                                        </View>
+                                                    )}
                                                 </View>
                                             </View>
                                             <Text style={styles.reviewDate}>
@@ -494,7 +589,9 @@ export default function PublicSellerProfileScreen() {
                                         )}
                                         {item.seller_reply && (
                                             <View style={styles.sellerReply}>
-                                                <Text style={styles.replyLabel}>Seller Response</Text>
+                                                <View style={styles.replyHeaderRow}>
+                                                    <Text style={styles.replyLabel}>Shop Response</Text>
+                                                </View>
                                                 <Text style={styles.replyContent}>{item.seller_reply}</Text>
                                             </View>
                                         )}
@@ -979,6 +1076,32 @@ const styles = StyleSheet.create({
         color: Colors.text.secondary,
         lineHeight: 18,
     },
+    reviewMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    verifiedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 8,
+        backgroundColor: '#ECFDF5',
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 4,
+    },
+    verifiedText: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: '#059669',
+        marginLeft: 2,
+    },
+    replyHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
     // FAQ Styles
     faqSection: {
         marginTop: 24,
@@ -1019,5 +1142,44 @@ const styles = StyleSheet.create({
         color: Colors.text.secondary,
         lineHeight: 20,
         paddingLeft: 28,
+    },
+    pausedContainer: {
+        alignItems: 'center',
+        paddingVertical: 60,
+        paddingHorizontal: 32,
+    },
+    pausedIconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    pausedBadge: {
+        backgroundColor: '#FEF3C7',
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 100,
+        marginBottom: 12,
+    },
+    pausedBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#D97706',
+    },
+    pausedTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    pausedSub: {
+        fontSize: 14,
+        color: Colors.text.tertiary,
+        textAlign: 'center',
+        lineHeight: 20,
     },
 });

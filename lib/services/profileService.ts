@@ -18,6 +18,7 @@ export const fetchPublicSellerProfile = async (sellerId: string) => {
             shop_policies,
             is_verified,
             verification_status,
+            is_shop_live,
             created_at
         `)
         .eq('id', sellerId)
@@ -222,4 +223,20 @@ export const getSignedImageUrl = async (bucket: string, path: string, expiresIn:
     }
 
     return data.signedUrl;
+};
+
+export const updateShopStatus = async (userId: string, isLive: boolean) => {
+    if (!userId) return { success: false, error: 'User ID is required' };
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ is_shop_live: isLive })
+        .eq('id', userId);
+
+    if (error) {
+        console.error('Error updating shop status:', error);
+        return { success: false, error: error.message };
+    }
+
+    return { success: true };
 };

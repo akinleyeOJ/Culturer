@@ -203,7 +203,9 @@ const SellerReviewsScreen = () => {
                 ) : item.seller_reply ? (
                     <View style={styles.replyBox}>
                         <View style={styles.replyHeaderRow}>
-                            <Text style={styles.replyLabel}>Your Reply</Text>
+                            <View style={styles.shopResponseBadge}>
+                                <Text style={styles.replyLabel}>Shop Response</Text>
+                            </View>
                             <View style={styles.replyActions}>
                                 <TouchableOpacity 
                                     onPress={() => {
@@ -509,11 +511,18 @@ const styles = StyleSheet.create({
     replyIconBtn: {
         padding: 4,
     },
+    shopResponseBadge: {
+        backgroundColor: Colors.primary[50],
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: Colors.primary[200],
+    },
     replyLabel: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: Colors.primary[600],
-        marginBottom: 4,
+        fontSize: 10,
+        fontWeight: '800',
+        color: Colors.primary[700],
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },

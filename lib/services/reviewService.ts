@@ -103,7 +103,8 @@ export const fetchProductReviews = async (productId: string): Promise<ReviewWith
         seller_reply: r.seller_reply,
         seller_replied_at: r.seller_replied_at,
         created_at: r.created_at,
-        type: 'product',
+        type: r.type || 'product',
+        order_id: r.order_id,
         product_name: '', // Not strictly needed for item view, but keeping interface
         product_image: null,
         buyer_name: buyer?.full_name || 'Anonymous User',

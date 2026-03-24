@@ -181,7 +181,15 @@ const OrdersScreen = () => {
     };
 
     const PurchaseSummary = () => {
-        if (activeTab !== 'buying' || orders.length === 0) return null;
+        if (activeTab !== 'buying') return null;
+
+        if (orders.length === 0) {
+            return (
+                <View style={[styles.summaryContainer, { backgroundColor: '#F9FAFB', borderColor: '#F3F4F6', justifyContent: 'center', paddingVertical: 20 }]}>
+                    <Text style={[styles.summaryLabel, { color: '#9CA3AF', textAlign: 'center' }]}>No purchases yet</Text>
+                </View>
+            );
+        }
 
         const totalSpent = orders.reduce((sum, order) => sum + order.total_amount, 0);
 
@@ -189,11 +197,11 @@ const OrdersScreen = () => {
             <View style={styles.summaryContainer}>
                 <View style={styles.summaryItem}>
                     <Text style={styles.summaryNumber}>{orders.length}</Text>
-                    <Text style={styles.summaryLabel}>Total Purchases</Text>
+                    <Text style={styles.summaryLabel}>Total {orders.length === 1 ? 'Purchase' : 'Purchases'}</Text>
                 </View>
                 <View style={styles.summaryDivider} />
                 <View style={styles.summaryItem}>
-                    <Text style={styles.summaryNumber}>${totalSpent.toFixed(2)}</Text>
+                    <Text style={styles.summaryNumber}>${totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
                     <Text style={styles.summaryLabel}>Total Spent</Text>
                 </View>
             </View>

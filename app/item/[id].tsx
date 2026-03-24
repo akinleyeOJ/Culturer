@@ -14,7 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeftIcon, ShareIcon, MinusIcon, PlusIcon, ShoppingBagIcon, ChatBubbleLeftIcon, StarIcon as StarOutline } from 'react-native-heroicons/outline';
 import { HeartIcon as HeartOutline } from 'react-native-heroicons/outline';
-import { HeartIcon as HeartSolid, StarIcon as StarSolid } from 'react-native-heroicons/solid';
+import { HeartIcon as HeartSolid, StarIcon as StarSolid, CheckBadgeIcon } from 'react-native-heroicons/solid';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence } from 'react-native-reanimated';
 import { Colors } from '../../constants/color';
 import { ImageCarousel } from '../../components/ImageCarousel';
 import { SellerCard } from '../../components/SellerCard';
@@ -38,65 +39,94 @@ const ItemDetail = () => {
     const router = useRouter();
     const { user } = useAuth();
     const { refreshCartCount, cartCount } = useCart();
-    const { id } = useLocalSearchParams<{ id: string }>();
-
+    const [id] = useState(useLocalSearchParams<{ id: string }>().id);
     const [product, setProduct] = useState<any>(null);
     const [sellerProducts, setSellerProducts] = useState<any[]>([]);
     const [similarProducts, setSimilarProducts] = useState<any[]>([]);
     const [reviews, setReviews] = useState<ReviewWithDetails[]>([]);
     const [showAllReviews, setShowAllReviews] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [reviewsLoading, setReviewsLoading] = useState(true);
+    const [sellerProductsLoading, setSellerProductsLoading] = useState(true);
     const [quantity, setQuantity] = useState(1);
 
     const isOwnListing = user?.id && product?.seller_id && user.id === product.seller_id;
 
     useEffect(() => {
-        loadProductData();
-    }, [id]);
+        const loadInitialData = async () => {
+            if (!id) return;
 
-    const loadProductData = async () => {
-        if (!id) return;
+            setLoading(true);
+            try {
+                const productData = await fetchProductById(id, user?.id);
 
-        setLoading(true);
-        try {
-            const productData = await fetchProductById(id, user?.id);
+                if (!productData) {
+                    Alert.alert('Error', 'Product not found');
+                    router.back();
+                    return;
+                }
 
-            if (!productData) {
-                Alert.alert('Error', 'Product not found');
-                router.back();
-                return;
-            }
+                setProduct(productData);
 
-            setProduct(productData);
+                // Track view
+                if (user && productData.seller_id) {
+                    await trackProductView(user.id, id, productData.seller_id);
+                }
 
-            // Track view
-            if (user && productData.seller_id) {
-                await trackProductView(user.id, id, productData.seller_id);
-            }
-
-            // Load recommendations and reviews
-            const [seller, similar, productReviews] = await Promise.all([
-                fetchSellerProducts(productData.seller_id || 'seller-1', id, 6, user?.id),
-                fetchSimilarProducts(
+                // Load similar products
+                const similar = await fetchSimilarProducts(
                     id,
                     productData.category,
                     parseFloat(productData.price.replace('$', '')),
                     8,
                     user?.id
-                ),
-                fetchProductReviews(id)
-            ]);
+                );
+                setSimilarProducts(similar);
+            } catch (error) {
+                console.error('Error loading product:', error);
+                Alert.alert('Error', 'Failed to load product details');
+            } finally {
+                setLoading(false);
+            }
+        };
 
-            setSellerProducts(seller);
-            setSimilarProducts(similar);
-            setReviews(productReviews);
-        } catch (error) {
-            console.error('Error loading product:', error);
-            Alert.alert('Error', 'Failed to load product details');
-        } finally {
-            setLoading(false);
+        const loadReviews = async () => {
+            if (!id) return;
+            setReviewsLoading(true);
+            try {
+                const data = await fetchProductReviews(id);
+                setReviews(data);
+            } catch (error) {
+                console.error('Error loading reviews:', error);
+            } finally {
+                setReviewsLoading(false);
+            }
+        };
+
+        if (id) {
+            loadInitialData();
+            loadReviews();
         }
-    };
+    }, [id, user?.id]);
+
+    useEffect(() => {
+        const loadSellerProducts = async () => {
+            if (!product?.seller_id || !id) return;
+            setSellerProductsLoading(true);
+            try {
+                const data = await fetchSellerProducts(product.seller_id, id, 6, user?.id);
+                setSellerProducts(data);
+            } catch (error) {
+                console.error('Error loading seller products:', error);
+            } finally {
+                setSellerProductsLoading(false);
+            }
+        };
+
+        if (product?.seller_id) {
+            loadSellerProducts();
+        }
+    }, [product?.seller_id, id, user?.id]);
 
     const handleBuyNow = () => {
         if (!user) {
@@ -248,6 +278,73 @@ const ItemDetail = () => {
         : isInStock
             ? 'In stock'
             : 'Sold out';
+
+    const Skeleton = ({ width, height, borderRadius = 4, style }: any) => {
+        const opacity = useSharedValue(0.3);
+
+        useEffect(() => {
+            opacity.value = withRepeat(
+                withSequence(
+                    withTiming(0.7, { duration: 1000 }),
+                    withTiming(0.3, { duration: 1000 })
+                ),
+                -1,
+                true
+            );
+        }, []);
+
+        const animatedStyle = useAnimatedStyle(() => ({
+            opacity: opacity.value,
+        }));
+
+        return (
+            <Animated.View
+                style={[
+                    {
+                        width,
+                        height,
+                        borderRadius,
+                        backgroundColor: '#E5E7EB',
+                    },
+                    animatedStyle,
+                    style,
+                ]}
+            />
+        );
+    };
+
+    const ReviewSkeleton = () => (
+        <View style={styles.publicReviewCard}>
+            <View style={styles.publicReviewHeader}>
+                <View style={styles.buyerInfo}>
+                    <Skeleton width={40} height={40} borderRadius={20} />
+                    <View style={{ marginLeft: 12 }}>
+                        <Skeleton width={100} height={16} style={{ marginBottom: 4 }} />
+                        <Skeleton width={60} height={12} />
+                    </View>
+                </View>
+                <View style={{ flexDirection: 'row' }}>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <StarSolid key={i} size={16} color="#E5E7EB" style={{ marginRight: 2 }} />
+                    ))}
+                </View>
+            </View>
+            <Skeleton width="100%" height={14} style={{ marginTop: 12 }} />
+            <Skeleton width="80%" height={14} style={{ marginTop: 6 }} />
+        </View>
+    );
+
+    const ProductSkeleton = () => (
+        <View style={[styles.gridProductCard, { backgroundColor: '#FFF', borderRadius: 12, padding: 8 }]}>
+            <Skeleton width="100%" height={150} borderRadius={8} />
+            <Skeleton width="90%" height={16} style={{ marginTop: 10 }} />
+            <Skeleton width="60%" height={20} style={{ marginTop: 8 }} />
+            <View style={{ flexDirection: 'row', marginTop: 8, justifyContent: 'space-between' }}>
+                <Skeleton width={50} height={14} />
+                <Skeleton width={30} height={14} />
+            </View>
+        </View>
+    );
 
     const renderStars = (rating: number) => {
         return (
@@ -432,90 +529,119 @@ const ItemDetail = () => {
                     )}
 
                     {/* Product Reviews */}
-                    {reviews.length > 0 && (
-                        <View style={styles.section}>
-                            <View style={styles.reviewsHeaderRow}>
-                                <Text style={styles.sectionTitle}>Product Reviews</Text>
+                    <View style={styles.section}>
+                        <View style={styles.reviewsHeaderRow}>
+                            <Text style={styles.sectionTitle}>Product Reviews</Text>
+                            {reviews.length > 0 && !reviewsLoading && (
                                 <View style={styles.reviewsBadge}>
                                     <StarSolid size={14} color="#F59E0B" />
                                     <Text style={styles.reviewsBadgeText}>
                                         {(reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)} ({reviews.length} {reviews.length === 1 ? 'review' : 'reviews'})
                                     </Text>
                                 </View>
-                            </View>
-
-                            {reviews.slice(0, showAllReviews ? reviews.length : 5).map(review => (
-                                <View key={review.id} style={styles.publicReviewCard}>
-                                    <View style={styles.publicReviewHeader}>
-                                        <View style={styles.buyerInfo}>
-                                            <View style={styles.buyerAvatar}>
-                                                <Text style={styles.buyerInitials}>
-                                                    {review.buyer_name.substring(0, 1).toUpperCase()}
-                                                </Text>
-                                            </View>
-                                            <View>
-                                                <Text style={styles.publicBuyerName}>{review.buyer_name}</Text>
-                                                <Text style={styles.publicReviewDate}>
-                                                    {new Date(review.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        {renderStars(review.rating)}
-                                    </View>
-
-                                    <Text style={styles.publicCommentText}>{review.comment || 'No written feedback provided.'}</Text>
-
-                                    {review.seller_reply && (
-                                        <View style={styles.publicSellerReplyBox}>
-                                            <View style={styles.replyHeaderRow}>
-                                                <Text style={styles.replySellerName}>{product.seller_name} (Seller)</Text>
-                                            </View>
-                                            <Text style={styles.replySellerText}>{review.seller_reply}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            ))}
-
-                            {reviews.length > 5 && !showAllReviews && (
-                                <TouchableOpacity 
-                                    style={styles.loadMoreBtn}
-                                    onPress={() => setShowAllReviews(true)}
-                                >
-                                    <Text style={styles.loadMoreText}>Load more reviews ({reviews.length - 5} more)</Text>
-                                </TouchableOpacity>
                             )}
                         </View>
-                    )}
+
+                        {reviewsLoading ? (
+                            <>
+                                <ReviewSkeleton />
+                                <ReviewSkeleton />
+                            </>
+                        ) : reviews.length > 0 ? (
+                            <>
+                                {reviews.slice(0, showAllReviews ? reviews.length : 5).map(review => (
+                                    <View key={review.id} style={styles.publicReviewCard}>
+                                        <View style={styles.publicReviewHeader}>
+                                            <View style={styles.buyerInfo}>
+                                                <View style={styles.buyerAvatar}>
+                                                    <Text style={styles.buyerInitials}>
+                                                        {review.buyer_name.substring(0, 1).toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                                <View>
+                                                    <Text style={styles.publicBuyerName}>{review.buyer_name}</Text>
+                                                    <View style={styles.reviewMetaRow}>
+                                                        <Text style={styles.publicReviewDate}>
+                                                            {new Date(review.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </Text>
+                                                        {review.order_id && (
+                                                            <View style={styles.verifiedBadge}>
+                                                                <CheckBadgeIcon size={14} color="#10B981" />
+                                                                <Text style={styles.verifiedText}>Verified Purchase</Text>
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                </View>
+                                            </View>
+                                            {renderStars(review.rating)}
+                                        </View>
+
+                                        <Text style={styles.publicCommentText}>{review.comment || 'No written feedback provided.'}</Text>
+
+                                        {review.seller_reply && (
+                                            <View style={styles.publicSellerReplyBox}>
+                                                <View style={styles.replyHeaderRow}>
+                                                    <Text style={styles.replySellerName}>{product.seller_name} (Seller)</Text>
+                                                    <Text style={styles.sellerResponseLabel}>Seller response</Text>
+                                                </View>
+                                                <Text style={styles.replySellerText}>{review.seller_reply}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                ))}
+
+                                {reviews.length > 5 && !showAllReviews && (
+                                    <TouchableOpacity
+                                        style={styles.loadMoreBtn}
+                                        onPress={() => setShowAllReviews(true)}
+                                    >
+                                        <Text style={styles.loadMoreText}>Load more reviews ({reviews.length - 5} more)</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </>
+                        ) : (
+                            <Text style={styles.noReviewsText}>No reviews for this item yet.</Text>
+                        )}
+                    </View>
 
                     {/* Other items by seller */}
-                    {sellerProducts.length > 0 && (
+                    {(sellerProducts.length > 0 || sellerProductsLoading) && (
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>Other items by this seller</Text>
                             <View style={styles.sellerProductsGrid}>
-                                {sellerProducts.map((item) => (
-                                    <ProductCard
-                                        key={item.id}
-                                        name={item.name}
-                                        price={item.price}
-                                        image={item.image}
-                                        emoji={item.emoji}
-                                        rating={item.rating}
-                                        reviews={item.reviews}
-                                        shipping={item.shipping}
-                                        isLiked={item.isFavorited}
-                                        onLike={() => handleToggleRecommendationFavorite(item.id)}
-                                        onPress={() => router.push(`/item/${item.id}`)}
-                                        style={styles.gridProductCard}
-                                        hideFavoriteButton={user?.id === item.seller_id}
-                                    />
-                                ))}
+                                {sellerProductsLoading ? (
+                                    <>
+                                        <ProductSkeleton />
+                                        <ProductSkeleton />
+                                    </>
+                                ) : (
+                                    sellerProducts.map((item) => (
+                                        <ProductCard
+                                            key={item.id}
+                                            name={item.name}
+                                            price={item.price}
+                                            image={item.image}
+                                            emoji={item.emoji}
+                                            rating={item.rating}
+                                            reviews={item.reviews}
+                                            shipping={item.shipping}
+                                            isLiked={item.isFavorited}
+                                            onLike={() => handleToggleRecommendationFavorite(item.id)}
+                                            onPress={() => router.push(`/item/${item.id}`)}
+                                            style={styles.gridProductCard}
+                                            hideFavoriteButton={user?.id === item.seller_id}
+                                        />
+                                    ))
+                                )}
                             </View>
-                            <TouchableOpacity 
-                                style={styles.viewAllListingsBtn}
-                                onPress={() => router.push(`/seller/${product.seller_id}` as any)}
-                            >
-                                <Text style={styles.viewAllListingsText}>View all seller's listings</Text>
-                            </TouchableOpacity>
+                            {!sellerProductsLoading && sellerProducts.length > 0 && (
+                                <TouchableOpacity
+                                    style={styles.viewAllListingsBtn}
+                                    onPress={() => router.push(`/seller/${product.seller_id}` as any)}
+                                >
+                                    <Text style={styles.viewAllListingsText}>View all seller's listings</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     )}
 
@@ -823,6 +949,32 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: Colors.text.tertiary,
     },
+    reviewMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    verifiedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 8,
+        backgroundColor: '#ECFDF5',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    verifiedText: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: '#059669',
+        marginLeft: 2,
+    },
+    noReviewsText: {
+        fontSize: 14,
+        color: Colors.text.tertiary,
+        marginTop: 8,
+        fontStyle: 'italic',
+    },
     publicCommentText: {
         fontSize: 14,
         color: Colors.text.secondary,
@@ -837,7 +989,17 @@ const styles = StyleSheet.create({
         borderLeftColor: Colors.primary[400],
     },
     replyHeaderRow: {
-        marginBottom: 4,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    sellerResponseLabel: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: Colors.primary[600],
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     replySellerName: {
         fontSize: 13,

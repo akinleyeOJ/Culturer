@@ -67,12 +67,25 @@ export const fetchProducts = async (
   filters: FilterOptions = {},
   userId?: string
 ) => {
+  // Pre-fetch paused seller IDs to exclude their products
+  const { data: pausedSellers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('is_shop_live', false);
+  
+  const pausedIds = pausedSellers?.map(s => s.id) || [];
+
   let query = supabase
     .from('products')
     .select('*', { count: 'exact' })
     .eq('status', 'active')
     .gt('stock_quantity', 0)
     .or('out_of_stock.is.null,out_of_stock.eq.false');
+
+  // Exclude products from paused shops
+  if (pausedIds.length > 0) {
+    query = query.not('seller_id', 'in', `(${pausedIds.join(',')})`);
+  }
 
   // 1. Categories (multiple)
   if (filters.categories && filters.categories.length > 0) {
@@ -126,7 +139,11 @@ export const fetchProducts = async (
     return { products: [], count: 0 };
   }
 
-  const products = data ? data.map(p => transformProduct(p, favoriteIds)) : [];
+  // Post-filter: exclude products from paused shops
+  const pausedSet = new Set(pausedIds);
+  const filtered = data ? data.filter(p => !pausedSet.has((p as any).seller_id)) : [];
+
+  const products = filtered.map(p => transformProduct(p, favoriteIds));
   return { products, count: count || 0 };
 };
 
@@ -245,6 +262,13 @@ export const fetchRecentlyViewed = async (userId: string) => {
 
   if (rvError || !recentlyViewedData || recentlyViewedData.length === 0) return [];
 
+  // Pre-fetch paused seller IDs
+  const { data: pausedSellers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('is_shop_live', false);
+  const pausedIds = new Set(pausedSellers?.map(s => s.id) || []);
+
   const productIds = (recentlyViewedData as any[]).map((rv: any) => rv.product_id);
   const { data: products } = await supabase
     .from('products')
@@ -259,6 +283,7 @@ export const fetchRecentlyViewed = async (userId: string) => {
   return (recentlyViewedData as any[]).map((rv: any) => {
     const product = productsMap.get(rv.product_id);
     if (!product) return null;
+    if (pausedIds.has(product.seller_id)) return null;
     return {
       id: product.id,
       name: product.name,
