@@ -10,10 +10,12 @@ import {
     ActivityIndicator,
     Switch,
     Modal,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/color';
+import KeyboardAwareBottomSheet from '../../components/KeyboardAwareBottomSheet';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -429,17 +431,11 @@ export default function ShopPoliciesScreen() {
                 animationType="fade"
                 onRequestClose={closeFaqModal}
             >
-                <TouchableOpacity
+                <Pressable
                     style={styles.modalOverlay}
-                    activeOpacity={1}
                     onPress={closeFaqModal}
                 >
-                    {/* Bottom sheet content */}
-                    <TouchableOpacity
-                        activeOpacity={1}
-                        style={styles.modalBottomSheet}
-                        onPress={(e) => e.stopPropagation()}
-                    >
+                    <KeyboardAwareBottomSheet contentContainerStyle={styles.modalBottomSheet}>
                         {/* Drag handle */}
                         <View style={styles.modalHandle} />
 
@@ -450,12 +446,7 @@ export default function ShopPoliciesScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView
-                            style={styles.modalBody}
-                            showsVerticalScrollIndicator={false}
-                            keyboardShouldPersistTaps="handled"
-                            keyboardDismissMode="on-drag"
-                        >
+                        <View style={styles.modalBody}>
                             <View style={styles.inputGroup}>
                                 <Text style={styles.modalLabel}>QUESTION</Text>
                                 <TextInput
@@ -497,9 +488,9 @@ export default function ShopPoliciesScreen() {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
-                        </ScrollView>
-                    </TouchableOpacity>
-                </TouchableOpacity>
+                        </View>
+                    </KeyboardAwareBottomSheet>
+                </Pressable>
             </Modal>
         </SafeAreaView>
     );

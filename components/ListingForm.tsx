@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,7 @@ import {
     Platform,
     Modal,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { CameraIcon, XMarkIcon, ChevronLeftIcon, InformationCircleIcon, CubeIcon } from 'react-native-heroicons/outline';
@@ -21,6 +21,7 @@ import { Colors } from '../constants/color';
 import { CATEGORIES } from '../constants/categories';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadProductImages, createListing } from '../lib/services/productService';
+import { supabase } from '../lib/supabase';
 import { ImageZoomModal } from './ImageZoomModal';
 
 interface ImageFile {
@@ -68,6 +69,47 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
     const [selectedZoomIndex, setSelectedZoomIndex] = useState(0);
     const [isPickingImage, setIsPickingImage] = useState(false);
     const [weightTier, setWeightTier] = useState<'small' | 'medium' | 'large'>('medium');
+    const [hasShippingAddress, setHasShippingAddress] = useState<boolean | null>(null);
+
+    const checkShippingSetup = useCallback(async () => {
+        if (!user) {
+            setHasShippingAddress(false);
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('shop_shipping')
+            .eq('id', user.id)
+            .single();
+
+        if (!error && data) {
+            const shopShipping = (data as any).shop_shipping;
+            const hasCompleteShipFromAddress = !!(
+                shopShipping &&
+                typeof shopShipping.origin_street1 === 'string' &&
+                shopShipping.origin_street1.trim() &&
+                typeof shopShipping.origin_city === 'string' &&
+                shopShipping.origin_city.trim() &&
+                typeof shopShipping.origin_zip === 'string' &&
+                shopShipping.origin_zip.trim()
+            );
+            setHasShippingAddress(hasCompleteShipFromAddress);
+            return;
+        }
+
+        setHasShippingAddress(false);
+    }, [user]);
+
+    useEffect(() => {
+        checkShippingSetup();
+    }, [checkShippingSetup]);
+
+    useFocusEffect(
+        useCallback(() => {
+            checkShippingSetup();
+        }, [checkShippingSetup])
+    );
 
     const resetForm = () => {
         setTitle('');
@@ -138,6 +180,21 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
         }
         if (status === 'active' && (!title.trim() || !price || !category)) {
             Alert.alert('Missing Info', 'Please fill in the title, price, and category before publishing.');
+            return;
+        }
+
+        if (status === 'active' && hasShippingAddress === false) {
+            Alert.alert(
+                'Shipping Setup Required',
+                'Add your ship-from street address, city, and ZIP code before publishing. This is required for accurate courier and pickup-point calculations.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                        text: 'Go to Settings', 
+                        onPress: () => router.push('/profile/seller-shipping' as any) 
+                    }
+                ]
+            );
             return;
         }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Dimensions, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Dimensions, Modal, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -288,7 +288,11 @@ const PromotionsScreen = () => {
             transparent={true}
             onRequestClose={() => setIsCreateModalVisible(false)}
         >
-            <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+                style={styles.modalOverlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={24}
+            >
                 <View style={[styles.modalContainer, step === 2 && { height: 'auto', paddingBottom: 60 }]}>
                     <View style={styles.modalHeader}>
                         <View>
@@ -303,7 +307,7 @@ const PromotionsScreen = () => {
                     </View>
 
                     {step === 1 ? (
-                        <ScrollView style={styles.modalBody} bounces={false}>
+                        <ScrollView style={styles.modalBody} bounces={false} keyboardShouldPersistTaps="handled">
                             <View style={styles.selectHeaderRow}>
                                 <Text style={styles.modalSub}>Select which items to promote</Text>
                                 <TouchableOpacity
@@ -403,7 +407,7 @@ const PromotionsScreen = () => {
                             </TouchableOpacity>
                         </ScrollView>
                     ) : (
-                        <ScrollView style={styles.modalBody} bounces={false}>
+                        <ScrollView style={styles.modalBody} bounces={false} keyboardShouldPersistTaps="handled">
                             {promoType === 'coupon' ? (
                                 <View style={styles.inputGroup}>
                                     <Text style={styles.inputLabel}>Coupon Code Name</Text>
@@ -477,7 +481,7 @@ const PromotionsScreen = () => {
                         </ScrollView>
                     )}
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 

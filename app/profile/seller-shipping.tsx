@@ -18,143 +18,45 @@ import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
+    AVAILABLE_ORIGIN_COUNTRIES,
+    DEFAULT_SHIPPING_CONFIG,
+    PROCESSING_TIMES,
+    ZONE_OPTIONS,
+    buildProviderConfigs,
+    getCountryFlag,
+    getLockedDefaultProvidersForMode,
+    hydrateShippingConfig,
+    normalizeCountryName,
+    type ShippingProviderMode,
+    type SellerShippingConfig,
+} from '../../lib/shippingUtils';
+import {
     ChevronLeftIcon,
     TruckIcon,
     ClockIcon,
     MapPinIcon,
     ChevronRightIcon,
     CheckCircleIcon as CheckCircleSolidIcon,
-    PlusIcon,
     GlobeAltIcon,
     InformationCircleIcon,
-    XMarkIcon,
 } from 'react-native-heroicons/outline';
-
-// ─── Country → Carrier Mapping ───────────────────────────
-const COUNTRY_CARRIERS: Record<string, { name: string; type: 'home' | 'locker' | 'pickup' }[]> = {
-    'Poland': [
-        { name: 'InPost Locker 24/7', type: 'locker' },
-        { name: 'InPost Home Delivery', type: 'home' },
-        { name: 'DHL', type: 'home' },
-        { name: 'DPD', type: 'home' },
-        { name: 'Poczta Polska', type: 'home' },
-    ],
-    'United Kingdom': [
-        { name: 'Royal Mail', type: 'home' },
-        { name: 'Evri (Hermes)', type: 'home' },
-        { name: 'DPD', type: 'home' },
-        { name: 'UPS', type: 'home' },
-        { name: 'DHL', type: 'home' },
-    ],
-    'Germany': [
-        { name: 'DHL', type: 'home' },
-        { name: 'Hermes', type: 'home' },
-        { name: 'DPD', type: 'home' },
-        { name: 'GLS', type: 'home' },
-        { name: 'UPS', type: 'home' },
-    ],
-    'Italy': [
-        { name: 'Poste Italiane', type: 'home' },
-        { name: 'BRT (Bartolini)', type: 'home' },
-        { name: 'DHL', type: 'home' },
-        { name: 'GLS', type: 'home' },
-        { name: 'UPS', type: 'home' },
-    ],
-    'France': [
-        { name: 'Colissimo', type: 'home' },
-        { name: 'Mondial Relay', type: 'locker' },
-        { name: 'Chronopost', type: 'home' },
-        { name: 'DHL', type: 'home' },
-        { name: 'DPD', type: 'home' },
-    ],
-    'Spain': [
-        { name: 'Correos', type: 'home' },
-        { name: 'SEUR', type: 'home' },
-        { name: 'DHL', type: 'home' },
-        { name: 'GLS', type: 'home' },
-        { name: 'MRW', type: 'home' },
-    ],
-    'Netherlands': [
-        { name: 'PostNL', type: 'home' },
-        { name: 'DHL', type: 'home' },
-        { name: 'DPD', type: 'home' },
-        { name: 'UPS', type: 'home' },
-        { name: 'GLS', type: 'home' },
-    ],
-};
-
-const AVAILABLE_COUNTRIES = [
-    { name: 'Poland', flag: '🇵🇱' },
-    { name: 'United Kingdom', flag: '🇬🇧' },
-    { name: 'Germany', flag: '🇩🇪' },
-    { name: 'Italy', flag: '🇮🇹' },
-    { name: 'France', flag: '🇫🇷' },
-    { name: 'Spain', flag: '🇪🇸' },
-    { name: 'Netherlands', flag: '🇳🇱' },
-    { name: 'Austria', flag: '🇦🇹' },
-    { name: 'Belgium', flag: '🇧🇪' },
-    { name: 'Czech Republic', flag: '🇨🇿' },
-    { name: 'Denmark', flag: '🇩🇰' },
-    { name: 'Ireland', flag: '🇮🇪' },
-    { name: 'Portugal', flag: '🇵🇹' },
-    { name: 'Sweden', flag: '🇸🇪' },
-    { name: 'Romania', flag: '🇷🇴' },
-    { name: 'Hungary', flag: '🇭🇺' },
-    { name: 'Greece', flag: '🇬🇷' },
-].sort((a, b) => a.name.localeCompare(b.name));
-
-// ─── Types ───
-interface CarrierConfig {
-    name: string;
-    type: 'home' | 'locker' | 'pickup';
-    enabled: boolean;
-    price_small: number;
-    price_medium: number;
-    price_large: number;
-}
-
-interface ShopShipping {
-    processing_time: string;
-    origin_country: string;
-    local_pickup: boolean;
-    pickup_location: string;
-    carriers: CarrierConfig[];
-    shipping_zones: ('domestic' | 'eu' | 'worldwide')[];
-}
-
-const PROCESSING_TIMES = [
-    '1 business day',
-    '1-2 business days',
-    '3-5 business days',
-    '1-2 weeks',
-    '2-4 weeks',
-];
-
-const ZONE_OPTIONS: { key: 'domestic' | 'eu' | 'worldwide'; label: string; desc: string }[] = [
-    { key: 'domestic', label: 'Domestic', desc: 'Ship within your country' },
-    { key: 'eu', label: 'European Union', desc: 'Ship to EU countries (no customs)' },
-    { key: 'worldwide', label: 'Worldwide', desc: 'Ship globally (customs may apply)' },
-];
-
-const DEFAULT_SHIPPING: ShopShipping = {
-    processing_time: '3-5 business days',
-    origin_country: '',
-    local_pickup: false,
-    pickup_location: '',
-    carriers: [],
-    shipping_zones: ['domestic'],
-};
 
 export default function SellerShippingScreen() {
     const router = useRouter();
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showProcessingModal, setShowProcessingModal] = useState(false);
     const [showCountryModal, setShowCountryModal] = useState(false);
-    const [showAddCarrierModal, setShowAddCarrierModal] = useState(false);
-    const [customCarrierName, setCustomCarrierName] = useState('');
-
-    const [shipping, setShipping] = useState<ShopShipping>(DEFAULT_SHIPPING);
+    const [shipping, setShipping] = useState<SellerShippingConfig>(DEFAULT_SHIPPING_CONFIG);
+    const providersByMode = {
+        home_delivery: shipping.providers.filter((provider) => provider.mode === 'home_delivery'),
+        locker_pickup: shipping.providers.filter((provider) => provider.mode === 'locker_pickup'),
+    };
+    const lockedHomeProviders = getLockedDefaultProvidersForMode(shipping.origin_country, 'home_delivery');
+    const lockedLockerProviders = getLockedDefaultProvidersForMode(shipping.origin_country, 'locker_pickup');
+    const lockedProviders = new Set([...lockedHomeProviders, ...lockedLockerProviders]);
 
     useEffect(() => {
         if (user) fetchShippingSettings();
@@ -162,22 +64,20 @@ export default function SellerShippingScreen() {
 
     const fetchShippingSettings = async () => {
         try {
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('profiles')
-                .select('shop_shipping, location')
+                .select('shop_shipping')
                 .eq('id', user!.id)
                 .single();
 
             if (data) {
                 if (data.shop_shipping) {
-                    const saved = (data.shop_shipping as unknown) as ShopShipping;
-                    // Merge with defaults for backward compatibility
-                    setShipping({
-                        ...DEFAULT_SHIPPING,
-                        ...saved,
-                        carriers: saved.carriers || [],
-                        shipping_zones: saved.shipping_zones || ['domestic'],
-                    });
+                    const saved = (data.shop_shipping as unknown) as Partial<SellerShippingConfig>;
+                    setShipping(hydrateShippingConfig(saved));
+                    setHasUnsavedChanges(false);
+                } else {
+                    setShipping(DEFAULT_SHIPPING_CONFIG);
+                    setHasUnsavedChanges(false);
                 }
             }
         } catch (e) {
@@ -187,108 +87,88 @@ export default function SellerShippingScreen() {
         }
     };
 
-    const handleSave = async (updatedSettings = shipping) => {
+    const persistShipping = async (updatedSettings = shipping) => {
         if (!user) return;
+        const normalizedSettings = hydrateShippingConfig(updatedSettings);
         try {
+            setSaving(true);
             const { error } = await supabase
                 .from('profiles')
-                .update({ shop_shipping: updatedSettings as any })
+                .update({ shop_shipping: normalizedSettings as any })
                 .eq('id', user.id);
 
             if (error) throw error;
+            setShipping(normalizedSettings);
+            setHasUnsavedChanges(false);
         } catch (e: any) {
             Alert.alert('Error', e.message);
+        } finally {
+            setSaving(false);
         }
     };
 
-    const updateField = (field: keyof ShopShipping, value: any) => {
+    const updateShipping = (updater: SellerShippingConfig | ((current: SellerShippingConfig) => SellerShippingConfig)) => {
+        setShipping((current) => {
+            const next = typeof updater === 'function'
+                ? (updater as (current: SellerShippingConfig) => SellerShippingConfig)(current)
+                : updater;
+
+            setHasUnsavedChanges(true);
+            return hydrateShippingConfig(next);
+        });
+    };
+
+    const updateField = (field: keyof SellerShippingConfig, value: any) => {
         const newSettings = { ...shipping, [field]: value };
-        setShipping(newSettings);
-        handleSave(newSettings);
+        updateShipping(newSettings);
     };
 
     // ─── Country Selection ───
     const handleCountrySelect = (countryName: string) => {
-        // Get suggested carriers for this country
-        const suggested = COUNTRY_CARRIERS[countryName] || [];
-        const carrierConfigs: CarrierConfig[] = suggested.map(c => ({
-            name: c.name,
-            type: c.type,
-            enabled: false,
-            price_small: 0,
-            price_medium: 0,
-            price_large: 0,
-        }));
-
-        // Keep any existing custom carriers
-        const existingCustom = shipping.carriers.filter(
-            c => !suggested.some(s => s.name === c.name)
-        );
+        const normalizedCountry = normalizeCountryName(countryName);
 
         const newSettings = {
             ...shipping,
-            origin_country: countryName,
-            carriers: [...carrierConfigs, ...existingCustom],
+            origin_country: normalizedCountry,
+            providers: buildProviderConfigs(normalizedCountry, shipping.providers),
         };
-        setShipping(newSettings);
-        handleSave(newSettings);
+        updateShipping(newSettings);
         setShowCountryModal(false);
     };
 
-    // ─── Carrier Toggle ───
-    const toggleCarrier = (index: number) => {
-        const newCarriers = [...shipping.carriers];
-        newCarriers[index] = { ...newCarriers[index], enabled: !newCarriers[index].enabled };
-        const newSettings = { ...shipping, carriers: newCarriers };
-        setShipping(newSettings);
-        handleSave(newSettings);
-    };
+    const updateMode = (mode: ShippingProviderMode | 'local_pickup', enabled: boolean) => {
+        if (
+            shipping.origin_country &&
+            (mode === 'home_delivery' || mode === 'locker_pickup') &&
+            getLockedDefaultProvidersForMode(shipping.origin_country, mode).length > 0
+        ) {
+            return;
+        }
 
-    // ─── Update Carrier Price ───
-    const updateCarrierPrice = (index: number, tier: 'price_small' | 'price_medium' | 'price_large', value: string) => {
-        const newCarriers = [...shipping.carriers];
-        newCarriers[index] = { ...newCarriers[index], [tier]: parseFloat(value) || 0 };
-        setShipping({ ...shipping, carriers: newCarriers });
-    };
-
-    const saveCarrierPrice = () => {
-        handleSave(shipping);
-    };
-
-    // ─── Add Custom Carrier ───
-    const addCustomCarrier = () => {
-        if (!customCarrierName.trim()) return;
-        const newCarrier: CarrierConfig = {
-            name: customCarrierName.trim(),
-            type: 'home',
-            enabled: true,
-            price_small: 0,
-            price_medium: 0,
-            price_large: 0,
-        };
-        const newSettings = {
-            ...shipping,
-            carriers: [...shipping.carriers, newCarrier],
-        };
-        setShipping(newSettings);
-        handleSave(newSettings);
-        setCustomCarrierName('');
-        setShowAddCarrierModal(false);
-    };
-
-    // ─── Remove Custom Carrier ───
-    const removeCarrier = (index: number) => {
-        Alert.alert('Remove Carrier', `Remove "${shipping.carriers[index].name}"?`, [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Remove', style: 'destructive', onPress: () => {
-                    const newCarriers = shipping.carriers.filter((_, i) => i !== index);
-                    const newSettings = { ...shipping, carriers: newCarriers };
-                    setShipping(newSettings);
-                    handleSave(newSettings);
-                }
+        updateShipping((current) => ({
+            ...current,
+            modes: {
+                ...current.modes,
+                [mode]: mode === 'local_pickup'
+                    ? { enabled }
+                    : { ...current.modes[mode], enabled },
             },
-        ]);
+        }));
+    };
+
+    const toggleProvider = (providerName: string) => {
+        if (lockedProviders.has(providerName)) {
+            return;
+        }
+
+        updateShipping((current) => ({
+            ...current,
+            providers: current.providers.map((provider) =>
+                provider.name === providerName
+                    ? { ...provider, enabled: !provider.enabled }
+                    : provider
+            ),
+        }));
     };
 
     // ─── Zone Toggle ───
@@ -312,10 +192,6 @@ export default function SellerShippingScreen() {
         }
     };
 
-    const getCountryFlag = (name: string) => {
-        return AVAILABLE_COUNTRIES.find(c => c.name === name)?.flag || '🌍';
-    };
-
     if (loading) {
         return (
             <SafeAreaView style={styles.container}>
@@ -334,37 +210,95 @@ export default function SellerShippingScreen() {
                     <ChevronLeftIcon size={24} color={Colors.text.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Shipping & Postage</Text>
-                <View style={{ width: 40 }} />
+                <TouchableOpacity
+                    style={styles.headerSaveButton}
+                    onPress={() => persistShipping()}
+                    disabled={!hasUnsavedChanges || saving}
+                >
+                    {saving ? (
+                        <ActivityIndicator size="small" color={Colors.primary[500]} />
+                    ) : (
+                        <Text
+                            style={[
+                                styles.headerSaveText,
+                                (!hasUnsavedChanges || saving) && styles.headerSaveTextDisabled,
+                            ]}
+                        >
+                            Save
+                        </Text>
+                    )}
+                </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
                 <View style={styles.infoBox}>
                     <InformationCircleIcon size={20} color={Colors.primary[600]} />
                     <Text style={styles.infoText}>
-                        Configure your shipping carriers and rates. These options will appear to buyers at checkout.
+                        Choose which shipping modes you support, then enable providers per mode. Buyers only see options that match their address.
                     </Text>
                 </View>
 
-                {/* ─── Origin Country ─── */}
+                {/* ─── Origin Address (Required for Shippo) ─── */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>SHIP FROM</Text>
-                    <TouchableOpacity
-                        style={styles.settingItem}
-                        onPress={() => setShowCountryModal(true)}
-                    >
-                        <View style={styles.settingIconBox}>
-                            <Text style={{ fontSize: 20 }}>
-                                {shipping.origin_country ? getCountryFlag(shipping.origin_country) : '🌍'}
-                            </Text>
+                    <Text style={styles.sectionTitle}>SHIP FROM ADDRESS</Text>
+                    <View style={styles.addressContainer}>
+                        <TouchableOpacity
+                            style={styles.countryPickerItem}
+                            onPress={() => setShowCountryModal(true)}
+                        >
+                            <View style={styles.settingIconBox}>
+                                <Text style={{ fontSize: 20 }}>
+                                    {shipping.origin_country ? getCountryFlag(shipping.origin_country) : '🌍'}
+                                </Text>
+                            </View>
+                            <View style={styles.settingContent}>
+                                <Text style={styles.settingTitle}>Origin Country</Text>
+                                <Text style={styles.settingValue}>
+                                    {shipping.origin_country || 'Select your country'}
+                                </Text>
+                            </View>
+                            <ChevronRightIcon size={20} color={Colors.neutral[400]} />
+                        </TouchableOpacity>
+
+                        <View style={styles.addressForm}>
+                            <TextInput
+                                style={styles.addressInput}
+                                placeholder="Street Address (Line 1)"
+                                value={shipping.origin_street1}
+                                onChangeText={(val) => updateShipping(prev => ({ ...prev, origin_street1: val }))}
+                                placeholderTextColor={Colors.neutral[400]}
+                            />
+                            <View style={styles.addressRow}>
+                                <TextInput
+                                    style={[styles.addressInput, { flex: 2 }]}
+                                    placeholder="City"
+                                    value={shipping.origin_city}
+                                    onChangeText={(val) => updateShipping(prev => ({ ...prev, origin_city: val }))}
+                                    placeholderTextColor={Colors.neutral[400]}
+                                />
+                                <TextInput
+                                    style={[styles.addressInput, { flex: 1, borderLeftWidth: 1, borderLeftColor: '#F3F4F6' }]}
+                                    placeholder="ZIP Code"
+                                    value={shipping.origin_zip}
+                                    onChangeText={(val) => updateShipping(prev => ({ ...prev, origin_zip: val }))}
+                                    placeholderTextColor={Colors.neutral[400]}
+                                />
+                            </View>
+                            <TextInput
+                                style={[styles.addressInput, { borderTopWidth: 1, borderTopColor: '#F3F4F6' }]}
+                                placeholder="State / Province (if applicable)"
+                                value={shipping.origin_state}
+                                onChangeText={(val) => updateShipping(prev => ({ ...prev, origin_state: val }))}
+                                placeholderTextColor={Colors.neutral[400]}
+                            />
                         </View>
-                        <View style={styles.settingContent}>
-                            <Text style={styles.settingTitle}>Origin Country</Text>
-                            <Text style={styles.settingValue}>
-                                {shipping.origin_country || 'Select your country'}
-                            </Text>
+                        <View style={styles.infoBoxSub}>
+                             <InformationCircleIcon size={16} color={Colors.neutral[500]} />
+                             <Text style={styles.infoTextSub}>
+                                This address is required for accurate courier rate calculations.
+                             </Text>
                         </View>
-                        <ChevronRightIcon size={20} color={Colors.neutral[400]} />
-                    </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* ─── Processing Time ─── */}
@@ -407,81 +341,153 @@ export default function SellerShippingScreen() {
                     ))}
                 </View>
 
-                {/* ─── Carriers ─── */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>SHIPPING MODES AS A SELLER</Text>
+                    <View style={styles.settingItem}>
+                        <View style={styles.settingIconBox}>
+                            <TruckIcon size={22} color={Colors.text.primary} />
+                        </View>
+                        <View style={styles.settingContent}>
+                            <Text style={styles.settingTitle}>Home Delivery</Text>
+                            <Text style={styles.settingSubtitle}>
+                                Buyers pay platform-calculated postage at checkout. Two popular country defaults stay on.
+                            </Text>
+                        </View>
+                        <Switch
+                            value={shipping.modes.home_delivery.enabled}
+                            onValueChange={(value) => updateMode('home_delivery', value)}
+                            trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
+                            disabled={lockedHomeProviders.length > 0}
+                        />
+                    </View>
+
+                    <View style={styles.settingItem}>
+                        <View style={styles.settingIconBox}>
+                            <Text style={{ fontSize: 20 }}>📦</Text>
+                        </View>
+                        <View style={styles.settingContent}>
+                            <Text style={styles.settingTitle}>Locker / Pickup Point</Text>
+                            <Text style={styles.settingSubtitle}>Provider-specific pickup point selection with two country defaults locked on.</Text>
+                        </View>
+                        <Switch
+                            value={shipping.modes.locker_pickup.enabled}
+                            onValueChange={(value) => updateMode('locker_pickup', value)}
+                            trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
+                            disabled={lockedLockerProviders.length > 0}
+                        />
+                    </View>
+
+                    <View style={styles.settingItem}>
+                        <View style={styles.settingIconBox}>
+                            <MapPinIcon size={22} color={Colors.primary[600]} />
+                        </View>
+                        <View style={styles.settingContent}>
+                            <Text style={styles.settingTitle}>Local Pickup</Text>
+                            <Text style={styles.settingSubtitle}>Let buyers collect items in person</Text>
+                        </View>
+                        <Switch
+                            value={shipping.modes.local_pickup.enabled}
+                            onValueChange={(value) => updateMode('local_pickup', value)}
+                            trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
+                        />
+                    </View>
+
+                    {shipping.modes.local_pickup.enabled && (
+                        <View style={[styles.settingItem, styles.nestedItem]}>
+                            <View style={styles.settingContent}>
+                                <Text style={styles.settingTitle}>Pickup Location Info</Text>
+                                <Text style={styles.settingSubtitle}>General area only, not the full private address</Text>
+                                <TextInput
+                                    style={[styles.textInput, { marginTop: 8 }]}
+                                    value={shipping.pickup_location}
+                                    onChangeText={(text) => updateShipping((prev) => ({ ...prev, pickup_location: text }))}
+                                    placeholder="Enter general area for pickup"
+                                />
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                {/* ─── Providers ─── */}
                 {shipping.origin_country ? (
                     <View style={styles.section}>
                         <View style={styles.sectionHeaderRow}>
-                            <Text style={styles.sectionTitle}>SHIPPING CARRIERS</Text>
-                            <TouchableOpacity
-                                style={styles.addBtn}
-                                onPress={() => setShowAddCarrierModal(true)}
-                            >
-                                <PlusIcon size={16} color={Colors.primary[500]} />
-                                <Text style={styles.addBtnText}>Add Custom</Text>
-                            </TouchableOpacity>
+                            <Text style={styles.sectionTitle}>SHIPPING PROVIDERS</Text>
                         </View>
                         <Text style={styles.sectionSubtitle}>
-                            Toggle carriers you use, set prices per package size
+                            Default providers are selected based on popularity in the seller's country.
                         </Text>
 
-                        {shipping.carriers.map((carrier, index) => (
-                            <View key={`${carrier.name}-${index}`}>
-                                <View style={styles.carrierItem}>
-                                    <Text style={styles.carrierIcon}>{getCarrierIcon(carrier.type)}</Text>
-                                    <View style={styles.carrierContent}>
-                                        <Text style={styles.carrierName}>{carrier.name}</Text>
-                                        <Text style={styles.carrierType}>
-                                            {carrier.type === 'locker' ? 'Locker / Pickup Point' :
-                                                carrier.type === 'pickup' ? 'Store Pickup' : 'Home Delivery'}
-                                        </Text>
-                                    </View>
-                                    <Switch
-                                        value={carrier.enabled}
-                                        onValueChange={() => toggleCarrier(index)}
-                                        trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
-                                    />
-                                </View>
+                        {([
+                            {
+                                mode: 'home_delivery' as const,
+                                title: 'Home Delivery Providers',
+                                enabled: shipping.modes.home_delivery.enabled,
+                                items: providersByMode.home_delivery,
+                            },
+                            {
+                                mode: 'locker_pickup' as const,
+                                title: 'Locker / Pickup Providers',
+                                enabled: shipping.modes.locker_pickup.enabled,
+                                items: providersByMode.locker_pickup,
+                            },
+                        ]).map((group) => (
+                            <View key={group.mode} style={styles.providerGroup}>
+                                <Text style={styles.providerGroupTitle}>{group.title}</Text>
+                                {!group.enabled ? (
+                                    <Text style={styles.providerGroupHint}>Turn this mode on above to configure available providers.</Text>
+                                ) : group.items.length === 0 ? (
+                                    <Text style={styles.providerGroupHint}>
+                                        {group.mode === 'locker_pickup'
+                                            ? 'No Sendcloud-backed pickup-point providers are available for this country yet.'
+                                            : 'No suggested providers for this country yet. Add a custom provider.'}
+                                    </Text>
+                                ) : (
+                                    <>
+                                        {group.mode === 'locker_pickup' && (
+                                            <Text style={styles.providerGroupHint}>
+                                                Default providers are selected based on popularity in this country.
+                                            </Text>
+                                        )}
+                                        {group.items.map((carrier) => {
+                                        const isLockedDefault = lockedProviders.has(carrier.name);
 
-                                {/* Price Tiers (shown when enabled) */}
-                                {carrier.enabled && (
-                                    <View style={styles.priceTierContainer}>
-                                        {[
-                                            { key: 'price_small' as const, label: 'Small (S)', desc: 'Jewelry, T-shirts' },
-                                            { key: 'price_medium' as const, label: 'Medium (M)', desc: 'Shoes, Books' },
-                                            { key: 'price_large' as const, label: 'Large (L)', desc: 'Coats, Electronics' },
-                                        ].map((tier) => (
-                                            <View key={tier.key} style={styles.priceTierRow}>
-                                                <View style={styles.priceTierInfo}>
-                                                    <Text style={styles.priceTierLabel}>{tier.label}</Text>
-                                                    <Text style={styles.priceTierDesc}>{tier.desc}</Text>
-                                                </View>
-                                                <View style={styles.priceInputRow}>
-                                                    <Text style={styles.currencyPrefix}>€</Text>
-                                                    <TextInput
-                                                        style={styles.priceInput}
-                                                        value={carrier[tier.key] > 0 ? carrier[tier.key].toString() : ''}
-                                                        onChangeText={(val) => updateCarrierPrice(index, tier.key, val)}
-                                                        onBlur={saveCarrierPrice}
-                                                        keyboardType="decimal-pad"
-                                                        placeholder="0.00"
-                                                        placeholderTextColor={Colors.neutral[400]}
+                                        return (
+                                            <View key={`${group.mode}-${carrier.name}`}>
+                                                <View style={styles.carrierItem}>
+                                                    <Text style={styles.carrierIcon}>{getCarrierIcon(carrier.type)}</Text>
+                                                    <View style={styles.carrierContent}>
+                                                        <View style={styles.carrierNameRow}>
+                                                            <Text style={styles.carrierName}>{carrier.name}</Text>
+                                                            {isLockedDefault && (
+                                                                <View style={styles.defaultBadge}>
+                                                                    <Text style={styles.defaultBadgeText}>Default</Text>
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                        <Text style={styles.carrierType}>
+                                                            {carrier.type === 'locker' ? 'Locker / Pickup Point' : 'Home Delivery'}
+                                                        </Text>
+                                                    </View>
+                                                    <Switch
+                                                        value={carrier.enabled}
+                                                        onValueChange={() => toggleProvider(carrier.name)}
+                                                        trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
+                                                        disabled={isLockedDefault}
                                                     />
                                                 </View>
-                                            </View>
-                                        ))}
 
-                                        {/* Remove button for custom carriers */}
-                                        {!COUNTRY_CARRIERS[shipping.origin_country]?.some(
-                                            c => c.name === carrier.name
-                                        ) && (
-                                            <TouchableOpacity
-                                                style={styles.removeCarrierBtn}
-                                                onPress={() => removeCarrier(index)}
-                                            >
-                                                <Text style={styles.removeCarrierText}>Remove carrier</Text>
-                                            </TouchableOpacity>
-                                        )}
-                                    </View>
+                                                {carrier.enabled && isLockedDefault && (
+                                                    <View style={styles.priceTierContainer}>
+                                                        <Text style={styles.providerActionsHint}>
+                                                            Selected by default based on carrier popularity in this country.
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                        );
+                                    })}
+                                    </>
                                 )}
                             </View>
                         ))}
@@ -491,46 +497,11 @@ export default function SellerShippingScreen() {
                         <View style={styles.emptyCarrierBox}>
                             <TruckIcon size={32} color={Colors.neutral[400]} />
                             <Text style={styles.emptyCarrierText}>
-                                Select your origin country above to see suggested carriers
+                                Select your origin country above to see suggested providers
                             </Text>
                         </View>
                     </View>
                 )}
-
-                {/* ─── Local Pickup ─── */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>LOCAL PICKUP</Text>
-                    <View style={styles.settingItem}>
-                        <View style={styles.settingIconBox}>
-                            <MapPinIcon size={22} color={Colors.primary[600]} />
-                        </View>
-                        <View style={styles.settingContent}>
-                            <Text style={styles.settingTitle}>Allow Local Pickup</Text>
-                            <Text style={styles.settingSubtitle}>Let buyers collect items in person</Text>
-                        </View>
-                        <Switch
-                            value={shipping.local_pickup}
-                            onValueChange={(val) => updateField('local_pickup', val)}
-                            trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
-                        />
-                    </View>
-
-                    {shipping.local_pickup && (
-                        <View style={[styles.settingItem, styles.nestedItem]}>
-                            <View style={styles.settingContent}>
-                                <Text style={styles.settingTitle}>Pickup Location Info</Text>
-                                <Text style={styles.settingSubtitle}>General area (e.g. Berlin Mitte)</Text>
-                                <TextInput
-                                    style={[styles.textInput, { marginTop: 8 }]}
-                                    value={shipping.pickup_location}
-                                    onChangeText={(text) => setShipping(prev => ({ ...prev, pickup_location: text }))}
-                                    onBlur={() => handleSave()}
-                                    placeholder="Enter general area for pickup"
-                                />
-                            </View>
-                        </View>
-                    )}
-                </View>
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -599,7 +570,7 @@ export default function SellerShippingScreen() {
                     </View>
 
                     <FlatList
-                        data={AVAILABLE_COUNTRIES}
+                        data={AVAILABLE_ORIGIN_COUNTRIES}
                         keyExtractor={(item) => item.name}
                         contentContainerStyle={{ paddingBottom: 40 }}
                         renderItem={({ item }) => (
@@ -618,56 +589,6 @@ export default function SellerShippingScreen() {
                 </SafeAreaView>
             </Modal>
 
-            {/* ─── Add Custom Carrier Modal ─── */}
-            <Modal
-                visible={showAddCarrierModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowAddCarrierModal(false)}
-            >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowAddCarrierModal(false)}
-                >
-                    <View style={styles.bottomSheet}>
-                        <Text style={styles.bottomSheetTitle}>Add Custom Carrier</Text>
-                        <Text style={styles.bottomSheetSubtitle}>
-                            Enter the name of a carrier not on the suggested list
-                        </Text>
-
-                        <TextInput
-                            style={styles.customCarrierInput}
-                            value={customCarrierName}
-                            onChangeText={setCustomCarrierName}
-                            placeholder="e.g. FedEx, TNT, Local Courier"
-                            placeholderTextColor={Colors.neutral[400]}
-                            autoFocus
-                        />
-
-                        <TouchableOpacity
-                            style={[
-                                styles.addCarrierConfirmBtn,
-                                !customCarrierName.trim() && styles.addCarrierConfirmBtnDisabled,
-                            ]}
-                            onPress={addCustomCarrier}
-                            disabled={!customCarrierName.trim()}
-                        >
-                            <Text style={styles.addCarrierConfirmText}>Add Carrier</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.closeBtn}
-                            onPress={() => {
-                                setCustomCarrierName('');
-                                setShowAddCarrierModal(false);
-                            }}
-                        >
-                            <Text style={styles.closeBtnText}>Cancel</Text>
-                        </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
         </SafeAreaView>
     );
 }
@@ -703,6 +624,19 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         color: '#111827',
+    },
+    headerSaveButton: {
+        minWidth: 48,
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+    },
+    headerSaveText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: Colors.primary[500],
+    },
+    headerSaveTextDisabled: {
+        color: Colors.neutral[300],
     },
     scrollContent: {
         paddingBottom: 40,
@@ -823,6 +757,11 @@ const styles = StyleSheet.create({
     carrierContent: {
         flex: 1,
     },
+    carrierNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     carrierName: {
         fontSize: 15,
         fontWeight: '600',
@@ -835,12 +774,45 @@ const styles = StyleSheet.create({
     },
 
     // ─── Price Tiers ───
+    providerGroup: {
+        marginBottom: 16,
+    },
+    providerGroupTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#374151',
+        paddingHorizontal: 20,
+        marginBottom: 4,
+    },
+    providerGroupHint: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        paddingHorizontal: 20,
+        marginBottom: 8,
+    },
     priceTierContainer: {
         backgroundColor: '#F9FAFB',
         paddingHorizontal: 20,
         paddingVertical: 8,
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
+    },
+    providerActionsHint: {
+        fontSize: 11,
+        color: '#6B7280',
+        lineHeight: 16,
+        paddingVertical: 8,
+    },
+    defaultBadge: {
+        backgroundColor: '#EEF2FF',
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    defaultBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#4F46E5',
     },
     priceTierRow: {
         flexDirection: 'row',
@@ -940,6 +912,31 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 24,
     },
+    modePickerRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 16,
+    },
+    modePickerPill: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 999,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    modePickerPillActive: {
+        backgroundColor: Colors.primary[500],
+        borderColor: Colors.primary[500],
+    },
+    modePickerPillText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#6B7280',
+    },
+    modePickerPillTextActive: {
+        color: '#FFF',
+    },
     sheetItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1023,5 +1020,51 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '500',
         color: '#111827',
+    },
+
+    // ─── Address Form ───
+    addressContainer: {
+        marginHorizontal: 16,
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    countryPickerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#F3F4F6',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+    },
+    addressForm: {
+        padding: 4,
+    },
+    addressInput: {
+        padding: 12,
+        fontSize: 14,
+        color: '#111827',
+    },
+    addressRow: {
+        flexDirection: 'row',
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+    },
+    infoBoxSub: {
+        flexDirection: 'row',
+        padding: 12,
+        backgroundColor: '#F9FAFB',
+        alignItems: 'center',
+        gap: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+    },
+    infoTextSub: {
+        fontSize: 11,
+        color: '#6B7280',
+        flex: 1,
     },
 });

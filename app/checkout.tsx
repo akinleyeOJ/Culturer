@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -19,7 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MagnifyingGlassIcon, XMarkIcon, ChevronDownIcon } from 'react-native-heroicons/outline';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
+import { useRouter, useNavigation, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Colors } from '../constants/color';
 import CustomButton from '../components/Button';
 import { useCart } from '../contexts/CartContext';
@@ -27,12 +27,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { fetchCart, clearCart, CartItem } from '../lib/services/cartService';
 import { trackProductSale } from '../lib/services/productService';
+import { type PickupPointResult, type PickupPointSearchContext } from '../lib/services/pickupPointService';
 import {
     detectShippingZone,
     WEIGHT_TIER_GRAMS,
     formatWeight,
-    getCarrierPrice,
+    getIntegratedRate,
     getEnabledCarriers,
+    hydrateShippingConfig,
+    buildLocalPickupOption,
+    sortProvidersByPreference,
     sellerShipsToZone,
     type ShippingZone,
     type WeightTier,
@@ -56,6 +60,11 @@ import {
 } from 'react-native-heroicons/outline';
 import { CheckCircleIcon as CheckCircleSolid } from 'react-native-heroicons/solid';
 import { CardField, useStripe } from '@stripe/stripe-react-native';
+import {
+    clearPickupPointSelectionState,
+    getPickupPointSelectionState,
+    setPickupPointSelectionState,
+} from '../lib/pickupPointSelectionStore';
 
 const COUNTRIES = [
     { name: "Austria", flag: "🇦🇹" }, { name: "Belgium", flag: "🇧🇪" }, { name: "Bulgaria", flag: "🇧🇬" },
@@ -85,6 +94,48 @@ interface Address {
     lastName: string;
     label?: string; // e.g. "Home", "Office"
 }
+
+const LIVE_SHIPPING_APIS_ENABLED =
+    process.env.EXPO_PUBLIC_ENABLE_LIVE_SHIPPING_APIS === 'true' ||
+    (!__DEV__ && process.env.EXPO_PUBLIC_ENABLE_LIVE_SHIPPING_APIS !== 'false');
+
+const getCheapestShippoRate = (rates: ShippoRate[]) =>
+    [...rates].sort((a, b) => Number(a.amount) - Number(b.amount))[0] || null;
+
+const normalizeProviderName = (value: string) =>
+    value
+        .toLowerCase()
+        .replace(/[()/]/g, ' ')
+        .replace(/\b(locker|pickup|pick up|servicepoint|service point|access point|parcelshop|packstation|home delivery|delivery)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+const shippoRateMatchesProvider = (rate: ShippoRate, providerName: string) => {
+    const normalizedRateProvider = normalizeProviderName(rate.provider);
+    const normalizedProvider = normalizeProviderName(providerName);
+
+    return (
+        normalizedRateProvider.includes(normalizedProvider) ||
+        normalizedProvider.includes(normalizedRateProvider)
+    );
+};
+
+const buildShippoRequestSignature = (params: {
+    sellerId: string;
+    buyerCountry: string;
+    buyerCity: string;
+    buyerZip: string;
+    buyerAddress1: string;
+    totalWeightGrams: number;
+}) =>
+    [
+        params.sellerId,
+        params.buyerCountry.trim().toLowerCase(),
+        params.buyerCity.trim().toLowerCase(),
+        params.buyerZip.trim().toLowerCase(),
+        params.buyerAddress1.trim().toLowerCase(),
+        params.totalWeightGrams,
+    ].join('|');
 
 const Checkout = () => {
     const router = useRouter();
@@ -127,9 +178,9 @@ const Checkout = () => {
     const [cartWeightTier, setCartWeightTier] = useState<WeightTier>('medium');
 
     // Locker Selection State
+    const [selectedLocker, setSelectedLocker] = useState<PickupPointResult | null>(null);
     const [lockerSearch, setLockerSearch] = useState('');
-    const [selectedLocker, setSelectedLocker] = useState<{ id: string; address: string; hint: string } | null>(null);
-    const [lockerResults, setLockerResults] = useState<{ id: string; address: string; hint: string }[]>([]);
+    const [lockerSearchContext, setLockerSearchContext] = useState<PickupPointSearchContext | null>(null);
 
     // Shippo Rates State
     const [shippoRates, setShippoRates] = useState<ShippoRate[]>([]);
@@ -153,6 +204,8 @@ const Checkout = () => {
     // Filter/Modal State
     const [showCountryPicker, setShowCountryPicker] = useState(false);
     const [searchCountry, setSearchCountry] = useState('');
+    const shippoRequestSignatureRef = useRef<string | null>(null);
+    const shippoRateCacheRef = useRef<Map<string, { rates: ShippoRate[]; shipmentId: string | null }>>(new Map());
 
     // Promo Code State
     const [promoCode, setPromoCode] = useState('');
@@ -163,6 +216,47 @@ const Checkout = () => {
     const [savedCards, setSavedCards] = useState<any[]>([]);
     const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null);
     const [loadingCards, setLoadingCards] = useState(false);
+
+    const enabledHomeProviders = useMemo(
+        () => (sellerShipping ? getEnabledCarriers(sellerShipping, 'home_delivery') : []),
+        [sellerShipping]
+    );
+
+    const enabledLockerProviders = useMemo(
+        () => (sellerShipping ? getEnabledCarriers(sellerShipping, 'locker_pickup') : []),
+        [sellerShipping]
+    );
+
+    const localPickupOption = useMemo(
+        () => (sellerShipping ? buildLocalPickupOption(sellerShipping) : null),
+        [sellerShipping]
+    );
+
+    const filteredShippoRates = useMemo(() => {
+        if (shippoRates.length === 0 || enabledHomeProviders.length === 0) return [];
+        return shippoRates.filter((rate) =>
+            enabledHomeProviders.some((provider) => shippoRateMatchesProvider(rate, provider.name))
+        );
+    }, [shippoRates, enabledHomeProviders]);
+
+    const integratedCarrierOptions = useMemo(() => {
+        if (!sellerShipping) return [];
+
+        const preferredLockerProviders = sortProvidersByPreference(
+            enabledLockerProviders,
+            sellerShipping.modes.locker_pickup.preferred_carriers
+        );
+        const preferredHomeProviders = sortProvidersByPreference(
+            enabledHomeProviders,
+            sellerShipping.modes.home_delivery.preferred_carriers
+        );
+
+        return [
+            ...(filteredShippoRates.length === 0 ? preferredHomeProviders : []),
+            ...preferredLockerProviders,
+            ...(localPickupOption ? [localPickupOption] : []),
+        ];
+    }, [sellerShipping, enabledHomeProviders, enabledLockerProviders, localPickupOption, filteredShippoRates]);
 
     // Fetch Saved Cards
     const fetchSavedCards = async () => {
@@ -447,15 +541,8 @@ const Checkout = () => {
                     .single();
 
                 if (!error && (profile as any)?.shop_shipping) {
-                    const config = (profile as any).shop_shipping as SellerShippingConfig;
+                    const config = hydrateShippingConfig((profile as any).shop_shipping as SellerShippingConfig);
                     setSellerShipping(config);
-
-                    // Auto-select first enabled carrier
-                    const enabledCarriers = getEnabledCarriers(config);
-                    if (enabledCarriers.length > 0 && !selectedCarrier) {
-                        setSelectedCarrier(enabledCarriers[0]);
-                        setShippingMethod('carrier');
-                    }
                 }
             } catch (err) {
                 console.error('Error fetching seller shipping config:', err);
@@ -471,6 +558,41 @@ const Checkout = () => {
         const zone = detectShippingZone(sellerShipping.origin_country, country);
         setShippingZone(zone);
     }, [country, sellerShipping]);
+
+    useEffect(() => {
+        if (selectedCarrier && !integratedCarrierOptions.some((carrier) => carrier.name === selectedCarrier.name)) {
+            setSelectedCarrier(null);
+            setSelectedLocker(null);
+            setLockerSearch('');
+            setLockerSearchContext(null);
+            clearPickupPointSelectionState();
+        }
+    }, [integratedCarrierOptions, selectedCarrier]);
+
+    useEffect(() => {
+        if (selectedShippoRate && !filteredShippoRates.some((rate) => rate.object_id === selectedShippoRate.object_id)) {
+            setSelectedShippoRate(null);
+        }
+    }, [filteredShippoRates, selectedShippoRate]);
+
+    useEffect(() => {
+        if (filteredShippoRates.length > 0) {
+            if (!selectedShippoRate && !selectedCarrier) {
+                setSelectedShippoRate(getCheapestShippoRate(filteredShippoRates));
+                setShippingMethod('carrier');
+            }
+
+            if (selectedCarrier?.type === 'home') {
+                setSelectedCarrier(null);
+            }
+            return;
+        }
+
+        if (!selectedShippoRate && integratedCarrierOptions.length > 0 && !selectedCarrier) {
+            setSelectedCarrier(integratedCarrierOptions[0]);
+            setShippingMethod('carrier');
+        }
+    }, [filteredShippoRates, integratedCarrierOptions, selectedShippoRate, selectedCarrier]);
 
     // ─── Weight Calculation ───
     useEffect(() => {
@@ -599,6 +721,185 @@ const Checkout = () => {
         }
     };
 
+    // ─── Shippo Live Rate Fetching ───
+    const refreshShippoRates = async () => {
+        if (
+            !LIVE_SHIPPING_APIS_ENABLED ||
+            !zipCode.trim() ||
+            !country.trim() ||
+            !city.trim() ||
+            address1.trim().length < 5 ||
+            cartItems.length === 0
+        ) {
+            setShippoRates([]);
+            return;
+        }
+
+        try {
+            // 1. Get Seller's Origin Address
+            const sellerId = cartItems[0]?.product?.seller_id;
+            if (!sellerId || sellerId === 'system') {
+                return;
+            }
+
+            const { data: profile } = await supabase
+                .from('profiles' as any)
+                .select('shop_shipping')
+                .eq('id', sellerId)
+                .single();
+
+            const shopShipping = (profile as any)?.shop_shipping;
+            const normalizedShipping = hydrateShippingConfig(shopShipping as SellerShippingConfig | null);
+
+            const originAddress = {
+                street: normalizedShipping.origin_street1 || '',
+                city: normalizedShipping.origin_city || '',
+                state: normalizedShipping.origin_state || '',
+                zip: normalizedShipping.origin_zip || '',
+                country: normalizedShipping.origin_country || ''
+            };
+
+            if (
+                !normalizedShipping.modes.home_delivery.enabled ||
+                !originAddress.street ||
+                !originAddress.city ||
+                !originAddress.zip ||
+                !originAddress.country
+            ) {
+                setShippoRates([]);
+                return;
+            }
+
+            const requestSignature = buildShippoRequestSignature({
+                sellerId,
+                buyerCountry: country,
+                buyerCity: city,
+                buyerZip: zipCode,
+                buyerAddress1: address1,
+                totalWeightGrams: totalWeightGrams || 500,
+            });
+
+            if (shippoRequestSignatureRef.current === requestSignature) {
+                return;
+            }
+
+            const cached = shippoRateCacheRef.current.get(requestSignature);
+            if (cached) {
+                shippoRequestSignatureRef.current = requestSignature;
+                setShippoRates(cached.rates);
+                setShippoShipmentId(cached.shipmentId);
+                return;
+            }
+
+            // ISO Country Mapping (Shippo requires 2-letter codes)
+            const getISOCode = (name: string) => {
+                const map: Record<string, string> = {
+                    'Poland': 'PL', 'Germany': 'DE', 'France': 'FR', 'United Kingdom': 'GB',
+                    'Italy': 'IT', 'Spain': 'ES', 'Netherlands': 'NL', 'Belgium': 'BE',
+                    'Portugal': 'PT', 'Austria': 'AT', 'Sweden': 'SE', 'Denmark': 'DK',
+                    'Ireland': 'IE', 'Bulgaria': 'BG', 'Croatia': 'HR', 'Cyprus': 'CY',
+                    'Czech Republic': 'CZ', 'Estonia': 'EE', 'Finland': 'FI', 'Greece': 'GR',
+                    'Hungary': 'HU', 'Latvia': 'LV', 'Lithuania': 'LT', 'Luxembourg': 'LU',
+                    'Malta': 'MT', 'Romania': 'RO', 'Slovakia': 'SK', 'Slovenia': 'SI'
+                };
+                return map[name] || name;
+            };
+
+            // 2. Prepare Addresses
+            const addressTo = {
+                name: `${firstName} ${lastName}`.trim() || 'Buyer',
+                street1: address1,
+                street2: address2,
+                city: city,
+                state: '', 
+                zip: zipCode,
+                country: getISOCode(country),
+                phone: phone,
+            };
+
+            const addressFrom = {
+                name: cartItems[0]?.product?.seller_name || 'Seller',
+                street1: originAddress.street,
+                city: originAddress.city,
+                state: originAddress.state,
+                zip: originAddress.zip,
+                country: getISOCode(originAddress.country),
+            };
+
+            console.log('[Shippo] Refreshing rates...', { from: addressFrom.city, to: addressTo.city, zip: addressTo.zip });
+
+            // 3. Prepare Parcels
+            const parcels: ShippoParcel[] = [{
+                length: 10,
+                width: 10,
+                height: 10,
+                distance_unit: 'cm',
+                weight: totalWeightGrams || 500,
+                mass_unit: 'g',
+            }];
+
+            // 4. Fetch Rates
+            setLoadingRates(true);
+            const result = await fetchShippingRates(addressTo as any, addressFrom as any, parcels);
+            if (result.success && result.rates) {
+                shippoRequestSignatureRef.current = requestSignature;
+                shippoRateCacheRef.current.set(requestSignature, {
+                    rates: result.rates,
+                    shipmentId: result.shipmentId || null,
+                });
+                setShippoRates(result.rates);
+                setShippoShipmentId(result.shipmentId || null);
+                
+                // If shippo rates found, default to 'carrier' method if nothing selected
+                if (result.rates.length > 0 && shippingMethod !== 'carrier') {
+                    // Don't auto-switch if they already picked something? 
+                    // Actually, let's just let them pick.
+                }
+            } else {
+                shippoRequestSignatureRef.current = requestSignature;
+                setShippoRates([]);
+                console.error('Failed to fetch Shippo rates:', result.error);
+            }
+        } catch (err) {
+            console.error('Error in refreshShippoRates:', err);
+            setShippoRates([]);
+        } finally {
+            setLoadingRates(false);
+        }
+    };
+
+    // Debounced trigger for Shippo Rates
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (
+                step === 1 &&
+                LIVE_SHIPPING_APIS_ENABLED &&
+                zipCode.trim().length >= 3 &&
+                city.trim().length >= 2 &&
+                address1.trim().length >= 5 &&
+                country.trim().length >= 2 &&
+                cartItems.length > 0
+            ) {
+                refreshShippoRates();
+            }
+        }, 1800);
+
+        return () => clearTimeout(timer);
+    }, [zipCode, country, city, address1, cartItems, step, totalWeightGrams]);
+
+    useFocusEffect(() => {
+        const pickupState = getPickupPointSelectionState();
+        if (
+            pickupState.carrierName &&
+            selectedCarrier?.type === 'locker' &&
+            pickupState.carrierName === selectedCarrier.name
+        ) {
+            setSelectedLocker(pickupState.selection);
+            setLockerSearch(pickupState.search);
+            setLockerSearchContext(pickupState.context);
+        }
+    });
+
     const handleDeleteAddress = async () => {
         if (!user || selectedAddressIndex === null) return;
 
@@ -628,7 +929,9 @@ const Checkout = () => {
         if (selectedShippoRate) {
             shippingCost = Number(selectedShippoRate.amount);
         } else if (selectedCarrier) {
-            shippingCost = getCarrierPrice(selectedCarrier, cartWeightTier);
+            shippingCost = selectedCarrier.type === 'pickup'
+                ? 0
+                : getIntegratedRate(selectedCarrier.mode, shippingZone, cartWeightTier);
         } else if (shippingMethod === 'express') {
             shippingCost = 15.00;
         }
@@ -653,7 +956,7 @@ const Checkout = () => {
         const total = Math.max(0, subtotal + shippingCost + tax - discountAmount);
 
         return { subtotal, shippingCost, tax, discount: discountAmount, total };
-    }, [cartItems, shippingMethod, appliedDiscount, selectedCarrier, cartWeightTier]);
+    }, [cartItems, shippingMethod, appliedDiscount, selectedCarrier, cartWeightTier, selectedShippoRate, shippingZone]);
 
     // Formatters
     const formatCardNumber = (text: string) => {
@@ -777,9 +1080,9 @@ const Checkout = () => {
             const hasBasicInfo = !!(email && address1 && city && zipCode && firstName && lastName && country && phone);
             if (!hasBasicInfo) return false;
 
-            if (sellerShipping && getEnabledCarriers(sellerShipping).length > 0) {
-                if (!selectedCarrier) return false;
-                if (selectedCarrier.type === 'locker' && !selectedLocker) return false;
+            if (filteredShippoRates.length > 0 || integratedCarrierOptions.length > 0) {
+                if (!selectedShippoRate && !selectedCarrier) return false;
+                if (selectedCarrier?.type === 'locker' && !selectedLocker) return false;
             } else {
                 if (!shippingMethod) return false;
             }
@@ -806,14 +1109,14 @@ const Checkout = () => {
             }
 
             // 2. Shipping Method Validation
-            if (sellerShipping && getEnabledCarriers(sellerShipping).length > 0) {
-                if (!selectedCarrier) {
-                    Alert.alert('Carrier Selection', 'Please select a shipping carrier for your order.');
+            if (filteredShippoRates.length > 0 || integratedCarrierOptions.length > 0) {
+                if (!selectedShippoRate && !selectedCarrier) {
+                    Alert.alert('Carrier Selection', 'Please select a shipping option for your order.');
                     return;
                 }
 
                 // Locker validation
-                if (selectedCarrier.type === 'locker' && !selectedLocker) {
+                if (selectedCarrier?.type === 'locker' && !selectedLocker) {
                     Alert.alert('Pickup Point', 'Please select a pickup point/locker for this carrier.');
                     return;
                 }
@@ -966,7 +1269,32 @@ const Checkout = () => {
                     // Update shipping info if changed during resume
                     await supabase.from('orders' as any).update({
                         shipping_address: shippingAddressObj,
-                        payment_method: selectedPaymentMethod
+                        payment_method: selectedPaymentMethod,
+                        carrier_name: selectedShippoRate ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}` : (selectedCarrier?.name || null),
+                        shipping_method_details: (selectedCarrier || selectedShippoRate) ? {
+                            carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || 'Manual'),
+                            type: selectedShippoRate
+                                ? 'home_delivery'
+                                : selectedCarrier?.type === 'locker'
+                                    ? 'locker_pickup'
+                                    : selectedCarrier?.type === 'pickup'
+                                        ? 'local_pickup'
+                                        : 'home_delivery',
+                            pricing_mode: selectedShippoRate
+                                ? 'integrated_live'
+                                : selectedCarrier?.type === 'pickup'
+                                    ? 'local_pickup'
+                                    : 'integrated_table',
+                            weight_tier: cartWeightTier,
+                            total_weight_grams: totalWeightGrams,
+                            handling_fee: 0,
+                            shippo_rate_id: selectedShippoRate?.object_id || null,
+                            shippo_shipment_id: shippoShipmentId || null,
+                            locker: (selectedCarrier?.type === 'locker' && selectedLocker) ? {
+                                id: selectedLocker.id,
+                                address: selectedLocker.address,
+                            } : null
+                        } : null,
                     }).eq('id', orderIdToUse);
                 }
             }
@@ -987,9 +1315,21 @@ const Checkout = () => {
                     shipping_zone: shippingZone,
                     shipping_method_details: (selectedCarrier || selectedShippoRate) ? {
                         carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || 'Manual'),
-                        type: selectedShippoRate ? 'courier' : (selectedCarrier?.type || 'home'),
+                        type: selectedShippoRate
+                            ? 'home_delivery'
+                            : selectedCarrier?.type === 'locker'
+                                ? 'locker_pickup'
+                                : selectedCarrier?.type === 'pickup'
+                                    ? 'local_pickup'
+                                    : 'home_delivery',
+                        pricing_mode: selectedShippoRate
+                            ? 'integrated_live'
+                            : selectedCarrier?.type === 'pickup'
+                                ? 'local_pickup'
+                                : 'integrated_table',
                         weight_tier: cartWeightTier,
                         total_weight_grams: totalWeightGrams,
+                        handling_fee: 0,
                         shippo_rate_id: selectedShippoRate?.object_id || null,
                         shippo_shipment_id: shippoShipmentId || null,
                         locker: selectedCarrier?.type === 'locker' && selectedLocker ? {
@@ -1368,16 +1708,32 @@ const Checkout = () => {
                     </View>
                 )}
 
+                {!LIVE_SHIPPING_APIS_ENABLED && sellerShipping?.modes.home_delivery.enabled && (
+                    <View style={styles.apiCostHintBox}>
+                        <Text style={styles.apiCostHintText}>
+                            Live courier quotes are off in this environment. Platform postage will fall back to standard integrated rates at checkout.
+                        </Text>
+                    </View>
+                )}
+
+                {sellerShipping && (
+                    <View style={styles.apiCostHintBox}>
+                        <Text style={styles.apiCostHintText}>
+                            Buyers always pay postage. The platform calculates the shipping amount at checkout based on parcel size, route, and delivery option.
+                        </Text>
+                    </View>
+                )}
+
                 {/* Shippo Live Rates */}
                 {loadingRates ? (
                     <View style={styles.loadingRatesBox}>
                         <ActivityIndicator color={Colors.primary[500]} size="small" />
                         <Text style={styles.loadingRatesText}>Fetching live courier rates...</Text>
                     </View>
-                ) : shippoRates.length > 0 && (
+                ) : filteredShippoRates.length > 0 && (
                     <View style={{ marginBottom: 16 }}>
-                        <Text style={styles.subSectionTitle}>Courier Delivery (Powered by Shippo)</Text>
-                        {shippoRates.map((rate) => {
+                        <Text style={styles.subSectionTitle}>Home Delivery</Text>
+                        {filteredShippoRates.map((rate) => {
                             const isSelected = selectedShippoRate?.object_id === rate.object_id;
                             return (
                                 <TouchableOpacity
@@ -1386,7 +1742,11 @@ const Checkout = () => {
                                     onPress={() => {
                                         setSelectedShippoRate(rate);
                                         setShippingMethod('carrier');
-                                        setSelectedCarrier(null); // Clear manual carrier
+                                        setSelectedCarrier(null);
+                                        setSelectedLocker(null);
+                                        setLockerSearch('');
+                                        setLockerSearchContext(null);
+                                        clearPickupPointSelectionState();
                                     }}
                                 >
                                     <View style={styles.radioRow}>
@@ -1395,11 +1755,13 @@ const Checkout = () => {
                                         </View>
                                         <View>
                                             <Text style={styles.radioTitle}>{rate.provider} {rate.servicelevel.name}</Text>
-                                            <Text style={styles.radioSubtitle}>Est. {rate.estimated_days} days</Text>
+                                            <Text style={styles.radioSubtitle}>
+                                                Buyer-paid integrated postage • Est. {rate.estimated_days} days
+                                            </Text>
                                         </View>
                                     </View>
                                     <Text style={styles.radioPrice}>
-                                        {rate.currency} {rate.amount}
+                                        {rate.currency} {Number(rate.amount).toFixed(2)}
                                     </Text>
                                 </TouchableOpacity>
                             );
@@ -1407,12 +1769,16 @@ const Checkout = () => {
                     </View>
                 )}
 
-                {/* Seller Manual Carriers (from seller config) */}
-                {sellerShipping && getEnabledCarriers(sellerShipping).length > 0 && (
+                {/* Integrated pickup and fallback home options */}
+                {integratedCarrierOptions.length > 0 && (
                     <>
-                        <Text style={styles.subSectionTitle}>Carrier Options</Text>
-                        {getEnabledCarriers(sellerShipping).map((carrier) => {
-                            const price = getCarrierPrice(carrier, cartWeightTier);
+                        <Text style={styles.subSectionTitle}>
+                            {filteredShippoRates.length > 0 ? 'Pickup & Local Options' : 'Integrated Delivery Options'}
+                        </Text>
+                        {integratedCarrierOptions.map((carrier) => {
+                            const price = carrier.type === 'pickup'
+                                ? 0
+                                : getIntegratedRate(carrier.mode, shippingZone, cartWeightTier);
                             const isSelected = selectedCarrier?.name === carrier.name;
                             return (
                                 <TouchableOpacity
@@ -1420,7 +1786,14 @@ const Checkout = () => {
                                     style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
                                     onPress={() => {
                                         setSelectedCarrier(carrier);
+                                        setSelectedShippoRate(null);
                                         setShippingMethod('carrier');
+                                        if (carrier.type !== 'locker') {
+                                            setSelectedLocker(null);
+                                            setLockerSearch('');
+                                            setLockerSearchContext(null);
+                                            clearPickupPointSelectionState();
+                                        }
                                     }}
                                 >
                                     <View style={styles.radioRow}>
@@ -1431,7 +1804,11 @@ const Checkout = () => {
                                             <Text style={styles.radioTitle}>{carrier.name}</Text>
                                             <Text style={styles.radioSubtitle}>
                                                 {carrier.type === 'locker' ? 'Locker / Pickup Point' :
-                                                    carrier.type === 'pickup' ? 'Store Pickup' : 'Home Delivery'}
+                                                    carrier.type === 'pickup'
+                                                        ? (sellerShipping?.pickup_location
+                                                            ? `Collect in person • ${sellerShipping.pickup_location}`
+                                                            : 'Store Pickup')
+                                                        : 'Home Delivery'}
                                             </Text>
                                         </View>
                                     </View>
@@ -1445,11 +1822,19 @@ const Checkout = () => {
                 )}
 
                 {/* Legacy Fallback if NO carriers and NO shippo rates */}
-                {!sellerShipping && shippoRates.length === 0 && (
+                {!sellerShipping && filteredShippoRates.length === 0 && (
                     <>
                         <TouchableOpacity
                             style={[styles.radioOption, shippingMethod === 'standard' && styles.radioOptionSelected]}
-                            onPress={() => { setShippingMethod('standard'); setSelectedCarrier(null); }}
+                            onPress={() => {
+                                setShippingMethod('standard');
+                                setSelectedCarrier(null);
+                                setSelectedShippoRate(null);
+                                setSelectedLocker(null);
+                                setLockerSearch('');
+                                setLockerSearchContext(null);
+                                clearPickupPointSelectionState();
+                            }}
                         >
                             <View style={styles.radioRow}>
                                 <View style={styles.radioCircle}>
@@ -1465,7 +1850,15 @@ const Checkout = () => {
 
                         <TouchableOpacity
                             style={[styles.radioOption, shippingMethod === 'express' && styles.radioOptionSelected]}
-                            onPress={() => { setShippingMethod('express'); setSelectedCarrier(null); }}
+                            onPress={() => {
+                                setShippingMethod('express');
+                                setSelectedCarrier(null);
+                                setSelectedShippoRate(null);
+                                setSelectedLocker(null);
+                                setLockerSearch('');
+                                setLockerSearchContext(null);
+                                clearPickupPointSelectionState();
+                            }}
                         >
                             <View style={styles.radioRow}>
                                 <View style={styles.radioCircle}>
@@ -1485,59 +1878,43 @@ const Checkout = () => {
                 {selectedCarrier?.type === 'locker' && (
                     <View style={styles.lockerSection}>
                         <Text style={styles.lockerTitle}>📮 Select Pickup Point</Text>
-                        <Text style={styles.lockerSubtitle}>Search by city or zip code to find available lockers</Text>
-                        
-                        <View style={styles.lockerSearchRow}>
-                            <MagnifyingGlassIcon size={18} color="#9CA3AF" />
-                            <TextInput
-                                style={styles.lockerSearchInput}
-                                placeholder={`Search ${selectedCarrier.name} lockers...`}
-                                placeholderTextColor="#9CA3AF"
-                                value={lockerSearch}
-                                onChangeText={(text: string) => {
-                                    setLockerSearch(text);
-                                    if (text.trim().length >= 2) {
-                                        const prefix = selectedCarrier.name.toUpperCase().slice(0, 3);
-                                        const searchCity = text.trim();
-                                        // Dynamically generate 5 lockers based on whatever they type
-                                        const mockLockers = [
-                                            { id: `${prefix}001`, address: `${searchCity}, Main Street 15`, hint: 'Near the shopping centre entrance' },
-                                            { id: `${prefix}002`, address: `${searchCity}, Station Road 8`, hint: 'Next to the train station' },
-                                            { id: `${prefix}003`, address: `${searchCity}, Market Square 3`, hint: 'By the supermarket parking lot' },
-                                            { id: `${prefix}004`, address: `${searchCity}, Park Avenue 22`, hint: 'Opposite the park gate' },
-                                            { id: `${prefix}005`, address: `${searchCity}, University Lane 1`, hint: 'Inside the campus lobby' },
-                                        ];
-                                        setLockerResults(mockLockers);
-                                    } else {
-                                        setLockerResults([]);
-                                    }
-                                }}
-                                autoCorrect={false}
-                            />
-                        </View>
+                        <Text style={styles.lockerSubtitle}>Open a separate search screen to find pickup points near the typed location.</Text>
 
-                        {/* Locker Results */}
-                        {lockerResults.map((locker) => (
-                            <TouchableOpacity
-                                key={locker.id}
-                                style={[
-                                    styles.lockerItem,
-                                    selectedLocker?.id === locker.id && styles.lockerItemSelected,
-                                ]}
-                                onPress={() => setSelectedLocker(locker)}
-                            >
-                                <View style={styles.lockerItemContent}>
-                                    <Text style={styles.lockerId}>{locker.id}</Text>
-                                    <Text style={styles.lockerAddress}>{locker.address}</Text>
-                                    <Text style={styles.lockerHint}>{locker.hint}</Text>
+                        <TouchableOpacity
+                            style={styles.pickupLauncher}
+                            onPress={() => {
+                                setPickupPointSelectionState({
+                                    carrierName: selectedCarrier.name,
+                                    selection: selectedLocker,
+                                    search: lockerSearch,
+                                    context: lockerSearchContext,
+                                });
+                                router.push({
+                                    pathname: '/pickup-points',
+                                    params: {
+                                        carrierName: selectedCarrier.name,
+                                        address1,
+                                        city,
+                                        zipCode,
+                                        country,
+                                    },
+                                } as any);
+                            }}
+                        >
+                            <View style={styles.pickupLauncherRow}>
+                                <View style={styles.pickupLauncherCopy}>
+                                    <Text style={styles.pickupLauncherTitle}>
+                                        {selectedLocker ? 'Change Pickup Point' : 'Select Pickup Point'}
+                                    </Text>
+                                    <Text style={styles.pickupLauncherSubtitle}>
+                                        {selectedLocker
+                                            ? `${selectedLocker.id} • ${selectedLocker.address}`
+                                            : `Search ${selectedCarrier.name} pickup points near the buyer's delivery area`}
+                                    </Text>
                                 </View>
-                                {selectedLocker?.id === locker.id && (
-                                    <View style={styles.lockerCheck}>
-                                        <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>✓</Text>
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-                        ))}
+                                <ChevronDownIcon size={18} color={Colors.neutral[500]} style={{ transform: [{ rotate: '-90deg' }] }} />
+                            </View>
+                        </TouchableOpacity>
 
                         {/* Selected Locker Confirmation */}
                         {selectedLocker && (
@@ -1975,7 +2352,7 @@ const Checkout = () => {
                 {renderProgressBar()}
 
                 <ScrollView 
-                    keyboardShouldPersistTaps="handled" 
+                    keyboardShouldPersistTaps="always" 
                     contentContainerStyle={[styles.content, { paddingBottom: 120 }]}
                     keyboardDismissMode="on-drag"
                 >
@@ -2524,6 +2901,19 @@ const styles = StyleSheet.create({
         color: '#166534',
         lineHeight: 18,
     },
+    apiCostHintBox: {
+        backgroundColor: '#EFF6FF',
+        borderWidth: 1,
+        borderColor: '#BFDBFE',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 12,
+    },
+    apiCostHintText: {
+        fontSize: 13,
+        color: '#1D4ED8',
+        lineHeight: 18,
+    },
 
     // Locker Selection Styles
     lockerSection: {
@@ -2545,22 +2935,106 @@ const styles = StyleSheet.create({
         color: '#9CA3AF',
         marginBottom: 12,
     },
-    lockerSearchRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    pickupLauncher: {
         backgroundColor: '#FFF',
         borderWidth: 1,
         borderColor: '#E5E7EB',
         borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+        padding: 14,
+    },
+    pickupLauncherRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    pickupLauncherCopy: {
+        flex: 1,
+    },
+    pickupLauncherTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    pickupLauncherSubtitle: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 3,
+        lineHeight: 17,
+    },
+    lockerAutocompleteWrap: {
+        position: 'relative',
+        zIndex: 30,
         marginBottom: 8,
     },
-    lockerSearchInput: {
-        flex: 1,
-        marginLeft: 8,
+    lockerSearchIcon: {
+        position: 'absolute',
+        left: 12,
+        top: 14,
+        zIndex: 2,
+    },
+    lockerAutocompleteContainer: {
+        flex: 0,
+        width: '100%',
+    },
+    lockerAutocompleteInputContainer: {
+        width: '100%',
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 10,
+    },
+    lockerAutocompleteInput: {
+        height: 46,
+        marginTop: 0,
+        marginBottom: 0,
+        paddingLeft: 34,
+        paddingRight: 12,
         fontSize: 15,
         color: '#111827',
+        backgroundColor: '#FFF',
+        borderRadius: 10,
+    },
+    lockerAutocompleteList: {
+        position: 'absolute',
+        top: 50,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        elevation: 6,
+        backgroundColor: '#FFF',
+        borderRadius: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+    },
+    lockerSearchFallbackInput: {
+        height: 46,
+        width: '100%',
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 10,
+        paddingLeft: 34,
+        paddingRight: 12,
+        fontSize: 15,
+        color: '#111827',
+    },
+    lockerAutocompleteHint: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginBottom: 8,
+    },
+    lockerStatusBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    lockerStatusText: {
+        fontSize: 13,
+        color: '#6B7280',
     },
     lockerItem: {
         flexDirection: 'row',

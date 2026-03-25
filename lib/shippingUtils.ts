@@ -1,5 +1,4 @@
-// ─── Shipping Utilities ──────────────────────────────
-// Shared logic for zone detection, weight tiers, and carrier tracking
+// Shared shipping configuration model and helpers.
 
 // EU Member States (for zone detection)
 export const EU_COUNTRIES = [
@@ -10,36 +9,483 @@ export const EU_COUNTRIES = [
     'Slovenia', 'Spain', 'Sweden',
 ];
 
-// Note: UK is NOT in the EU
-export const isEU = (country: string): boolean =>
-    EU_COUNTRIES.includes(country);
-
-// ─── Zone Detection ──────────────────────────────
 export type ShippingZone = 'domestic' | 'eu' | 'international';
+export type WeightTier = 'small' | 'medium' | 'large';
+export type CarrierType = 'home' | 'locker' | 'pickup';
+export type ShippingProviderMode = 'home_delivery' | 'locker_pickup';
+export type ShippingModeKey = ShippingProviderMode | 'local_pickup';
+
+export interface CarrierTemplate {
+    name: string;
+    type: Extract<CarrierType, 'home' | 'locker'>;
+    mode: ShippingProviderMode;
+}
+
+export interface CarrierConfig {
+    name: string;
+    type: CarrierType;
+    mode: ShippingProviderMode;
+    enabled: boolean;
+    price_small: number;
+    price_medium: number;
+    price_large: number;
+    is_custom?: boolean;
+}
+
+export interface ShippingModeConfig {
+    enabled: boolean;
+    preferred_carriers: string[];
+}
+
+export interface SellerShippingConfig {
+    processing_time: string;
+    origin_country: string;
+    origin_street1?: string;
+    origin_city?: string;
+    origin_state?: string;
+    origin_zip?: string;
+    pickup_location: string;
+    shipping_zones: ('domestic' | 'eu' | 'worldwide')[];
+    modes: {
+        home_delivery: ShippingModeConfig & {
+            use_live_rates: boolean;
+            handling_fee: number;
+        };
+        locker_pickup: ShippingModeConfig;
+        local_pickup: { enabled: boolean };
+    };
+    providers: CarrierConfig[];
+    // Legacy aliases kept for backward compatibility with older readers.
+    local_pickup: boolean;
+    carriers: CarrierConfig[];
+}
+
+export const COUNTRY_PROVIDER_TEMPLATES: Record<string, CarrierTemplate[]> = {
+    Poland: [
+        { name: 'InPost Locker 24/7', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'Poczta Polska Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'InPost Home Delivery', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'Poczta Polska', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+    ],
+    'United Kingdom': [
+        { name: 'Evri ParcelShop', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'Royal Mail', type: 'home', mode: 'home_delivery' },
+        { name: 'Evri (Hermes)', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+        { name: 'Parcelforce', type: 'home', mode: 'home_delivery' },
+        { name: 'Yodel', type: 'home', mode: 'home_delivery' },
+    ],
+    Germany: [
+        { name: 'DHL Packstation', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'Hermes PaketShop', type: 'locker', mode: 'locker_pickup' },
+        { name: 'GLS ParcelShop', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'Hermes', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'Deutsche Post', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+        { name: 'Schenker', type: 'home', mode: 'home_delivery' },
+    ],
+    Italy: [
+        { name: 'Poste Italiane Punto Poste', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'GLS ParcelShop', type: 'locker', mode: 'locker_pickup' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'BRT (Bartolini)', type: 'home', mode: 'home_delivery' },
+        { name: 'Poste Italiane', type: 'home', mode: 'home_delivery' },
+        { name: 'TNT', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+    ],
+    France: [
+        { name: 'Mondial Relay', type: 'locker', mode: 'locker_pickup' },
+        { name: 'Chronopost Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'Colissimo Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'Colissimo', type: 'home', mode: 'home_delivery' },
+        { name: 'La Poste', type: 'home', mode: 'home_delivery' },
+        { name: 'Chronopost', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+    ],
+    Spain: [
+        { name: 'Correos Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'SEUR Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'Correos', type: 'home', mode: 'home_delivery' },
+        { name: 'SEUR', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'MRW', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'NACEX', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+    ],
+    Netherlands: [
+        { name: 'PostNL Pickup Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'PostNL', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+    ],
+    Austria: [
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'Austrian Post', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'Hermes', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+    ],
+    Ireland: [
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'An Post', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'Royal Mail', type: 'home', mode: 'home_delivery' },
+        { name: 'Fastway', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+    ],
+    Sweden: [
+        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
+        { name: 'PostNord Pickup Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
+        { name: 'DHL', type: 'home', mode: 'home_delivery' },
+        { name: 'PostNord', type: 'home', mode: 'home_delivery' },
+        { name: 'UPS', type: 'home', mode: 'home_delivery' },
+        { name: 'Schenker', type: 'home', mode: 'home_delivery' },
+        { name: 'GLS', type: 'home', mode: 'home_delivery' },
+        { name: 'DPD', type: 'home', mode: 'home_delivery' },
+        { name: 'FedEx', type: 'home', mode: 'home_delivery' },
+    ],
+};
+
+export const FALLBACK_EU_PROVIDER_TEMPLATES: CarrierTemplate[] = [
+    { name: 'DHL', type: 'home', mode: 'home_delivery' },
+    { name: 'DPD', type: 'home', mode: 'home_delivery' },
+    { name: 'UPS', type: 'home', mode: 'home_delivery' },
+    { name: 'GLS', type: 'home', mode: 'home_delivery' },
+];
+
+export const AVAILABLE_ORIGIN_COUNTRIES = [
+    { name: 'Poland', flag: '🇵🇱' },
+    { name: 'United Kingdom', flag: '🇬🇧' },
+    { name: 'Germany', flag: '🇩🇪' },
+    { name: 'Italy', flag: '🇮🇹' },
+    { name: 'France', flag: '🇫🇷' },
+    { name: 'Spain', flag: '🇪🇸' },
+    { name: 'Netherlands', flag: '🇳🇱' },
+    { name: 'Austria', flag: '🇦🇹' },
+    { name: 'Belgium', flag: '🇧🇪' },
+    { name: 'Czech Republic', flag: '🇨🇿' },
+    { name: 'Denmark', flag: '🇩🇰' },
+    { name: 'Ireland', flag: '🇮🇪' },
+    { name: 'Portugal', flag: '🇵🇹' },
+    { name: 'Sweden', flag: '🇸🇪' },
+    { name: 'Romania', flag: '🇷🇴' },
+    { name: 'Hungary', flag: '🇭🇺' },
+    { name: 'Greece', flag: '🇬🇷' },
+].sort((a, b) => a.name.localeCompare(b.name));
+
+export const COUNTRY_CODE_TO_NAME: Record<string, string> = {
+    AT: 'Austria',
+    BE: 'Belgium',
+    CZ: 'Czech Republic',
+    DE: 'Germany',
+    DK: 'Denmark',
+    ES: 'Spain',
+    FR: 'France',
+    GB: 'United Kingdom',
+    GR: 'Greece',
+    HU: 'Hungary',
+    IE: 'Ireland',
+    IT: 'Italy',
+    NL: 'Netherlands',
+    PL: 'Poland',
+    PT: 'Portugal',
+    RO: 'Romania',
+    SE: 'Sweden',
+    UK: 'United Kingdom',
+};
+
+export const PROCESSING_TIMES = [
+    '1 business day',
+    '1-2 business days',
+    '3-5 business days',
+    '1-2 weeks',
+    '2-4 weeks',
+];
+
+export const ZONE_OPTIONS: { key: 'domestic' | 'eu' | 'worldwide'; label: string; desc: string }[] = [
+    { key: 'domestic', label: 'Domestic', desc: 'Ship within your country' },
+    { key: 'eu', label: 'European Union', desc: 'Ship to EU countries (no customs)' },
+    { key: 'worldwide', label: 'Worldwide', desc: 'Ship globally (customs may apply)' },
+];
+
+export const DEFAULT_SHIPPING_CONFIG: SellerShippingConfig = {
+    processing_time: '3-5 business days',
+    origin_country: '',
+    origin_street1: '',
+    origin_city: '',
+    origin_state: '',
+    origin_zip: '',
+    pickup_location: '',
+    shipping_zones: ['domestic'],
+    modes: {
+        home_delivery: {
+            enabled: false,
+            preferred_carriers: [],
+            use_live_rates: false,
+            handling_fee: 0,
+        },
+        locker_pickup: {
+            enabled: false,
+            preferred_carriers: [],
+        },
+        local_pickup: {
+            enabled: false,
+        },
+    },
+    providers: [],
+    local_pickup: false,
+    carriers: [],
+};
+
+export const INTEGRATED_POSTAGE_RATES: Record<
+    ShippingModeKey,
+    Record<ShippingZone, Record<WeightTier, number>>
+> = {
+    home_delivery: {
+        domestic: { small: 4.49, medium: 5.99, large: 7.99 },
+        eu: { small: 8.99, medium: 11.99, large: 15.99 },
+        international: { small: 14.99, medium: 19.99, large: 27.99 },
+    },
+    locker_pickup: {
+        domestic: { small: 3.49, medium: 4.49, large: 5.99 },
+        eu: { small: 6.99, medium: 8.99, large: 11.99 },
+        international: { small: 11.99, medium: 14.99, large: 19.99 },
+    },
+    local_pickup: {
+        domestic: { small: 0, medium: 0, large: 0 },
+        eu: { small: 0, medium: 0, large: 0 },
+        international: { small: 0, medium: 0, large: 0 },
+    },
+};
+
+const normalizeProviderMode = (carrier: Partial<CarrierConfig>): ShippingProviderMode =>
+    carrier.mode || (carrier.type === 'locker' ? 'locker_pickup' : 'home_delivery');
+
+const normalizeCarrier = (carrier: Partial<CarrierConfig>): CarrierConfig => ({
+    name: carrier.name || 'Unknown Carrier',
+    type: carrier.type === 'locker' ? 'locker' : carrier.type === 'pickup' ? 'pickup' : 'home',
+    mode: normalizeProviderMode(carrier),
+    enabled: !!carrier.enabled,
+    price_small: Number(carrier.price_small) || 0,
+    price_medium: Number(carrier.price_medium) || 0,
+    price_large: Number(carrier.price_large) || 0,
+    is_custom: !!carrier.is_custom,
+});
+
+export const normalizeCountryName = (country: string) => {
+    const trimmed = country.trim();
+    if (!trimmed) return '';
+
+    const codeMatch = COUNTRY_CODE_TO_NAME[trimmed.toUpperCase()];
+    if (codeMatch) return codeMatch;
+
+    const exactMatch = AVAILABLE_ORIGIN_COUNTRIES.find(
+        (item) => item.name.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    return exactMatch?.name || trimmed;
+};
+
+export const getCountryFlag = (name: string) =>
+    AVAILABLE_ORIGIN_COUNTRIES.find((country) => country.name === name)?.flag || '🌍';
+
+export const getProviderTemplatesForCountry = (country: string) => {
+    const normalizedCountry = normalizeCountryName(country);
+    if (!normalizedCountry) return [];
+
+    if (COUNTRY_PROVIDER_TEMPLATES[normalizedCountry]) {
+        return COUNTRY_PROVIDER_TEMPLATES[normalizedCountry];
+    }
+
+    const isSupportedCountry = AVAILABLE_ORIGIN_COUNTRIES.some(
+        (item) => item.name === normalizedCountry
+    );
+
+    return isSupportedCountry ? FALLBACK_EU_PROVIDER_TEMPLATES : [];
+};
+
+export const getLockedDefaultProvidersForMode = (
+    country: string,
+    mode: ShippingProviderMode
+) =>
+    getProviderTemplatesForCountry(country)
+        .filter((provider) => provider.mode === mode)
+        .slice(0, 2)
+        .map((provider) => provider.name);
+
+export const buildProviderConfigs = (country: string, existingProviders: CarrierConfig[] = []) => {
+    const templates = getProviderTemplatesForCountry(country);
+    const existingByName = new Map(existingProviders.map((provider) => [provider.name, normalizeCarrier(provider)]));
+    const hasExplicitSelections = existingProviders.some((provider) => normalizeCarrier(provider).enabled);
+    const lockedDefaults = new Set([
+        ...getLockedDefaultProvidersForMode(country, 'home_delivery'),
+        ...getLockedDefaultProvidersForMode(country, 'locker_pickup'),
+    ]);
+
+    const suggestedProviders = templates.map((template) => {
+        const existing = existingByName.get(template.name);
+        if (existing) {
+            return {
+                ...existing,
+                enabled: lockedDefaults.has(template.name) ? true : existing.enabled,
+                type: template.type,
+                mode: template.mode,
+                is_custom: false,
+            };
+        }
+
+        return {
+            name: template.name,
+            type: template.type,
+            mode: template.mode,
+            enabled: lockedDefaults.has(template.name) || !hasExplicitSelections,
+            price_small: 0,
+            price_medium: 0,
+            price_large: 0,
+            is_custom: false,
+        };
+    });
+
+    return suggestedProviders;
+};
+
+const derivePreferredCarriers = (
+    savedNames: string[] | undefined,
+    providers: CarrierConfig[],
+    mode: ShippingProviderMode
+) => {
+    const validNames = new Set(providers.filter((provider) => provider.mode === mode).map((provider) => provider.name));
+    const preferred = Array.isArray(savedNames) ? savedNames.filter((name) => validNames.has(name)) : [];
+    if (preferred.length > 0) return preferred;
+
+    return providers
+        .filter((provider) => provider.mode === mode && provider.enabled)
+        .slice(0, 2)
+        .map((provider) => provider.name);
+};
+
+export const hydrateShippingConfig = (saved?: Partial<SellerShippingConfig> | null): SellerShippingConfig => {
+    const normalizedCountry = normalizeCountryName(saved?.origin_country || DEFAULT_SHIPPING_CONFIG.origin_country);
+    const legacyProviders = Array.isArray(saved?.providers)
+        ? saved.providers
+        : Array.isArray(saved?.carriers)
+            ? saved.carriers
+            : [];
+    const providers = buildProviderConfigs(normalizedCountry, legacyProviders as CarrierConfig[]);
+
+    const savedModes = saved?.modes;
+    const hasExplicitProviderSelections = legacyProviders.some((provider) => normalizeCarrier(provider as CarrierConfig).enabled);
+    const inferredHomeEnabled = providers.some((provider) => provider.mode === 'home_delivery' && provider.enabled);
+    const inferredLockerEnabled = providers.some((provider) => provider.mode === 'locker_pickup' && provider.enabled);
+
+    const homeEnabled = !hasExplicitProviderSelections && normalizedCountry
+        ? inferredHomeEnabled
+        : (savedModes?.home_delivery?.enabled ?? inferredHomeEnabled);
+    const lockerEnabled = !hasExplicitProviderSelections && normalizedCountry
+        ? inferredLockerEnabled
+        : (savedModes?.locker_pickup?.enabled ?? inferredLockerEnabled);
+    const localPickupEnabled = savedModes?.local_pickup?.enabled ?? saved?.local_pickup ?? false;
+
+    const modes: SellerShippingConfig['modes'] = {
+        home_delivery: {
+            enabled: homeEnabled,
+            preferred_carriers: derivePreferredCarriers(savedModes?.home_delivery?.preferred_carriers, providers, 'home_delivery'),
+            use_live_rates: savedModes?.home_delivery?.use_live_rates ?? false,
+            handling_fee: Number(savedModes?.home_delivery?.handling_fee) || 0,
+        },
+        locker_pickup: {
+            enabled: lockerEnabled,
+            preferred_carriers: derivePreferredCarriers(savedModes?.locker_pickup?.preferred_carriers, providers, 'locker_pickup'),
+        },
+        local_pickup: {
+            enabled: localPickupEnabled,
+        },
+    };
+
+    return {
+        ...DEFAULT_SHIPPING_CONFIG,
+        ...saved,
+        origin_country: normalizedCountry,
+        shipping_zones: Array.isArray(saved?.shipping_zones) && saved.shipping_zones.length > 0
+            ? saved.shipping_zones
+            : ['domestic'],
+        pickup_location: saved?.pickup_location || '',
+        modes,
+        providers,
+        local_pickup: modes.local_pickup.enabled,
+        carriers: providers,
+    };
+};
+
+export const isEU = (country: string): boolean => EU_COUNTRIES.includes(country);
 
 export const detectShippingZone = (
     sellerCountry: string,
     buyerCountry: string
 ): ShippingZone => {
     if (!sellerCountry || !buyerCountry) return 'domestic';
-
-    // Same country = Domestic
     if (sellerCountry === buyerCountry) return 'domestic';
-
-    // Both in EU = EU cross-border (no customs)
     if (isEU(sellerCountry) && isEU(buyerCountry)) return 'eu';
-
-    // Everything else = International (customs may apply)
     return 'international';
 };
 
-// ─── Weight Tiers ──────────────────────────────
-export type WeightTier = 'small' | 'medium' | 'large';
-
 export const WEIGHT_TIER_GRAMS: Record<WeightTier, number> = {
-    small: 500,    // 500g
-    medium: 2000,  // 2kg
-    large: 5000,   // 5kg
+    small: 500,
+    medium: 2000,
+    large: 5000,
 };
 
 export const WEIGHT_TIER_LABELS: Record<WeightTier, string> = {
@@ -55,7 +501,6 @@ export const formatWeight = (grams: number): string => {
     return `${grams}g`;
 };
 
-// ─── Carrier Tracking URLs ──────────────────────────────
 export const getTrackingUrl = (carrier: string, trackingNumber: string): string | null => {
     const c = carrier.toLowerCase();
     if (c.includes('inpost')) return `https://inpost.pl/sledzenie-przesylek?number=${trackingNumber}`;
@@ -75,30 +520,6 @@ export const getTrackingUrl = (carrier: string, trackingNumber: string): string 
     return null;
 };
 
-// ─── Seller Carrier Config Types ──────────────────────────────
-export interface CarrierConfig {
-    name: string;
-    type: 'home' | 'locker' | 'pickup';
-    enabled: boolean;
-    price_small: number;
-    price_medium: number;
-    price_large: number;
-}
-
-export interface SellerShippingConfig {
-    processing_time: string;
-    origin_country: string;
-    origin_street1?: string;
-    origin_city?: string;
-    origin_state?: string;
-    origin_zip?: string;
-    local_pickup: boolean;
-    pickup_location: string;
-    carriers: CarrierConfig[];
-    shipping_zones: ('domestic' | 'eu' | 'worldwide')[];
-}
-
-// Get the price for a specific carrier and weight tier
 export const getCarrierPrice = (
     carrier: CarrierConfig,
     weightTier: WeightTier
@@ -111,7 +532,12 @@ export const getCarrierPrice = (
     }
 };
 
-// Check if seller ships to the detected zone
+export const getIntegratedRate = (
+    mode: ShippingModeKey,
+    zone: ShippingZone,
+    weightTier: WeightTier
+): number => INTEGRATED_POSTAGE_RATES[mode][zone][weightTier];
+
 export const sellerShipsToZone = (
     config: SellerShippingConfig,
     zone: ShippingZone
@@ -121,7 +547,49 @@ export const sellerShipsToZone = (
     return config.shipping_zones.includes('worldwide');
 };
 
-// Get enabled carriers from seller config
-export const getEnabledCarriers = (config: SellerShippingConfig): CarrierConfig[] => {
-    return config.carriers.filter(c => c.enabled);
+export const isModeEnabled = (config: SellerShippingConfig, mode: ShippingModeKey) => {
+    if (mode === 'local_pickup') return !!config.modes.local_pickup.enabled;
+    return !!config.modes[mode].enabled;
+};
+
+export const getProvidersForMode = (
+    config: SellerShippingConfig,
+    mode: ShippingProviderMode
+) => config.providers.filter((provider) => provider.mode === mode);
+
+export const getEnabledCarriers = (
+    config: SellerShippingConfig,
+    mode?: ShippingProviderMode
+): CarrierConfig[] => {
+    const providers = mode ? getProvidersForMode(config, mode) : config.providers;
+    return providers.filter((provider) => provider.enabled && isModeEnabled(config, provider.mode));
+};
+
+export const sortProvidersByPreference = (
+    providers: CarrierConfig[],
+    preferredCarriers: string[]
+) => {
+    const preferredSet = new Set(preferredCarriers);
+    return [...providers].sort((a, b) => {
+        const aPreferred = preferredSet.has(a.name);
+        const bPreferred = preferredSet.has(b.name);
+        if (aPreferred !== bPreferred) return aPreferred ? -1 : 1;
+        if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+        return a.name.localeCompare(b.name);
+    });
+};
+
+export const buildLocalPickupOption = (config: SellerShippingConfig): CarrierConfig | null => {
+    if (!config.modes.local_pickup.enabled) return null;
+
+    return {
+        name: 'Local Pickup',
+        type: 'pickup',
+        mode: 'locker_pickup',
+        enabled: true,
+        price_small: 0,
+        price_medium: 0,
+        price_large: 0,
+        is_custom: false,
+    };
 };

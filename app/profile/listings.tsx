@@ -82,13 +82,22 @@ const ListingsScreen = () => {
             groups[catId].push(item);
         });
 
-        return Object.keys(groups).map(catId => {
-            const category = CATEGORIES.find(c => c.id === catId);
-            return {
-                title: category ? category.name : catId.charAt(0).toUpperCase() + catId.slice(1),
-                data: groups[catId].sort((a, b) => new Date(b.full_data.created_at).getTime() - new Date(a.full_data.created_at).getTime())
-            };
-        }).sort((a, b) => a.title.localeCompare(b.title));
+        return Object.keys(groups)
+            .map(catId => {
+                const category = CATEGORIES.find(c => c.id === catId);
+                const data = groups[catId].sort(
+                    (a, b) => new Date(b.full_data.created_at).getTime() - new Date(a.full_data.created_at).getTime()
+                );
+
+                return {
+                    title: category ? category.name : catId.charAt(0).toUpperCase() + catId.slice(1),
+                    data,
+                    latestCreatedAt: data[0]?.full_data?.created_at || '',
+                };
+            })
+            .sort(
+                (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
+            );
     }, [allListings, searchQuery, selectedCategories, selectedStatus]);
 
     useFocusEffect(
@@ -256,6 +265,9 @@ const ListingsScreen = () => {
             </View>
 
             <View style={styles.searchContainer}>
+                <View style={styles.sortHintRow}>
+                    <Text style={styles.sortHintText}>Sorted by latest listings first</Text>
+                </View>
                 <View style={styles.searchRow}>
                     <View style={styles.searchBar}>
                         <MagnifyingGlassIcon size={20} color={Colors.neutral[400]} />
@@ -618,6 +630,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
+    },
+    sortHintRow: {
+        marginBottom: 10,
+    },
+    sortHintText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#9CA3AF',
     },
     searchBar: {
         flex: 1,
