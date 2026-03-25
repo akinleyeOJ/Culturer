@@ -11,6 +11,8 @@ import {
     Modal,
     TextInput,
     Linking,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -26,6 +28,8 @@ import {
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Colors } from '../../../constants/color';
+import { fetchShippingRates, purchaseShippingLabel, type ShippoRate, type ShippoParcel } from '../../../lib/services/shippingService';
+import { WEIGHT_TIER_GRAMS } from '../../../lib/shippingUtils';
 
 interface OrderItem {
     id: string;
@@ -57,6 +61,9 @@ interface Order {
     payment_method: string;
     carrier_name: string | null;
     tracking_number: string | null;
+    tracking_url?: string | null;
+    label_url?: string | null;
+    shipping_status?: string | null;
     shipping_method_details: any | null;
     seller_name?: string;
     shipping_zone: string | null;
@@ -76,6 +83,14 @@ const OrderDetailsScreen = () => {
     const [shipTrackingNumber, setShipTrackingNumber] = useState('');
     const [shipProcessing, setShipProcessing] = useState(false);
     const [existingReviews, setExistingReviews] = useState<any[]>([]);
+
+    // Shippo Label State
+    const [shipMethod, setShipMethod] = useState<'shippo' | 'manual'>('shippo');
+    const [shippoRates, setShippoRates] = useState<ShippoRate[]>([]);
+    const [loadingShippoRates, setLoadingShippoRates] = useState(false);
+    const [selectedShippoRate, setSelectedShippoRate] = useState<ShippoRate | null>(null);
+    const [shippoShipmentId, setShippoShipmentId] = useState<string | null>(null);
+    const [purchasedLabelUrl, setPurchasedLabelUrl] = useState<string | null>(null);
 
     // Common carriers for the dropdown
     const CARRIER_OPTIONS = [
@@ -180,6 +195,91 @@ const OrderDetailsScreen = () => {
         }
     };
 
+    // ─── Shippo Label Logic ──────────────────────────────
+    const refreshShippoRates = async () => {
+        if (!order) return;
+        
+        setLoadingShippoRates(true);
+        try {
+            // Fetch seller profile for origin address
+            const { data: sellerProfile } = await supabase
+                .from('profiles')
+                .select('shop_shipping')
+                .eq('id', order.seller_id)
+                .single();
+            
+            const config = (sellerProfile as any)?.shop_shipping;
+            if (!config?.origin_city || !config?.origin_zip || !config?.origin_country) {
+                Alert.alert('Incomplete Profile', 'Please set up your shop origin address in Shipping Settings to use Shippo.');
+                setShipMethod('manual');
+                return;
+            }
+
+            // Estimate weight from order items or use saved metadata
+            const totalWeight = order.shipping_method_details?.total_weight_grams || 2000;
+            
+            const parcels: ShippoParcel[] = [{
+                length: 20, width: 15, height: 10, distance_unit: 'cm',
+                weight: totalWeight, mass_unit: 'g'
+            }];
+
+            const result = await fetchShippingRates(
+                {
+                    name: `${order.shipping_address.firstName} ${order.shipping_address.lastName}`,
+                    street1: order.shipping_address.line1,
+                    street2: order.shipping_address.line2 || '',
+                    city: order.shipping_address.city,
+                    state: '',
+                    zip: order.shipping_address.zipCode,
+                    country: order.shipping_address.country,
+                },
+                {
+                    name: order.seller_name || 'Seller',
+                    street1: config.origin_street1 || '',
+                    city: config.origin_city,
+                    state: config.origin_state || '',
+                    zip: config.origin_zip,
+                    country: config.origin_country,
+                },
+                parcels
+            );
+
+            if (result.success && result.rates) {
+                setShippoRates(result.rates);
+                setShippoShipmentId(result.shipmentId || null);
+                if (result.rates.length > 0) setSelectedShippoRate(result.rates[0]);
+            } else {
+                Alert.alert('Error', result.error || 'Failed to fetch shipping rates');
+            }
+        } catch (err) {
+            console.error('Error fetching shippo rates:', err);
+        } finally {
+            setLoadingShippoRates(false);
+        }
+    };
+
+    const handlePurchaseLabel = async () => {
+        if (!selectedShippoRate || !order) return;
+
+        try {
+            setShipProcessing(true);
+            const result = await purchaseShippingLabel(selectedShippoRate.object_id, order.id);
+
+            if (result.success && result.transaction) {
+                setPurchasedLabelUrl(result.transaction.label_url);
+                Alert.alert('Success!', 'Shipping label purchased successfully.');
+                fetchOrderDetails();
+            } else {
+                Alert.alert('Purchase Failed', result.error || 'Could not complete the label purchase.');
+            }
+        } catch (err) {
+            console.error('Error purchasing label:', err);
+            Alert.alert('Error', 'An unexpected error occurred during purchase.');
+        } finally {
+            setShipProcessing(false);
+        }
+    };
+
     const handleMarkAsShipped = async () => {
         if (!shipCarrier.trim() || !shipTrackingNumber.trim()) {
             Alert.alert('Required', 'Please select a carrier and enter the tracking number.');
@@ -198,6 +298,16 @@ const OrderDetailsScreen = () => {
 
             if (error) throw error;
 
+            // NEW: Register this manual tracking number with Shippo for automated updates
+            try {
+                const { registerTracking } = await import('../../../lib/services/shippingService');
+                await registerTracking(shipCarrier.trim(), shipTrackingNumber.trim(), id as string);
+                console.log('Tracking registered with Shippo successfully');
+            } catch (regErr) {
+                console.error('Optional tracking registration failed:', regErr);
+                // Don't fail the whole action if registration fails
+            }
+
             setShowShipModal(false);
             setShipCarrier('');
             setShipTrackingNumber('');
@@ -212,6 +322,9 @@ const OrderDetailsScreen = () => {
     };
 
     const getTrackingUrl = (carrier: string, trackingNum: string): string | null => {
+        // If we have a direct tracking URL saved (from Shippo purchase), use it
+        if (order?.tracking_url) return order.tracking_url;
+
         const c = carrier.toLowerCase();
         if (c.includes('inpost')) return `https://inpost.pl/sledzenie-przesylek?number=${trackingNum}`;
         if (c.includes('dhl')) return `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNum}`;
@@ -329,6 +442,54 @@ const OrderDetailsScreen = () => {
         );
     }
 
+    const renderStatusBanner = () => {
+        if (!order.shipping_status || order.status === 'cancelled') return null;
+
+        let bannerColor = Colors.primary[50];
+        let textColor = Colors.primary[700];
+        let icon = <TruckIcon size={20} color={Colors.primary[600]} />;
+        let message = '';
+
+        switch (order.shipping_status) {
+            case 'pre_transit':
+                message = 'Label prepared. Waiting for carrier pickup.';
+                break;
+            case 'in_transit':
+                message = 'Your package is on its way!';
+                bannerColor = '#EFF6FF';
+                textColor = '#1E40AF';
+                break;
+            case 'out_for_delivery':
+                message = 'Out for delivery! Your package will arrive today.';
+                bannerColor = '#F0FDF4';
+                textColor = '#166534';
+                icon = <CheckCircleIcon size={20} color="#166534" />;
+                break;
+            case 'delivered':
+                message = 'Delivered! Check your porch or mailbox.';
+                bannerColor = '#F0FDF4';
+                textColor = '#166534';
+                icon = <CheckCircleIcon size={20} color="#166534" />;
+                break;
+            case 'failure':
+            case 'returned':
+                message = 'Delivery issue: Package is being returned to sender.';
+                bannerColor = '#FEF2F2';
+                textColor = '#991B1B';
+                icon = <XCircleIcon size={20} color="#991B1B" />;
+                break;
+            default:
+                return null;
+        }
+
+        return (
+            <View style={[styles.statusBanner, { backgroundColor: bannerColor }]}>
+                {icon}
+                <Text style={[styles.statusBannerText, { color: textColor }]}>{message}</Text>
+            </View>
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -351,6 +512,9 @@ const OrderDetailsScreen = () => {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
+                {/* Status Banner */}
+                {renderStatusBanner()}
+
                 {/* Status Tracker */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Order Status</Text>
@@ -500,6 +664,22 @@ const OrderDetailsScreen = () => {
                     </View>
                 )}
 
+                {/* Seller Label Visibility (if purchased via Shippo) */}
+                {user?.id === order.seller_id && order.label_url && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>📄 Shipping Label</Text>
+                        <View style={styles.labelSuccessBox}>
+                            <Text style={[styles.labelSuccessText, { marginBottom: 8 }]}>Your label is ready for printing</Text>
+                            <TouchableOpacity 
+                                style={[styles.viewLabelBtn, { backgroundColor: Colors.primary[600] }]}
+                                onPress={() => Linking.openURL(order.label_url!)}
+                            >
+                                <Text style={styles.viewLabelBtnText}>Download / Print Label (PDF)</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+
                 {/* Order Actions */}
                 <View style={styles.actionSection}>
                     {user?.id === order.seller_id ? (
@@ -638,70 +818,154 @@ const OrderDetailsScreen = () => {
                     activeOpacity={1}
                     onPress={() => setShowShipModal(false)}
                 >
-                    <View style={styles.bottomSheet}>
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={styles.bottomSheet}
+                    >
                         <Text style={styles.bottomSheetTitle}>Ship This Order</Text>
-                        <Text style={styles.bottomSheetSubtitle}>Select the carrier and enter the tracking number</Text>
+                        <Text style={styles.bottomSheetSubtitle}>Choose how you want to handle fulfillment</Text>
 
-                        {/* Carrier Selection */}
-                        {/* Carrier Selection */}
-                        <Text style={styles.shipFieldLabel}>Carrier (Chosen by Buyer)</Text>
-                        {order.carrier_name ? (
-                            <View style={[styles.carrierChip, styles.carrierChipActive, { alignSelf: 'flex-start', marginVertical: 8 }]}>
-                                <Text style={[styles.carrierChipText, styles.carrierChipTextActive]}>{order.carrier_name}</Text>
+                        {/* Fulfillment Method Tabs */}
+                        <View style={styles.modalTabRow}>
+                            <TouchableOpacity 
+                                style={[styles.modalTab, shipMethod === 'shippo' && styles.modalTabActive]}
+                                onPress={() => {
+                                    setShipMethod('shippo');
+                                    if (shippoRates.length === 0) refreshShippoRates();
+                                }}
+                            >
+                                <Text style={[styles.modalTabText, shipMethod === 'shippo' && styles.modalTabTextActive]}>Shippo Labels</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.modalTab, shipMethod === 'manual' && styles.modalTabActive]}
+                                onPress={() => setShipMethod('manual')}
+                            >
+                                <Text style={[styles.modalTabText, shipMethod === 'manual' && styles.modalTabTextActive]}>Manual Tracking</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {shipMethod === 'shippo' ? (
+                            <View style={{ minHeight: 200 }}>
+                                {loadingShippoRates ? (
+                                    <View style={{ padding: 40, alignItems: 'center' }}>
+                                        <ActivityIndicator color={Colors.primary[500]} />
+                                        <Text style={{ marginTop: 12, color: '#6B7280' }}>Fetching discounted rates...</Text>
+                                    </View>
+                                ) : purchasedLabelUrl ? (
+                                    <View style={styles.labelSuccessBox}>
+                                        <Text style={styles.labelSuccessText}>Label Purchased & Ready!</Text>
+                                        <TouchableOpacity 
+                                            style={styles.viewLabelBtn}
+                                            onPress={() => Linking.openURL(purchasedLabelUrl)}
+                                        >
+                                            <Text style={styles.viewLabelBtnText}>Print Shipping Label (PDF)</Text>
+                                        </TouchableOpacity>
+                                        <Text style={{ fontSize: 11, color: '#6B7280', textAlign: 'center', marginTop: 12 }}>
+                                            The order has been automatically updated with the tracking number.
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <>
+                                        <Text style={styles.shipFieldLabel}>Select a Discounted Rate</Text>
+                                        <ScrollView style={{ maxHeight: 200 }}>
+                                            {shippoRates.map((rate) => {
+                                                const isSelected = selectedShippoRate?.object_id === rate.object_id;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={rate.object_id}
+                                                        style={[styles.shippoRateItem, isSelected && styles.shippoRateItemSelected]}
+                                                        onPress={() => setSelectedShippoRate(rate)}
+                                                    >
+                                                        <View style={styles.shippoRateRow}>
+                                                            <View>
+                                                                <Text style={styles.shippoProvider}>{rate.provider}</Text>
+                                                                <Text style={styles.shippoService}>{rate.servicelevel.name}</Text>
+                                                            </View>
+                                                            <View>
+                                                                <Text style={styles.shippoPrice}>{rate.currency} {rate.amount}</Text>
+                                                                <Text style={styles.shippoDays}>Est. {rate.estimated_days} days</Text>
+                                                            </View>
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </ScrollView>
+
+                                        <TouchableOpacity
+                                            style={[styles.buyLabelBtn, !selectedShippoRate && { backgroundColor: '#D1D5DB' }]}
+                                            onPress={handlePurchaseLabel}
+                                            disabled={!selectedShippoRate || shipProcessing}
+                                        >
+                                            {shipProcessing ? <ActivityIndicator color="#FFF" /> : (
+                                                <Text style={styles.buyLabelBtnText}>Buy & Generate Label</Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    </>
+                                )}
                             </View>
                         ) : (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carrierChipsScroll}>
-                                {CARRIER_OPTIONS.map((c) => (
-                                    <TouchableOpacity
-                                        key={c}
-                                        style={[
-                                            styles.carrierChip,
-                                            shipCarrier === c && styles.carrierChipActive,
-                                        ]}
-                                        onPress={() => setShipCarrier(c)}
-                                    >
-                                        <Text style={[
-                                            styles.carrierChipText,
-                                            shipCarrier === c && styles.carrierChipTextActive,
-                                        ]}>{c}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
+                            <>
+                                {/* Carrier Selection */}
+                                <Text style={styles.shipFieldLabel}>Carrier (Chosen by Buyer)</Text>
+                                {order.carrier_name ? (
+                                    <View style={[styles.carrierChip, styles.carrierChipActive, { alignSelf: 'flex-start', marginVertical: 8 }]}>
+                                        <Text style={[styles.carrierChipText, styles.carrierChipTextActive]}>{order.carrier_name}</Text>
+                                    </View>
+                                ) : (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carrierChipsScroll}>
+                                        {CARRIER_OPTIONS.map((c) => (
+                                            <TouchableOpacity
+                                                key={c}
+                                                style={[
+                                                    styles.carrierChip,
+                                                    shipCarrier === c && styles.carrierChipActive,
+                                                ]}
+                                                onPress={() => setShipCarrier(c)}
+                                            >
+                                                <Text style={[
+                                                    styles.carrierChipText,
+                                                    shipCarrier === c && styles.carrierChipTextActive,
+                                                ]}>{c}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                )}
+
+                                {/* Tracking Number */}
+                                <Text style={[styles.shipFieldLabel, { marginTop: 16 }]}>Tracking Number</Text>
+                                <TextInput
+                                    style={styles.trackingInput}
+                                    value={shipTrackingNumber}
+                                    onChangeText={setShipTrackingNumber}
+                                    placeholder="e.g. 628000123456789"
+                                    placeholderTextColor="#9CA3AF"
+                                    autoCapitalize="characters"
+                                />
+
+                                <TouchableOpacity
+                                    style={[
+                                        styles.confirmShipBtn,
+                                        (!shipCarrier || !shipTrackingNumber.trim()) && styles.confirmShipBtnDisabled,
+                                    ]}
+                                    onPress={handleMarkAsShipped}
+                                    disabled={!shipCarrier || !shipTrackingNumber.trim() || shipProcessing}
+                                >
+                                    {shipProcessing ? (
+                                        <ActivityIndicator color="#FFF" />
+                                    ) : (
+                                        <Text style={styles.confirmShipBtnText}>Confirm Shipped</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </>
                         )}
-
-                        {/* Tracking Number */}
-                        <Text style={[styles.shipFieldLabel, { marginTop: 16 }]}>Tracking Number</Text>
-                        <TextInput
-                            style={styles.trackingInput}
-                            value={shipTrackingNumber}
-                            onChangeText={setShipTrackingNumber}
-                            placeholder="e.g. 628000123456789"
-                            placeholderTextColor="#9CA3AF"
-                            autoCapitalize="characters"
-                        />
-
-                        <TouchableOpacity
-                            style={[
-                                styles.confirmShipBtn,
-                                (!shipCarrier || !shipTrackingNumber.trim()) && styles.confirmShipBtnDisabled,
-                            ]}
-                            onPress={handleMarkAsShipped}
-                            disabled={!shipCarrier || !shipTrackingNumber.trim() || shipProcessing}
-                        >
-                            {shipProcessing ? (
-                                <ActivityIndicator color="#FFF" />
-                            ) : (
-                                <Text style={styles.confirmShipBtnText}>Confirm Shipped</Text>
-                            )}
-                        </TouchableOpacity>
 
                         <TouchableOpacity
                             style={styles.cancelShipBtn}
                             onPress={() => setShowShipModal(false)}
                         >
-                            <Text style={styles.cancelShipBtnText}>Cancel</Text>
+                            <Text style={styles.cancelShipBtnText}>Close</Text>
                         </TouchableOpacity>
-                    </View>
+                    </KeyboardAvoidingView>
                 </TouchableOpacity>
             </Modal>
         </SafeAreaView>
@@ -1128,6 +1392,127 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: Colors.success[700],
         marginLeft: 6,
+    },
+    shippoRateItem: {
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 8,
+    },
+    shippoRateItemSelected: {
+        borderColor: Colors.primary[500],
+        backgroundColor: Colors.primary[50],
+    },
+    shippoRateRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    shippoProvider: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    shippoService: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2,
+    },
+    shippoPrice: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.primary[600],
+    },
+    shippoDays: {
+        fontSize: 11,
+        color: '#9CA3AF',
+        marginTop: 2,
+        textAlign: 'right',
+    },
+    buyLabelBtn: {
+        backgroundColor: Colors.primary[600],
+        padding: 16,
+        borderRadius: 14,
+        alignItems: 'center',
+        marginTop: 12,
+    },
+    buyLabelBtnText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    labelSuccessBox: {
+        backgroundColor: '#F0FDF4',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#BBF7D0',
+        marginTop: 12,
+    },
+    labelSuccessText: {
+        fontSize: 14,
+        color: '#166534',
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: 12,
+    },
+    viewLabelBtn: {
+        backgroundColor: '#166534',
+        padding: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    viewLabelBtnText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    modalTabRow: {
+        flexDirection: 'row',
+        marginBottom: 20,
+        backgroundColor: '#F3F4F6',
+        borderRadius: 12,
+        padding: 4,
+    },
+    modalTab: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 8,
+    },
+    modalTabActive: {
+        backgroundColor: '#FFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    modalTabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#6B7280',
+    },
+    modalTabTextActive: {
+        color: '#111827',
+    },
+    statusBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        marginHorizontal: 16,
+        marginTop: 16,
+        borderRadius: 12,
+        gap: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.05)',
+    },
+    statusBannerText: {
+        fontSize: 14,
+        fontWeight: '600',
+        flex: 1,
     },
 });
 

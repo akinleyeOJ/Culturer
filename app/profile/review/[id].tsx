@@ -97,7 +97,7 @@ const ReviewProductScreen = () => {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
+            <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 100 }]} keyboardDismissMode="on-drag">
                 {/* Product/Shop Summary */}
                 <View style={styles.productCard}>
                     {type === 'product' ? (

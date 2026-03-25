@@ -88,6 +88,10 @@ export interface CarrierConfig {
 export interface SellerShippingConfig {
     processing_time: string;
     origin_country: string;
+    origin_street1?: string;
+    origin_city?: string;
+    origin_state?: string;
+    origin_zip?: string;
     local_pickup: boolean;
     pickup_location: string;
     carriers: CarrierConfig[];

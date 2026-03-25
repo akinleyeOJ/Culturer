@@ -161,7 +161,7 @@ const OrderIssueScreen = () => {
                     <View style={{ width: 40 }} />
                 </View>
 
-                <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
+                <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 }]} keyboardDismissMode="on-drag">
                     <Text style={styles.title}>How can we help?</Text>
                     <Text style={styles.subtitle}>Select the issue you're experiencing with your order.</Text>
 

@@ -847,6 +847,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   logoContainer: {
     alignItems: "center",

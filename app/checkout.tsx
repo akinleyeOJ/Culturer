@@ -39,6 +39,7 @@ import {
     type SellerShippingConfig,
     type CarrierConfig,
 } from '../lib/shippingUtils';
+import { fetchShippingRates, type ShippoRate, type ShippoParcel } from '../lib/services/shippingService';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -129,6 +130,12 @@ const Checkout = () => {
     const [lockerSearch, setLockerSearch] = useState('');
     const [selectedLocker, setSelectedLocker] = useState<{ id: string; address: string; hint: string } | null>(null);
     const [lockerResults, setLockerResults] = useState<{ id: string; address: string; hint: string }[]>([]);
+
+    // Shippo Rates State
+    const [shippoRates, setShippoRates] = useState<ShippoRate[]>([]);
+    const [loadingRates, setLoadingRates] = useState(false);
+    const [selectedShippoRate, setSelectedShippoRate] = useState<ShippoRate | null>(null);
+    const [shippoShipmentId, setShippoShipmentId] = useState<string | null>(null);
 
     // Payment State
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'apple_pay' | 'p24'>('card');
@@ -616,9 +623,11 @@ const Checkout = () => {
     const totals = useMemo(() => {
         const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
         
-        // Use selected carrier price or fallback to old logic
+        // Use selected shippo rate, manual carrier, or fallback
         let shippingCost = 0;
-        if (selectedCarrier) {
+        if (selectedShippoRate) {
+            shippingCost = Number(selectedShippoRate.amount);
+        } else if (selectedCarrier) {
             shippingCost = getCarrierPrice(selectedCarrier, cartWeightTier);
         } else if (shippingMethod === 'express') {
             shippingCost = 15.00;
@@ -763,17 +772,63 @@ const Checkout = () => {
     );
 
     // Handlers 
+    const isStepValid = () => {
+        if (step === 1) {
+            const hasBasicInfo = !!(email && address1 && city && zipCode && firstName && lastName && country && phone);
+            if (!hasBasicInfo) return false;
+
+            if (sellerShipping && getEnabledCarriers(sellerShipping).length > 0) {
+                if (!selectedCarrier) return false;
+                if (selectedCarrier.type === 'locker' && !selectedLocker) return false;
+            } else {
+                if (!shippingMethod) return false;
+            }
+            return true;
+        }
+
+        if (step === 2) {
+            if (selectedPaymentMethod === 'card') {
+                if (selectedSavedCardId) return true;
+                return !!(cardHolderName.trim() && cardDetails?.complete);
+            }
+            return true; // Apple Pay/P24 handled during placement
+        }
+
+        return true;
+    };
+
     const handleNextStep = async () => {
         if (step === 1) {
-            if (!address1 || !city || !zipCode || !firstName || !lastName || !country) {
-                Alert.alert('Missing Information', 'Please fill in all required shipping fields');
+            // 1. Basic Address Validation
+            if (!email || !address1 || !city || !zipCode || !firstName || !lastName || !country || !phone) {
+                Alert.alert('Information Needed', 'Please complete your contact and shipping information to continue.');
                 return;
             }
+
+            // 2. Shipping Method Validation
+            if (sellerShipping && getEnabledCarriers(sellerShipping).length > 0) {
+                if (!selectedCarrier) {
+                    Alert.alert('Carrier Selection', 'Please select a shipping carrier for your order.');
+                    return;
+                }
+
+                // Locker validation
+                if (selectedCarrier.type === 'locker' && !selectedLocker) {
+                    Alert.alert('Pickup Point', 'Please select a pickup point/locker for this carrier.');
+                    return;
+                }
+            } else {
+                // Legacy fallback check
+                if (!shippingMethod) {
+                    Alert.alert('Shipping Method', 'Please select a shipping method.');
+                    return;
+                }
+            }
+
             setStep(2);
         } else if (step === 2) {
             // Validate payment info
             if (selectedPaymentMethod === 'card') {
-
                 // Use Saved Card if selected
                 if (selectedSavedCardId) {
                     setStripePaymentMethodId(selectedSavedCardId);
@@ -782,11 +837,11 @@ const Checkout = () => {
                 }
 
                 if (!cardHolderName.trim()) {
-                    Alert.alert('Missing Information', 'Please enter cardholder name');
+                    Alert.alert('Cardholder Name', 'Please enter the name exactly as it appears on your card.');
                     return;
                 }
                 if (!cardDetails?.complete) {
-                    Alert.alert('Invalid Card', 'Please enter valid card details');
+                    Alert.alert('Payment Details', 'Please enter your complete card information.');
                     return;
                 }
 
@@ -928,13 +983,19 @@ const Checkout = () => {
                     shipping_address: shippingAddressObj,
                     payment_method: selectedPaymentMethod,
                     notes: orderNote,
-                    carrier_name: selectedCarrier?.name || null,
+                    carrier_name: selectedShippoRate ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}` : (selectedCarrier?.name || null),
                     shipping_zone: shippingZone,
-                    shipping_method_details: selectedCarrier ? {
-                        carrier: selectedCarrier.name,
-                        type: selectedCarrier.type,
+                    shipping_method_details: (selectedCarrier || selectedShippoRate) ? {
+                        carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || 'Manual'),
+                        type: selectedShippoRate ? 'courier' : (selectedCarrier?.type || 'home'),
                         weight_tier: cartWeightTier,
                         total_weight_grams: totalWeightGrams,
+                        shippo_rate_id: selectedShippoRate?.object_id || null,
+                        shippo_shipment_id: shippoShipmentId || null,
+                        locker: selectedCarrier?.type === 'locker' && selectedLocker ? {
+                            id: selectedLocker.id,
+                            address: selectedLocker.address,
+                        } : null
                     } : null,
                 })
                     .select()
@@ -1307,9 +1368,49 @@ const Checkout = () => {
                     </View>
                 )}
 
-                {/* Dynamic Carrier Options (from seller config) */}
-                {sellerShipping && getEnabledCarriers(sellerShipping).length > 0 ? (
+                {/* Shippo Live Rates */}
+                {loadingRates ? (
+                    <View style={styles.loadingRatesBox}>
+                        <ActivityIndicator color={Colors.primary[500]} size="small" />
+                        <Text style={styles.loadingRatesText}>Fetching live courier rates...</Text>
+                    </View>
+                ) : shippoRates.length > 0 && (
+                    <View style={{ marginBottom: 16 }}>
+                        <Text style={styles.subSectionTitle}>Courier Delivery (Powered by Shippo)</Text>
+                        {shippoRates.map((rate) => {
+                            const isSelected = selectedShippoRate?.object_id === rate.object_id;
+                            return (
+                                <TouchableOpacity
+                                    key={rate.object_id}
+                                    style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
+                                    onPress={() => {
+                                        setSelectedShippoRate(rate);
+                                        setShippingMethod('carrier');
+                                        setSelectedCarrier(null); // Clear manual carrier
+                                    }}
+                                >
+                                    <View style={styles.radioRow}>
+                                        <View style={styles.radioCircle}>
+                                            {isSelected && <View style={styles.radioDot} />}
+                                        </View>
+                                        <View>
+                                            <Text style={styles.radioTitle}>{rate.provider} {rate.servicelevel.name}</Text>
+                                            <Text style={styles.radioSubtitle}>Est. {rate.estimated_days} days</Text>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.radioPrice}>
+                                        {rate.currency} {rate.amount}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                )}
+
+                {/* Seller Manual Carriers (from seller config) */}
+                {sellerShipping && getEnabledCarriers(sellerShipping).length > 0 && (
                     <>
+                        <Text style={styles.subSectionTitle}>Carrier Options</Text>
                         {getEnabledCarriers(sellerShipping).map((carrier) => {
                             const price = getCarrierPrice(carrier, cartWeightTier);
                             const isSelected = selectedCarrier?.name === carrier.name;
@@ -1341,8 +1442,10 @@ const Checkout = () => {
                             );
                         })}
                     </>
-                ) : (
-                    /* Fallback: Standard/Express (legacy) */
+                )}
+
+                {/* Legacy Fallback if NO carriers and NO shippo rates */}
+                {!sellerShipping && shippoRates.length === 0 && (
                     <>
                         <TouchableOpacity
                             style={[styles.radioOption, shippingMethod === 'standard' && styles.radioOptionSelected]}
@@ -1873,7 +1976,7 @@ const Checkout = () => {
 
                 <ScrollView 
                     keyboardShouldPersistTaps="handled" 
-                    contentContainerStyle={styles.content}
+                    contentContainerStyle={[styles.content, { paddingBottom: 120 }]}
                     keyboardDismissMode="on-drag"
                 >
                     {step === 1 && renderDeliveryStep()}
@@ -1886,10 +1989,11 @@ const Checkout = () => {
                         <CustomButton
                             title={step === 1 ? "Continue to Payment" : "Review Order"}
                             onPress={handleNextStep}
+                            style={{ backgroundColor: !isStepValid() ? Colors.neutral[300] : Colors.primary[500] }}
                         />
                     ) : (
                         <CustomButton
-                            title={processing ? "Processing..." : `Pay $${totals.total.toFixed(2)}`}
+                            title={processing ? "Processing..." : `Pay €${totals.total.toFixed(2)}`}
                             onPress={handlePlaceOrder}
                             disabled={processing}
                         />
@@ -2511,6 +2615,31 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#166534',
         fontWeight: '500',
+    },
+    subSectionTitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: Colors.neutral[500],
+        marginTop: 16,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    loadingRatesBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.primary[50],
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: Colors.primary[100],
+    },
+    loadingRatesText: {
+        marginLeft: 10,
+        fontSize: 13,
+        color: Colors.primary[700],
+        fontWeight: '600',
     },
 });
 
