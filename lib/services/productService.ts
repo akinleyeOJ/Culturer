@@ -48,6 +48,15 @@ const transformProduct = (product: Product, favoriteIds: string[] = []) => {
   };
 };
 
+const getPausedSellerIds = async (): Promise<Set<string>> => {
+  const { data: pausedSellers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('is_shop_live', false);
+
+  return new Set(pausedSellers?.map((seller) => seller.id) || []);
+};
+
 // Filter Options Interface
 export interface FilterOptions {
   categories?: string[];
@@ -744,13 +753,27 @@ export const fetchSimilarProducts = async (
   category: string,
   price: number,
   limit: number = 8,
-  userId?: string
+  userId?: string,
+  excludeOwnerIds: string[] = []
 ) => {
-  const priceMin = price * 0.7; // 30% lower
-  const priceMax = price * 1.3; // 30% higher
+  const ownerIdsToExclude = new Set(excludeOwnerIds.filter(Boolean));
 
-  const [productsResponse, favoriteIds] = await Promise.all([
-    supabase
+  const [pausedSellerIds, favoriteIds] = await Promise.all([
+    getPausedSellerIds(),
+    userId ? getUserFavorites(userId) : Promise.resolve([])
+  ]);
+
+  const attempts = [
+    { priceMin: price * 0.7, priceMax: price * 1.3 },
+    { priceMin: price * 0.5, priceMax: price * 1.5 },
+    { priceMin: null as number | null, priceMax: null as number | null },
+  ];
+
+  const seenProductIds = new Set<string>();
+  const similarProducts: ReturnType<typeof transformProduct>[] = [];
+
+  for (const attempt of attempts) {
+    let query = supabase
       .from('products')
       .select('*')
       .eq('category', category)
@@ -758,19 +781,46 @@ export const fetchSimilarProducts = async (
       .gt('stock_quantity', 0)
       .or('out_of_stock.is.null,out_of_stock.eq.false')
       .neq('id', productId)
-      .gte('price', priceMin)
-      .lte('price', priceMax)
-      .limit(limit),
-    userId ? getUserFavorites(userId) : Promise.resolve([])
-  ]);
+      .order('created_at', { ascending: false })
+      .limit(Math.max(limit * 4, 24));
 
-  const { data: products, error } = productsResponse;
+    for (const ownerId of ownerIdsToExclude) {
+      query = query
+        .neq('seller_id', ownerId)
+        .neq('user_id', ownerId);
+    }
 
-  if (error || !products) {
-    return [];
+    if (attempt.priceMin !== null) {
+      query = query.gte('price', attempt.priceMin);
+    }
+
+    if (attempt.priceMax !== null) {
+      query = query.lte('price', attempt.priceMax);
+    }
+
+    const { data: products, error } = await query;
+
+    if (error || !products) {
+      continue;
+    }
+
+    for (const product of products) {
+      const ownerId = (product as any).seller_id || (product as any).user_id || null;
+
+      if (seenProductIds.has(product.id)) continue;
+      if (ownerId && ownerIdsToExclude.has(ownerId)) continue;
+      if (ownerId && pausedSellerIds.has(ownerId)) continue;
+
+      seenProductIds.add(product.id);
+      similarProducts.push(transformProduct(product, favoriteIds));
+
+      if (similarProducts.length >= limit) {
+        return similarProducts.slice(0, limit);
+      }
+    }
   }
 
-  return products.map(p => transformProduct(p, favoriteIds));
+  return similarProducts.slice(0, limit);
 };
 
 // Create or update a product listing

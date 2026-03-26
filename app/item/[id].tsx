@@ -79,7 +79,8 @@ const ItemDetail = () => {
                     productData.category,
                     parseFloat(productData.price.replace('$', '')),
                     8,
-                    user?.id
+                    user?.id,
+                    [productData.seller_id, user?.id].filter(Boolean) as string[]
                 );
                 setSimilarProducts(similar);
             } catch (error) {
@@ -647,7 +648,7 @@ const ItemDetail = () => {
 
 
                     {/* Similar items */}
-                    {similarProducts.length > 0 && (
+                    {!isOwnListing && similarProducts.length > 0 && (
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>You might also like</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>

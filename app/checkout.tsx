@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -7,62 +7,36 @@ import {
     ScrollView,
     Alert,
     TouchableOpacity,
-    Image,
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
     Modal,
     FlatList,
-    Pressable,
-    Switch, // Ensure Image is imported for logos if needed
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MagnifyingGlassIcon, XMarkIcon, ChevronDownIcon } from 'react-native-heroicons/outline';
+import { MagnifyingGlassIcon, XMarkIcon } from 'react-native-heroicons/outline';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useNavigation, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../constants/color';
 import CustomButton from '../components/Button';
+import { DeliveryStep } from '../components/checkout/DeliveryStep';
+import { PaymentStep } from '../components/checkout/PaymentStep';
+import { ReviewStep } from '../components/checkout/ReviewStep';
+import { type CheckoutAddress as Address, type CheckoutShippingMethod as ShippingMethod, type CheckoutStep } from '../components/checkout/types';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCheckoutShipping } from '../lib/hooks/useCheckoutShipping';
 import { supabase } from '../lib/supabase';
 import { fetchCart, clearCart, CartItem } from '../lib/services/cartService';
 import { trackProductSale } from '../lib/services/productService';
-import { type PickupPointResult, type PickupPointSearchContext } from '../lib/services/pickupPointService';
-import {
-    detectShippingZone,
-    WEIGHT_TIER_GRAMS,
-    formatWeight,
-    getIntegratedRate,
-    getEnabledCarriers,
-    hydrateShippingConfig,
-    buildLocalPickupOption,
-    sortProvidersByPreference,
-    sellerShipsToZone,
-    type ShippingZone,
-    type WeightTier,
-    type SellerShippingConfig,
-    type CarrierConfig,
-} from '../lib/shippingUtils';
-import { fetchShippingRates, type ShippoRate, type ShippoParcel } from '../lib/services/shippingService';
-import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withTiming,
-    FadeInDown,
-} from 'react-native-reanimated';
-import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import { formatWeight } from '../lib/shippingUtils';
 import {
     ChevronLeftIcon,
-    DevicePhoneMobileIcon,
-    CreditCardIcon,
     LockClosedIcon,
-    BanknotesIcon
 } from 'react-native-heroicons/outline';
 import { CheckCircleIcon as CheckCircleSolid } from 'react-native-heroicons/solid';
-import { CardField, useStripe } from '@stripe/stripe-react-native';
+import { useStripe } from '@stripe/stripe-react-native';
 import {
-    clearPickupPointSelectionState,
-    getPickupPointSelectionState,
     setPickupPointSelectionState,
 } from '../lib/pickupPointSelectionStore';
 
@@ -79,63 +53,9 @@ const COUNTRIES = [
     { name: "United Kingdom", flag: "🇬🇧" }
 ].sort((a, b) => a.name.localeCompare(b.name));
 
-// Types 
-type CheckoutStep = 1 | 2 | 3;
-type ShippingMethod = 'standard' | 'express' | 'carrier';
-
-interface Address {
-    line1: string;
-    line2: string;
-    city: string;
-    zipCode: string;
-    country: string;
-    phone: string;
-    firstName: string;
-    lastName: string;
-    label?: string; // e.g. "Home", "Office"
-}
-
 const LIVE_SHIPPING_APIS_ENABLED =
     process.env.EXPO_PUBLIC_ENABLE_LIVE_SHIPPING_APIS === 'true' ||
     (!__DEV__ && process.env.EXPO_PUBLIC_ENABLE_LIVE_SHIPPING_APIS !== 'false');
-
-const getCheapestShippoRate = (rates: ShippoRate[]) =>
-    [...rates].sort((a, b) => Number(a.amount) - Number(b.amount))[0] || null;
-
-const normalizeProviderName = (value: string) =>
-    value
-        .toLowerCase()
-        .replace(/[()/]/g, ' ')
-        .replace(/\b(locker|pickup|pick up|servicepoint|service point|access point|parcelshop|packstation|home delivery|delivery)\b/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-const shippoRateMatchesProvider = (rate: ShippoRate, providerName: string) => {
-    const normalizedRateProvider = normalizeProviderName(rate.provider);
-    const normalizedProvider = normalizeProviderName(providerName);
-
-    return (
-        normalizedRateProvider.includes(normalizedProvider) ||
-        normalizedProvider.includes(normalizedRateProvider)
-    );
-};
-
-const buildShippoRequestSignature = (params: {
-    sellerId: string;
-    buyerCountry: string;
-    buyerCity: string;
-    buyerZip: string;
-    buyerAddress1: string;
-    totalWeightGrams: number;
-}) =>
-    [
-        params.sellerId,
-        params.buyerCountry.trim().toLowerCase(),
-        params.buyerCity.trim().toLowerCase(),
-        params.buyerZip.trim().toLowerCase(),
-        params.buyerAddress1.trim().toLowerCase(),
-        params.totalWeightGrams,
-    ].join('|');
 
 const Checkout = () => {
     const router = useRouter();
@@ -166,34 +86,15 @@ const Checkout = () => {
     const [city, setCity] = useState('');
     const [zipCode, setZipCode] = useState('');
     const [country, setCountry] = useState('');
-    const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
+    const [shippingMethod, setShippingMethod] = useState<ShippingMethod | null>(null);
     const [orderNote, setOrderNote] = useState('');
-    const [saveAddress, setSaveAddress] = useState(false);
-
-    // Shipping Zone & Carrier State
-    const [sellerShipping, setSellerShipping] = useState<SellerShippingConfig | null>(null);
-    const [shippingZone, setShippingZone] = useState<ShippingZone>('domestic');
-    const [selectedCarrier, setSelectedCarrier] = useState<CarrierConfig | null>(null);
-    const [totalWeightGrams, setTotalWeightGrams] = useState(0);
-    const [cartWeightTier, setCartWeightTier] = useState<WeightTier>('medium');
-
-    // Locker Selection State
-    const [selectedLocker, setSelectedLocker] = useState<PickupPointResult | null>(null);
-    const [lockerSearch, setLockerSearch] = useState('');
-    const [lockerSearchContext, setLockerSearchContext] = useState<PickupPointSearchContext | null>(null);
-
-    // Shippo Rates State
-    const [shippoRates, setShippoRates] = useState<ShippoRate[]>([]);
-    const [loadingRates, setLoadingRates] = useState(false);
-    const [selectedShippoRate, setSelectedShippoRate] = useState<ShippoRate | null>(null);
-    const [shippoShipmentId, setShippoShipmentId] = useState<string | null>(null);
+    const [saveAddress] = useState(false);
 
     // Payment State
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'apple_pay' | 'p24'>('card');
     const [cardHolderName, setCardHolderName] = useState('');
     const [cardNumber, setCardNumber] = useState('');
     const [cardExpiry, setCardExpiry] = useState('');
-    const [cardCvv, setCardCvv] = useState('');
     const [saveCard, setSaveCard] = useState(false);
 
     // Stripe hooks
@@ -204,8 +105,6 @@ const Checkout = () => {
     // Filter/Modal State
     const [showCountryPicker, setShowCountryPicker] = useState(false);
     const [searchCountry, setSearchCountry] = useState('');
-    const shippoRequestSignatureRef = useRef<string | null>(null);
-    const shippoRateCacheRef = useRef<Map<string, { rates: ShippoRate[]; shipmentId: string | null }>>(new Map());
 
     // Promo Code State
     const [promoCode, setPromoCode] = useState('');
@@ -217,49 +116,42 @@ const Checkout = () => {
     const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null);
     const [loadingCards, setLoadingCards] = useState(false);
 
-    const enabledHomeProviders = useMemo(
-        () => (sellerShipping ? getEnabledCarriers(sellerShipping, 'home_delivery') : []),
-        [sellerShipping]
-    );
-
-    const enabledLockerProviders = useMemo(
-        () => (sellerShipping ? getEnabledCarriers(sellerShipping, 'locker_pickup') : []),
-        [sellerShipping]
-    );
-
-    const localPickupOption = useMemo(
-        () => (sellerShipping ? buildLocalPickupOption(sellerShipping) : null),
-        [sellerShipping]
-    );
-
-    const filteredShippoRates = useMemo(() => {
-        if (shippoRates.length === 0 || enabledHomeProviders.length === 0) return [];
-        return shippoRates.filter((rate) =>
-            enabledHomeProviders.some((provider) => shippoRateMatchesProvider(rate, provider.name))
-        );
-    }, [shippoRates, enabledHomeProviders]);
-
-    const integratedCarrierOptions = useMemo(() => {
-        if (!sellerShipping) return [];
-
-        const preferredLockerProviders = sortProvidersByPreference(
-            enabledLockerProviders,
-            sellerShipping.modes.locker_pickup.preferred_carriers
-        );
-        const preferredHomeProviders = sortProvidersByPreference(
-            enabledHomeProviders,
-            sellerShipping.modes.home_delivery.preferred_carriers
-        );
-
-        return [
-            ...(filteredShippoRates.length === 0 ? preferredHomeProviders : []),
-            ...preferredLockerProviders,
-            ...(localPickupOption ? [localPickupOption] : []),
-        ];
-    }, [sellerShipping, enabledHomeProviders, enabledLockerProviders, localPickupOption, filteredShippoRates]);
+    const {
+        sellerShipping,
+        shippingZone,
+        selectedCarrier,
+        setSelectedCarrier,
+        totalWeightGrams,
+        cartWeightTier,
+        selectedLocker,
+        setSelectedLocker,
+        lockerSearch,
+        setLockerSearch,
+        lockerSearchContext,
+        setLockerSearchContext,
+        loadingRates,
+        filteredShippoRates,
+        selectedShippoRate,
+        setSelectedShippoRate,
+        shippoShipmentId,
+        integratedCarrierOptions,
+        shippingCost,
+    } = useCheckoutShipping({
+        cartItems,
+        country,
+        city,
+        zipCode,
+        address1,
+        address2,
+        firstName,
+        lastName,
+        phone,
+        step,
+        liveShippingApisEnabled: LIVE_SHIPPING_APIS_ENABLED,
+    });
 
     // Fetch Saved Cards
-    const fetchSavedCards = async () => {
+    const fetchSavedCards = useCallback(async () => {
         if (!user) return;
         setLoadingCards(true);
         try {
@@ -276,13 +168,13 @@ const Checkout = () => {
             console.error('Error fetching cards:', e);
         }
         setLoadingCards(false);
-    };
+    }, [user]);
 
     useEffect(() => {
         if (step === 2 && selectedPaymentMethod === 'card') {
             fetchSavedCards();
         }
-    }, [step, selectedPaymentMethod]);
+    }, [fetchSavedCards, selectedPaymentMethod, step]);
 
     // Handle Back Navigation
     // Handle Back Navigation
@@ -515,117 +407,14 @@ const Checkout = () => {
             setLoading(false);
         };
         loadData();
-    }, [user, productId, paramQuantity, orderId]);
+    }, [orderId, paramQuantity, productId, router, user]);
 
     // Switch Payment Method if Country Changes (P24 only for Poland)
     useEffect(() => {
         if (country !== 'Poland' && selectedPaymentMethod === 'p24') {
             setSelectedPaymentMethod('card');
         }
-    }, [country]);
-
-    // ─── Fetch Seller Shipping Config & Detect Zone ───
-    useEffect(() => {
-        const fetchSellerShipping = async () => {
-            if (cartItems.length === 0) return;
-
-            // Get the first seller's ID (MVP: single-seller cart)
-            const sellerId = cartItems[0]?.product?.seller_id;
-            if (!sellerId || sellerId === 'system') return;
-
-            try {
-                const { data: profile, error } = await supabase
-                    .from('profiles' as any)
-                    .select('shop_shipping')
-                    .eq('id', sellerId)
-                    .single();
-
-                if (!error && (profile as any)?.shop_shipping) {
-                    const config = hydrateShippingConfig((profile as any).shop_shipping as SellerShippingConfig);
-                    setSellerShipping(config);
-                }
-            } catch (err) {
-                console.error('Error fetching seller shipping config:', err);
-            }
-        };
-
-        fetchSellerShipping();
-    }, [cartItems]);
-
-    // ─── Zone Detection (when country or seller changes) ───
-    useEffect(() => {
-        if (!country || !sellerShipping) return;
-        const zone = detectShippingZone(sellerShipping.origin_country, country);
-        setShippingZone(zone);
-    }, [country, sellerShipping]);
-
-    useEffect(() => {
-        if (selectedCarrier && !integratedCarrierOptions.some((carrier) => carrier.name === selectedCarrier.name)) {
-            setSelectedCarrier(null);
-            setSelectedLocker(null);
-            setLockerSearch('');
-            setLockerSearchContext(null);
-            clearPickupPointSelectionState();
-        }
-    }, [integratedCarrierOptions, selectedCarrier]);
-
-    useEffect(() => {
-        if (selectedShippoRate && !filteredShippoRates.some((rate) => rate.object_id === selectedShippoRate.object_id)) {
-            setSelectedShippoRate(null);
-        }
-    }, [filteredShippoRates, selectedShippoRate]);
-
-    useEffect(() => {
-        if (filteredShippoRates.length > 0) {
-            if (!selectedShippoRate && !selectedCarrier) {
-                setSelectedShippoRate(getCheapestShippoRate(filteredShippoRates));
-                setShippingMethod('carrier');
-            }
-
-            if (selectedCarrier?.type === 'home') {
-                setSelectedCarrier(null);
-            }
-            return;
-        }
-
-        if (!selectedShippoRate && integratedCarrierOptions.length > 0 && !selectedCarrier) {
-            setSelectedCarrier(integratedCarrierOptions[0]);
-            setShippingMethod('carrier');
-        }
-    }, [filteredShippoRates, integratedCarrierOptions, selectedShippoRate, selectedCarrier]);
-
-    // ─── Weight Calculation ───
-    useEffect(() => {
-        if (cartItems.length === 0) return;
-
-        // Fetch weight tiers for all products
-        const fetchWeights = async () => {
-            const productIds = cartItems.map(item => item.product_id);
-            const { data: products } = await supabase
-                .from('products')
-                .select('id, weight_tier')
-                .in('id', productIds);
-
-            let totalGrams = 0;
-            let maxTier: WeightTier = 'small';
-            const tierOrder: WeightTier[] = ['small', 'medium', 'large'];
-
-            cartItems.forEach(item => {
-                const product = products?.find((p: any) => p.id === item.product_id);
-                const tier = (product?.weight_tier as WeightTier) || 'medium';
-                totalGrams += WEIGHT_TIER_GRAMS[tier] * item.quantity;
-
-                if (tierOrder.indexOf(tier) > tierOrder.indexOf(maxTier)) {
-                    maxTier = tier;
-                }
-            });
-
-            setTotalWeightGrams(totalGrams);
-            setCartWeightTier(maxTier); // Use the largest tier in cart for pricing
-        };
-
-        fetchWeights();
-    }, [cartItems]);
+    }, [country, selectedPaymentMethod]);
 
     // Auto-Save Draft to AsyncStorage
     useEffect(() => {
@@ -637,7 +426,7 @@ const Checkout = () => {
                     cardHolderName, cardNumber, cardExpiry
                 };
                 await AsyncStorage.setItem('checkout_draft', JSON.stringify(draft));
-            } catch (e) {
+            } catch {
                 // ignore
             }
         }, 500); // 500ms debounce
@@ -721,185 +510,6 @@ const Checkout = () => {
         }
     };
 
-    // ─── Shippo Live Rate Fetching ───
-    const refreshShippoRates = async () => {
-        if (
-            !LIVE_SHIPPING_APIS_ENABLED ||
-            !zipCode.trim() ||
-            !country.trim() ||
-            !city.trim() ||
-            address1.trim().length < 5 ||
-            cartItems.length === 0
-        ) {
-            setShippoRates([]);
-            return;
-        }
-
-        try {
-            // 1. Get Seller's Origin Address
-            const sellerId = cartItems[0]?.product?.seller_id;
-            if (!sellerId || sellerId === 'system') {
-                return;
-            }
-
-            const { data: profile } = await supabase
-                .from('profiles' as any)
-                .select('shop_shipping')
-                .eq('id', sellerId)
-                .single();
-
-            const shopShipping = (profile as any)?.shop_shipping;
-            const normalizedShipping = hydrateShippingConfig(shopShipping as SellerShippingConfig | null);
-
-            const originAddress = {
-                street: normalizedShipping.origin_street1 || '',
-                city: normalizedShipping.origin_city || '',
-                state: normalizedShipping.origin_state || '',
-                zip: normalizedShipping.origin_zip || '',
-                country: normalizedShipping.origin_country || ''
-            };
-
-            if (
-                !normalizedShipping.modes.home_delivery.enabled ||
-                !originAddress.street ||
-                !originAddress.city ||
-                !originAddress.zip ||
-                !originAddress.country
-            ) {
-                setShippoRates([]);
-                return;
-            }
-
-            const requestSignature = buildShippoRequestSignature({
-                sellerId,
-                buyerCountry: country,
-                buyerCity: city,
-                buyerZip: zipCode,
-                buyerAddress1: address1,
-                totalWeightGrams: totalWeightGrams || 500,
-            });
-
-            if (shippoRequestSignatureRef.current === requestSignature) {
-                return;
-            }
-
-            const cached = shippoRateCacheRef.current.get(requestSignature);
-            if (cached) {
-                shippoRequestSignatureRef.current = requestSignature;
-                setShippoRates(cached.rates);
-                setShippoShipmentId(cached.shipmentId);
-                return;
-            }
-
-            // ISO Country Mapping (Shippo requires 2-letter codes)
-            const getISOCode = (name: string) => {
-                const map: Record<string, string> = {
-                    'Poland': 'PL', 'Germany': 'DE', 'France': 'FR', 'United Kingdom': 'GB',
-                    'Italy': 'IT', 'Spain': 'ES', 'Netherlands': 'NL', 'Belgium': 'BE',
-                    'Portugal': 'PT', 'Austria': 'AT', 'Sweden': 'SE', 'Denmark': 'DK',
-                    'Ireland': 'IE', 'Bulgaria': 'BG', 'Croatia': 'HR', 'Cyprus': 'CY',
-                    'Czech Republic': 'CZ', 'Estonia': 'EE', 'Finland': 'FI', 'Greece': 'GR',
-                    'Hungary': 'HU', 'Latvia': 'LV', 'Lithuania': 'LT', 'Luxembourg': 'LU',
-                    'Malta': 'MT', 'Romania': 'RO', 'Slovakia': 'SK', 'Slovenia': 'SI'
-                };
-                return map[name] || name;
-            };
-
-            // 2. Prepare Addresses
-            const addressTo = {
-                name: `${firstName} ${lastName}`.trim() || 'Buyer',
-                street1: address1,
-                street2: address2,
-                city: city,
-                state: '', 
-                zip: zipCode,
-                country: getISOCode(country),
-                phone: phone,
-            };
-
-            const addressFrom = {
-                name: cartItems[0]?.product?.seller_name || 'Seller',
-                street1: originAddress.street,
-                city: originAddress.city,
-                state: originAddress.state,
-                zip: originAddress.zip,
-                country: getISOCode(originAddress.country),
-            };
-
-            console.log('[Shippo] Refreshing rates...', { from: addressFrom.city, to: addressTo.city, zip: addressTo.zip });
-
-            // 3. Prepare Parcels
-            const parcels: ShippoParcel[] = [{
-                length: 10,
-                width: 10,
-                height: 10,
-                distance_unit: 'cm',
-                weight: totalWeightGrams || 500,
-                mass_unit: 'g',
-            }];
-
-            // 4. Fetch Rates
-            setLoadingRates(true);
-            const result = await fetchShippingRates(addressTo as any, addressFrom as any, parcels);
-            if (result.success && result.rates) {
-                shippoRequestSignatureRef.current = requestSignature;
-                shippoRateCacheRef.current.set(requestSignature, {
-                    rates: result.rates,
-                    shipmentId: result.shipmentId || null,
-                });
-                setShippoRates(result.rates);
-                setShippoShipmentId(result.shipmentId || null);
-                
-                // If shippo rates found, default to 'carrier' method if nothing selected
-                if (result.rates.length > 0 && shippingMethod !== 'carrier') {
-                    // Don't auto-switch if they already picked something? 
-                    // Actually, let's just let them pick.
-                }
-            } else {
-                shippoRequestSignatureRef.current = requestSignature;
-                setShippoRates([]);
-                console.error('Failed to fetch Shippo rates:', result.error);
-            }
-        } catch (err) {
-            console.error('Error in refreshShippoRates:', err);
-            setShippoRates([]);
-        } finally {
-            setLoadingRates(false);
-        }
-    };
-
-    // Debounced trigger for Shippo Rates
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (
-                step === 1 &&
-                LIVE_SHIPPING_APIS_ENABLED &&
-                zipCode.trim().length >= 3 &&
-                city.trim().length >= 2 &&
-                address1.trim().length >= 5 &&
-                country.trim().length >= 2 &&
-                cartItems.length > 0
-            ) {
-                refreshShippoRates();
-            }
-        }, 1800);
-
-        return () => clearTimeout(timer);
-    }, [zipCode, country, city, address1, cartItems, step, totalWeightGrams]);
-
-    useFocusEffect(() => {
-        const pickupState = getPickupPointSelectionState();
-        if (
-            pickupState.carrierName &&
-            selectedCarrier?.type === 'locker' &&
-            pickupState.carrierName === selectedCarrier.name
-        ) {
-            setSelectedLocker(pickupState.selection);
-            setLockerSearch(pickupState.search);
-            setLockerSearchContext(pickupState.context);
-        }
-    });
-
     const handleDeleteAddress = async () => {
         if (!user || selectedAddressIndex === null) return;
 
@@ -921,21 +531,16 @@ const Checkout = () => {
 
 
     // Total cost calculations 
+    const hasIntegratedShippingOptions = filteredShippoRates.length > 0 || integratedCarrierOptions.length > 0;
+
     const totals = useMemo(() => {
         const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-        
-        // Use selected shippo rate, manual carrier, or fallback
-        let shippingCost = 0;
-        if (selectedShippoRate) {
-            shippingCost = Number(selectedShippoRate.amount);
-        } else if (selectedCarrier) {
-            shippingCost = selectedCarrier.type === 'pickup'
-                ? 0
-                : getIntegratedRate(selectedCarrier.mode, shippingZone, cartWeightTier);
-        } else if (shippingMethod === 'express') {
-            shippingCost = 15.00;
-        }
-        
+
+        const resolvedShippingCost =
+            shippingMethod === 'express' && !selectedShippoRate && !selectedCarrier
+                ? 15.0
+                : shippingCost;
+
         const tax = subtotal * 0.10; // 10% Tax
 
         let discountAmount = 0;
@@ -953,50 +558,10 @@ const Checkout = () => {
             }
         }
 
-        const total = Math.max(0, subtotal + shippingCost + tax - discountAmount);
+        const total = Math.max(0, subtotal + resolvedShippingCost + tax - discountAmount);
 
-        return { subtotal, shippingCost, tax, discount: discountAmount, total };
-    }, [cartItems, shippingMethod, appliedDiscount, selectedCarrier, cartWeightTier, selectedShippoRate, shippingZone]);
-
-    // Formatters
-    const formatCardNumber = (text: string) => {
-        const cleaned = text.replace(/\D/g, '');
-        const truncated = cleaned.slice(0, 16); // Limit to 16 digits
-        const groups = truncated.match(/.{1,4}/g) || [];
-        setCardNumber(groups.join(' '));
-    };
-
-    const formatExpiryDate = (text: string) => {
-        // Simple and robust masking for MM/YY
-        let cleaned = text.replace(/\D/g, '');
-
-        // 1. Handle auto-prefixing '0' if user types 2-9 as first char
-        if (cleaned.length === 1 && parseInt(cleaned) > 1) {
-            cleaned = '0' + cleaned;
-        }
-
-        // 2. Limit length to 4 digits (MMYY)
-        if (cleaned.length > 4) cleaned = cleaned.slice(0, 4);
-
-        // 3. Format with Slash
-        // Logic: If we have at least 2 digits, we want "MM/..."
-        if (cleaned.length >= 2) {
-            const month = parseInt(cleaned.slice(0, 2));
-            // If invalid month ( > 12 or 00), handle it strategy?
-            // Strategy: Strict blocking. If > 12, just drop the last char (fail to type it)
-            if (month > 12 || month === 0) {
-                // Valid month check failure.
-                // If typing "1[3]", it effectively ignores the 3
-                cleaned = cleaned.slice(0, 1);
-            } else {
-                // Valid month. Add slash.
-                setCardExpiry(`${cleaned.slice(0, 2)}/${cleaned.slice(2)}`);
-                return;
-            }
-        }
-
-        setCardExpiry(cleaned);
-    };
+        return { subtotal, shippingCost: resolvedShippingCost, tax, discount: discountAmount, total };
+    }, [appliedDiscount, cartItems, selectedCarrier, selectedShippoRate, shippingCost, shippingMethod]);
 
     // Filtered Countries
     const filteredCountries = useMemo(() => {
@@ -1080,7 +645,7 @@ const Checkout = () => {
             const hasBasicInfo = !!(email && address1 && city && zipCode && firstName && lastName && country && phone);
             if (!hasBasicInfo) return false;
 
-            if (filteredShippoRates.length > 0 || integratedCarrierOptions.length > 0) {
+            if (hasIntegratedShippingOptions) {
                 if (!selectedShippoRate && !selectedCarrier) return false;
                 if (selectedCarrier?.type === 'locker' && !selectedLocker) return false;
             } else {
@@ -1109,7 +674,7 @@ const Checkout = () => {
             }
 
             // 2. Shipping Method Validation
-            if (filteredShippoRates.length > 0 || integratedCarrierOptions.length > 0) {
+            if (hasIntegratedShippingOptions) {
                 if (!selectedShippoRate && !selectedCarrier) {
                     Alert.alert('Carrier Selection', 'Please select a shipping option for your order.');
                     return;
@@ -1496,675 +1061,6 @@ const Checkout = () => {
         </View>
     );
 
-    // Delivery Form - Step 1
-    const renderDeliveryStep = () => (
-        <View style={styles.stepContainer}>
-            {/* Customer Information */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Contact Information</Text>
-                <View style={styles.formGroup}>
-                    <TextInput style={styles.input}
-                        placeholder="Email Address"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
-                </View>
-            </View>
-
-            {/* Shipping Address */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Shipping Address</Text>
-
-                {/* Saved Addresses Section - Always visible to ensure user knows feature exists */}
-                <View style={{ marginBottom: 16 }}>
-                    <Text style={styles.formLabel}>Saved Addresses</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-                        <TouchableOpacity
-                            style={[styles.savedAddressCard, selectedAddressIndex === null && styles.savedAddressCardSelected]}
-                            onPress={clearAddressForm}
-                        >
-                            <Text style={[styles.savedAddressText, selectedAddressIndex === null && styles.savedAddressTextSelected]}>+ New Address</Text>
-                        </TouchableOpacity>
-                        {savedAddresses.map((addr, index) => (
-                            <TouchableOpacity
-                                key={index}
-                                style={[styles.savedAddressCard, selectedAddressIndex === index && styles.savedAddressCardSelected]}
-                                onPress={() => {
-                                    fillAddressForm(addr);
-                                    setSelectedAddressIndex(index);
-                                }}
-                            >
-                                <Text style={[styles.savedAddressText, selectedAddressIndex === index && styles.savedAddressTextSelected]}>
-                                    {addr.label || `${addr.firstName} (${addr.city})`}
-                                </Text>
-                                <Text style={{ fontSize: 10, color: Colors.text.secondary, marginTop: 2 }} numberOfLines={1}>
-                                    {addr.line1}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
-
-                <View style={styles.row}>
-                    <TextInput
-                        style={[styles.input, styles.halfInput]}
-                        placeholder="First Name"
-                        value={firstName}
-                        onChangeText={setFirstName}
-                    />
-                    <TextInput
-                        style={[styles.input, styles.halfInput]}
-                        placeholder="Last Name"
-                        value={lastName}
-                        onChangeText={setLastName}
-                    />
-                </View>
-                <View style={[styles.row, { zIndex: 100 }]}>
-                    <GooglePlacesAutocomplete
-                        placeholder="Search or enter Address Line 1"
-                        onPress={(data, details = null) => {
-                            if (details) {
-                                // Extract address components
-                                let streetNumber = '';
-                                let route = '';
-                                let locality = '';
-                                let postalCode = '';
-                                let countryCode = '';
-
-                                details.address_components.forEach(component => {
-                                    const types = component.types;
-                                    if (types.includes('street_number')) streetNumber = component.long_name;
-                                    if (types.includes('route')) route = component.long_name;
-                                    if (types.includes('locality')) locality = component.long_name;
-                                    if (types.includes('postal_code')) postalCode = component.long_name;
-                                    if (types.includes('country')) countryCode = component.short_name;
-                                });
-
-                                setAddress1(`${streetNumber} ${route}`.trim() || data.description);
-                                if (locality) setCity(locality);
-                                if (postalCode) setZipCode(postalCode);
-                                if (countryCode) setCountry(countryCode);
-                            } else {
-                                setAddress1(data.description);
-                            }
-                        }}
-                        query={{
-                            key: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-                            language: 'en',
-                        }}
-                        fetchDetails={true}
-                        styles={{
-                            container: { flex: 0, width: '100%', marginBottom: 12 },
-                            textInputContainer: { width: '100%' },
-                            textInput: styles.input,
-                            listView: {
-                                position: 'absolute',
-                                top: 48,
-                                zIndex: 1000,
-                                elevation: 5,
-                                backgroundColor: 'white',
-                                borderRadius: 10,
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.1,
-                                shadowRadius: 4,
-                            },
-                        }}
-                        textInputProps={{
-                            value: address1,
-                            onChangeText: setAddress1,
-                            placeholderTextColor: Colors.neutral[400]
-                        }}
-                    />
-                </View>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Address Line 2 (Optional)"
-                    value={address2}
-                    onChangeText={setAddress2}
-                />
-
-                {/* Country Selection */}
-                <Text style={styles.formLabel}>Country</Text>
-                <TouchableOpacity
-                    style={styles.countrySelector}
-                    onPress={() => setShowCountryPicker(true)}
-                >
-                    <Text style={styles.countrySelectorText}>{country}</Text>
-                    <ChevronDownIcon size={20} color={Colors.text.secondary} />
-                </TouchableOpacity>
-
-                <View style={styles.row}>
-                    <TextInput
-                        style={[styles.input, styles.halfInput]}
-                        placeholder="City"
-                        value={city}
-                        onChangeText={setCity}
-                    />
-                    <TextInput
-                        style={[styles.input, styles.halfInput]}
-                        placeholder="Zip / Postal Code"
-                        value={zipCode}
-                        onChangeText={setZipCode}
-                    />
-                </View>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Phone Number"
-                    value={phone}
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                />
-
-                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 8 }}>
-                    <TouchableOpacity
-                        style={[styles.actionButton, { width: '45%', backgroundColor: Colors.primary[500] }]}
-                        onPress={handleSaveAddress}
-                    >
-                        <Text style={[styles.actionButtonText, { color: '#fff' }]}>
-                            {selectedAddressIndex !== null ? 'Update' : 'Save Address'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {selectedAddressIndex !== null && (
-                        <TouchableOpacity
-                            style={[styles.actionButton, { width: '45%', backgroundColor: Colors.danger[50], borderWidth: 1, borderColor: Colors.danger[200] }]}
-                            onPress={handleDeleteAddress}
-                        >
-                            <Text style={[styles.actionButtonText, { color: Colors.danger[500] }]}>Delete</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
-
-            {/* Shipping Method */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Shipping Method</Text>
-
-                {/* Weight Summary */}
-                {totalWeightGrams > 0 && (
-                    <View style={styles.weightSummaryRow}>
-                        <Text style={styles.weightSummaryLabel}>📦 Estimated Package Weight</Text>
-                        <Text style={styles.weightSummaryValue}>{formatWeight(totalWeightGrams)}</Text>
-                    </View>
-                )}
-
-                {/* Zone Info */}
-                {sellerShipping && country && (
-                    <View style={[styles.zoneInfoBox, 
-                        shippingZone === 'international' && { backgroundColor: '#FFF7ED', borderColor: '#FFEDD5' }
-                    ]}>
-                        <Text style={styles.zoneInfoText}>
-                            {shippingZone === 'domestic' 
-                                ? `🏠 Domestic shipping within ${country}`
-                                : shippingZone === 'eu' 
-                                    ? `🇪🇺 EU shipping — no customs duties`
-                                    : `🌍 International shipping — import duties or taxes may apply upon delivery`
-                            }
-                        </Text>
-                    </View>
-                )}
-
-                {!LIVE_SHIPPING_APIS_ENABLED && sellerShipping?.modes.home_delivery.enabled && (
-                    <View style={styles.apiCostHintBox}>
-                        <Text style={styles.apiCostHintText}>
-                            Live courier quotes are off in this environment. Platform postage will fall back to standard integrated rates at checkout.
-                        </Text>
-                    </View>
-                )}
-
-                {sellerShipping && (
-                    <View style={styles.apiCostHintBox}>
-                        <Text style={styles.apiCostHintText}>
-                            Buyers always pay postage. The platform calculates the shipping amount at checkout based on parcel size, route, and delivery option.
-                        </Text>
-                    </View>
-                )}
-
-                {/* Shippo Live Rates */}
-                {loadingRates ? (
-                    <View style={styles.loadingRatesBox}>
-                        <ActivityIndicator color={Colors.primary[500]} size="small" />
-                        <Text style={styles.loadingRatesText}>Fetching live courier rates...</Text>
-                    </View>
-                ) : filteredShippoRates.length > 0 && (
-                    <View style={{ marginBottom: 16 }}>
-                        <Text style={styles.subSectionTitle}>Home Delivery</Text>
-                        {filteredShippoRates.map((rate) => {
-                            const isSelected = selectedShippoRate?.object_id === rate.object_id;
-                            return (
-                                <TouchableOpacity
-                                    key={rate.object_id}
-                                    style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
-                                    onPress={() => {
-                                        setSelectedShippoRate(rate);
-                                        setShippingMethod('carrier');
-                                        setSelectedCarrier(null);
-                                        setSelectedLocker(null);
-                                        setLockerSearch('');
-                                        setLockerSearchContext(null);
-                                        clearPickupPointSelectionState();
-                                    }}
-                                >
-                                    <View style={styles.radioRow}>
-                                        <View style={styles.radioCircle}>
-                                            {isSelected && <View style={styles.radioDot} />}
-                                        </View>
-                                        <View>
-                                            <Text style={styles.radioTitle}>{rate.provider} {rate.servicelevel.name}</Text>
-                                            <Text style={styles.radioSubtitle}>
-                                                Buyer-paid integrated postage • Est. {rate.estimated_days} days
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Text style={styles.radioPrice}>
-                                        {rate.currency} {Number(rate.amount).toFixed(2)}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                )}
-
-                {/* Integrated pickup and fallback home options */}
-                {integratedCarrierOptions.length > 0 && (
-                    <>
-                        <Text style={styles.subSectionTitle}>
-                            {filteredShippoRates.length > 0 ? 'Pickup & Local Options' : 'Integrated Delivery Options'}
-                        </Text>
-                        {integratedCarrierOptions.map((carrier) => {
-                            const price = carrier.type === 'pickup'
-                                ? 0
-                                : getIntegratedRate(carrier.mode, shippingZone, cartWeightTier);
-                            const isSelected = selectedCarrier?.name === carrier.name;
-                            return (
-                                <TouchableOpacity
-                                    key={carrier.name}
-                                    style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
-                                    onPress={() => {
-                                        setSelectedCarrier(carrier);
-                                        setSelectedShippoRate(null);
-                                        setShippingMethod('carrier');
-                                        if (carrier.type !== 'locker') {
-                                            setSelectedLocker(null);
-                                            setLockerSearch('');
-                                            setLockerSearchContext(null);
-                                            clearPickupPointSelectionState();
-                                        }
-                                    }}
-                                >
-                                    <View style={styles.radioRow}>
-                                        <View style={styles.radioCircle}>
-                                            {isSelected && <View style={styles.radioDot} />}
-                                        </View>
-                                        <View>
-                                            <Text style={styles.radioTitle}>{carrier.name}</Text>
-                                            <Text style={styles.radioSubtitle}>
-                                                {carrier.type === 'locker' ? 'Locker / Pickup Point' :
-                                                    carrier.type === 'pickup'
-                                                        ? (sellerShipping?.pickup_location
-                                                            ? `Collect in person • ${sellerShipping.pickup_location}`
-                                                            : 'Store Pickup')
-                                                        : 'Home Delivery'}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Text style={styles.radioPrice}>
-                                        {price === 0 ? 'Free' : `€${price.toFixed(2)}`}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </>
-                )}
-
-                {/* Legacy Fallback if NO carriers and NO shippo rates */}
-                {!sellerShipping && filteredShippoRates.length === 0 && (
-                    <>
-                        <TouchableOpacity
-                            style={[styles.radioOption, shippingMethod === 'standard' && styles.radioOptionSelected]}
-                            onPress={() => {
-                                setShippingMethod('standard');
-                                setSelectedCarrier(null);
-                                setSelectedShippoRate(null);
-                                setSelectedLocker(null);
-                                setLockerSearch('');
-                                setLockerSearchContext(null);
-                                clearPickupPointSelectionState();
-                            }}
-                        >
-                            <View style={styles.radioRow}>
-                                <View style={styles.radioCircle}>
-                                    {shippingMethod === 'standard' && <View style={styles.radioDot} />}
-                                </View>
-                                <View>
-                                    <Text style={styles.radioTitle}>Standard Delivery</Text>
-                                    <Text style={styles.radioSubtitle}>Est. 3-5 Business Days</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.radioPrice}>Free</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[styles.radioOption, shippingMethod === 'express' && styles.radioOptionSelected]}
-                            onPress={() => {
-                                setShippingMethod('express');
-                                setSelectedCarrier(null);
-                                setSelectedShippoRate(null);
-                                setSelectedLocker(null);
-                                setLockerSearch('');
-                                setLockerSearchContext(null);
-                                clearPickupPointSelectionState();
-                            }}
-                        >
-                            <View style={styles.radioRow}>
-                                <View style={styles.radioCircle}>
-                                    {shippingMethod === 'express' && <View style={styles.radioDot} />}
-                                </View>
-                                <View>
-                                    <Text style={styles.radioTitle}>Express Delivery</Text>
-                                    <Text style={styles.radioSubtitle}>Est. 1-2 Business Days</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.radioPrice}>$15.00</Text>
-                        </TouchableOpacity>
-                    </>
-                )}
-
-                {/* Locker Selection (when carrier type = locker) */}
-                {selectedCarrier?.type === 'locker' && (
-                    <View style={styles.lockerSection}>
-                        <Text style={styles.lockerTitle}>📮 Select Pickup Point</Text>
-                        <Text style={styles.lockerSubtitle}>Open a separate search screen to find pickup points near the typed location.</Text>
-
-                        <TouchableOpacity
-                            style={styles.pickupLauncher}
-                            onPress={() => {
-                                setPickupPointSelectionState({
-                                    carrierName: selectedCarrier.name,
-                                    selection: selectedLocker,
-                                    search: lockerSearch,
-                                    context: lockerSearchContext,
-                                });
-                                router.push({
-                                    pathname: '/pickup-points',
-                                    params: {
-                                        carrierName: selectedCarrier.name,
-                                        address1,
-                                        city,
-                                        zipCode,
-                                        country,
-                                    },
-                                } as any);
-                            }}
-                        >
-                            <View style={styles.pickupLauncherRow}>
-                                <View style={styles.pickupLauncherCopy}>
-                                    <Text style={styles.pickupLauncherTitle}>
-                                        {selectedLocker ? 'Change Pickup Point' : 'Select Pickup Point'}
-                                    </Text>
-                                    <Text style={styles.pickupLauncherSubtitle}>
-                                        {selectedLocker
-                                            ? `${selectedLocker.id} • ${selectedLocker.address}`
-                                            : `Search ${selectedCarrier.name} pickup points near the buyer's delivery area`}
-                                    </Text>
-                                </View>
-                                <ChevronDownIcon size={18} color={Colors.neutral[500]} style={{ transform: [{ rotate: '-90deg' }] }} />
-                            </View>
-                        </TouchableOpacity>
-
-                        {/* Selected Locker Confirmation */}
-                        {selectedLocker && (
-                            <View style={styles.lockerConfirm}>
-                                <Text style={styles.lockerConfirmText}>
-                                    ✅ Delivering to: {selectedLocker.id} — {selectedLocker.address}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                )}
-
-                {/* Seller doesn't ship to this zone */}
-                {sellerShipping && country && !sellerShipsToZone(sellerShipping, shippingZone) && (
-                    <View style={[styles.zoneInfoBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-                        <Text style={[styles.zoneInfoText, { color: '#DC2626' }]}>
-                            ⚠️ This seller doesn't ship to {country}. Please contact them or choose a different address.
-                        </Text>
-                    </View>
-                )}
-            </View>
-
-            {/* Notes */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Notes</Text>
-                <TextInput
-                    style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-                    placeholder="Add any special instructions/notes for delivery"
-                    multiline
-                    numberOfLines={3}
-                    value={orderNote}
-                    onChangeText={setOrderNote}
-                />
-            </View>
-        </View>
-    );
-
-    // Payment Form - Step 2
-    const renderPaymentStep = () => (
-        <View style={styles.stepContainer}>
-            {/* Payment Method Selection */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Select Payment Method</Text>
-
-                {/* Apple Pay */}
-                <TouchableOpacity
-                    style={[styles.radioOption, selectedPaymentMethod === 'apple_pay' && styles.radioOptionSelected]}
-                    onPress={() => setSelectedPaymentMethod('apple_pay')}
-                >
-                    <View style={styles.radioRow}>
-                        <View style={styles.radioCircle}>
-                            {selectedPaymentMethod === 'apple_pay' && <View style={styles.radioDot} />}
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <View style={styles.paymentIconContainer}>
-                                <DevicePhoneMobileIcon size={24} color={'#000'} />
-                            </View>
-                            <View>
-                                <Text style={styles.radioTitle}>Apple Pay</Text>
-                                <Text style={styles.radioSubtitle}>Finalise payment with Apple Pay</Text>
-                            </View>
-                        </View>
-                    </View>
-                </TouchableOpacity>
-
-
-
-                {/* Przelewy24 (includes Blik) - Show ONLY for Poland */}
-                {country === 'Poland' && (
-                    <TouchableOpacity
-                        style={[styles.radioOption, selectedPaymentMethod === 'p24' && styles.radioOptionSelected]}
-                        onPress={() => setSelectedPaymentMethod('p24')}
-                    >
-                        <View style={styles.radioRow}>
-                            <View style={styles.radioCircle}>
-                                {selectedPaymentMethod === 'p24' && <View style={styles.radioDot} />}
-                            </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                                <View style={[styles.paymentIconContainer, { backgroundColor: '#d4145a', borderColor: '#d4145a' }]}>
-                                    <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>P24</Text>
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.radioTitle}>Przelewy24</Text>
-                                    <Text style={styles.radioSubtitle} numberOfLines={1} ellipsizeMode="tail">Blik, bank transfers & more</Text>
-                                </View>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                )}
-
-                {/* Bank Card (Credit/Debit) */}
-                <TouchableOpacity
-                    style={[styles.radioOption, selectedPaymentMethod === 'card' && styles.radioOptionSelected]}
-                    onPress={() => setSelectedPaymentMethod('card')}
-                >
-                    <View style={styles.radioRow}>
-                        <View style={styles.radioCircle}>
-                            {selectedPaymentMethod === 'card' && <View style={styles.radioDot} />}
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <View style={styles.paymentIconContainer}>
-                                <CreditCardIcon size={24} color={Colors.neutral[800]} />
-                            </View>
-                            <View>
-                                <Text style={styles.radioTitle}>Bank card</Text>
-                                <Text style={styles.radioSubtitle}>Use a credit or debit card</Text>
-                            </View>
-                        </View>
-                    </View>
-                </TouchableOpacity>
-            </View>
-
-            {/* Card Details Form - ONLY SHOW IF CARD SELECTED */}
-            {selectedPaymentMethod === 'card' && (
-                <View style={[styles.section, { marginTop: -12 }]}>
-                    {/* Saved Cards Selection */}
-                    {!loadingCards && savedCards && savedCards.length > 0 && (
-                        <View style={{ marginBottom: 24 }}>
-                            <Text style={styles.sectionTitle}>Saved Cards</Text>
-                            {savedCards.map((card) => (
-                                <TouchableOpacity
-                                    key={card.id}
-                                    style={[
-                                        styles.radioOption,
-                                        selectedSavedCardId === card.id && styles.radioOptionSelected,
-                                        { marginBottom: 8 }
-                                    ]}
-                                    onPress={() => {
-                                        setSelectedSavedCardId(card.id);
-                                        setSaveCard(false);
-                                    }}
-                                >
-                                    <View style={styles.radioRow}>
-                                        <View style={styles.radioCircle}>
-                                            {selectedSavedCardId === card.id && <View style={styles.radioDot} />}
-                                        </View>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                            <CreditCardIcon size={24} color={Colors.neutral[800]} />
-                                            <View>
-                                                <Text style={styles.radioTitle}>
-                                                    {card.brand.toUpperCase()} {card.last4}
-                                                </Text>
-                                                <Text style={styles.radioSubtitle}>{card.exp_month}/{card.exp_year}</Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                            <TouchableOpacity
-                                style={[styles.radioOption, selectedSavedCardId === null && styles.radioOptionSelected]}
-                                onPress={() => setSelectedSavedCardId(null)}
-                            >
-                                <View style={styles.radioRow}>
-                                    <View style={styles.radioCircle}>
-                                        {selectedSavedCardId === null && <View style={styles.radioDot} />}
-                                    </View>
-                                    <Text style={styles.radioTitle}>Use a new card</Text>
-                                </View>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                    {selectedSavedCardId === null && (
-                        <View style={styles.cardInputContainer}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <Text style={styles.sectionTitle}>Card Details</Text>
-                                <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-                                    {/* Visa Logo */}
-                                    <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff' }]}>
-                                        <Text style={{ color: '#1A1F71', fontSize: 10, fontWeight: '700', fontStyle: 'italic' }}>VISA</Text>
-                                    </View>
-                                    {/* Mastercard Logo */}
-                                    <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
-                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF5F00', marginRight: -2 }} />
-                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F79E1B' }} />
-                                    </View>
-                                    {/* Maestro Logo */}
-                                    <View style={[styles.cardBrandLogo, { backgroundColor: '#f7f7f7ff', flexDirection: 'row', paddingHorizontal: 4 }]}>
-                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#0099DF', marginRight: -2 }} />
-                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#CC0000' }} />
-                                    </View>
-                                </View>
-                            </View>
-
-
-                            {/* Stripe CardField - Secure PCI-compliant card input */}
-                            <View style={{ marginBottom: 16 }}>
-                                <Text style={styles.formLabel}>Card Information</Text>
-                                <CardField
-                                    postalCodeEnabled={false}
-                                    placeholders={{
-                                        number: '4242 4242 4242 4242',
-                                        expiration: 'MM/YY',
-                                        cvc: 'CVC',
-                                    }}
-                                    cardStyle={{
-                                        backgroundColor: '#FFFFFF',
-                                        textColor: Colors.text.primary,
-                                        borderColor: Colors.neutral[300],
-                                        borderWidth: 1,
-                                        borderRadius: 8,
-                                        fontSize: 16,
-                                    }}
-                                    style={{
-                                        width: '100%',
-                                        height: 50,
-                                        marginTop: 8,
-                                    }}
-                                    onCardChange={(details) => {
-                                        setCardDetails(details);
-                                        console.log('Card complete:', details.complete);
-                                    }}
-                                />
-                            </View>
-
-                            {/* Cardholder Name */}
-                            <View style={{ marginBottom: 16 }}>
-                                <Text style={styles.formLabel}>Cardholder's Name</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="e.g. John Doe"
-                                    value={cardHolderName}
-                                    onChangeText={setCardHolderName}
-                                    autoCapitalize="words"
-                                />
-                            </View>
-
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, justifyContent: 'space-between' }}>
-                                <Text style={{ ...styles.formLabel, marginBottom: 0 }}>Save for future purchases</Text>
-                                <Switch
-                                    value={saveCard}
-                                    onValueChange={setSaveCard}
-                                    trackColor={{ false: Colors.neutral[200], true: Colors.success[500] }}
-                                    thumbColor={'#FFFFFF'}
-                                />
-                            </View>
-
-
-
-                            <View style={styles.secureBadge}>
-                                <LockClosedIcon size={12} color={Colors.success[700]} />
-                                <Text style={styles.secureText}>Payments are secure and encrypted</Text>
-                            </View>
-                        </View>
-                    )}
-                </View>
-            )}
-        </View>
-    );
-
     const handleApplyCoupon = async () => {
         if (!promoCode) return;
         setCheckingCoupon(true);
@@ -2203,124 +1099,26 @@ const Checkout = () => {
         setCheckingCoupon(false);
     };
 
-    // Review Order - Step 3
-    const renderReviewStep = () => (
-        <View style={styles.stepContainer}>
-            {/* Order Summary */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Order Summary</Text>
-                {cartItems.map((item) => (
-                    <View key={item.id} style={styles.reviewItem}>
-                        <Image
-                            source={
-                                item.product.image_url
-                                    ? { uri: item.product.image_url }
-                                    : { uri: "https://via.placeholder.com/60" } // Fallback
-                            }
-                            style={styles.reviewImage}
-                        />
-                        <View style={styles.reviewItemDetails}>
-                            <Text style={styles.reviewItemName} numberOfLines={1}>{item.product.name}</Text>
-                            <Text style={styles.reviewItemMeta}>Qty: {item.quantity}</Text>
-                        </View>
-                        <Text style={styles.reviewItemPrice}>${(item.product.price * item.quantity).toFixed(2)}</Text>
-                    </View>
-                ))}
-            </View>
+    const openPickupPointPicker = () => {
+        if (!selectedCarrier) return;
 
-            {/* Promo Code */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Discount Code</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TextInput
-                        style={[styles.input, { flex: 1, marginBottom: 0, marginRight: 8 }]}
-                        placeholder="Enter promo code"
-                        value={promoCode}
-                        onChangeText={(text) => setPromoCode(text.toUpperCase())}
-                        autoCapitalize="characters"
-                    />
-                    <TouchableOpacity
-                        style={{ backgroundColor: Colors.primary[500], padding: 12, borderRadius: 8 }}
-                        onPress={handleApplyCoupon}
-                        disabled={checkingCoupon}
-                    >
-                        {checkingCoupon ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Apply</Text>}
-                    </TouchableOpacity>
-                </View>
-                {appliedDiscount && (
-                    <Text style={{ color: Colors.success[500], marginTop: 4, fontWeight: '600' }}>
-                        Coupon applied: {appliedDiscount.code}
-                    </Text>
-                )}
-            </View>
-
-            {/* Order Totals */}
-            <View style={styles.section}>
-                <View style={styles.costRow}>
-                    <Text style={styles.costLabel}>Subtotal</Text>
-                    <Text style={styles.costValue}>${totals.subtotal.toFixed(2)}</Text>
-                </View>
-                {appliedDiscount && (
-                    <View style={styles.costRow}>
-                        <Text style={[styles.costLabel, { color: Colors.success[500] }]}>Discount</Text>
-                        <Text style={[styles.costValue, { color: Colors.success[500] }]}>- ${totals.discount.toFixed(2)}</Text>
-                    </View>
-                )}
-                <View style={styles.costRow}>
-                    <Text style={styles.costLabel}>Shipping</Text>
-                    <Text style={styles.costValue}>${totals.shippingCost.toFixed(2)}</Text>
-                </View>
-                <View style={styles.costRow}>
-                    <Text style={styles.costLabel}>Tax</Text>
-                    <Text style={styles.costValue}>${totals.tax.toFixed(2)}</Text>
-                </View>
-                <View style={[styles.costRow, styles.totalRow]}>
-                    <Text style={styles.totalLabel}>Total To Pay</Text>
-                    <Text style={styles.totalValue}>${totals.total.toFixed(2)}</Text>
-                </View>
-            </View>
-
-            {/* Details Recap */}
-            <View style={styles.recapContainer}>
-                <View style={styles.recapRow}>
-                    <View>
-                        <Text style={styles.recapLabel}>Ship To</Text>
-                        <Text style={styles.recapValue}>{firstName} {lastName}</Text>
-                        <Text style={styles.recapValue}>{address1}, {city}</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setStep(1)}>
-                        <Text style={styles.editLink}>Edit</Text>
-                    </TouchableOpacity>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.recapRow}>
-                    <View>
-                        <Text style={styles.recapLabel}>Method</Text>
-                        <Text style={styles.recapValue}>
-                            {shippingMethod === 'standard' ? 'Standard Delivery' : 'Express Delivery'}
-                        </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setStep(1)}>
-                        <Text style={styles.editLink}>Edit</Text>
-                    </TouchableOpacity>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.recapRow}>
-                    <View>
-                        <Text style={styles.recapLabel}>Payment</Text>
-                        <Text style={styles.recapValue}>Card ending in {cardNumber.slice(-4) || '****'}</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setStep(2)}>
-                        <Text style={styles.editLink}>Edit</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            <Text style={styles.termsText}>
-                By clicking Place Order, you agree to our Terms & Conditions.
-            </Text>
-        </View>
-    );
+        setPickupPointSelectionState({
+            carrierName: selectedCarrier.name,
+            selection: selectedLocker,
+            search: lockerSearch,
+            context: lockerSearchContext,
+        });
+        router.push({
+            pathname: '/pickup-points',
+            params: {
+                carrierName: selectedCarrier.name,
+                address1,
+                city,
+                zipCode,
+                country,
+            },
+        } as any);
+    };
 
     if (loading) {
         return (
@@ -2356,9 +1154,102 @@ const Checkout = () => {
                     contentContainerStyle={[styles.content, { paddingBottom: 120 }]}
                     keyboardDismissMode="on-drag"
                 >
-                    {step === 1 && renderDeliveryStep()}
-                    {step === 2 && renderPaymentStep()}
-                    {step === 3 && renderReviewStep()}
+                    {step === 1 && (
+                        <DeliveryStep
+                            styles={styles}
+                            email={email}
+                            setEmail={setEmail}
+                            savedAddresses={savedAddresses}
+                            selectedAddressIndex={selectedAddressIndex}
+                            clearAddressForm={clearAddressForm}
+                            fillAddressForm={fillAddressForm}
+                            setSelectedAddressIndex={setSelectedAddressIndex}
+                            firstName={firstName}
+                            setFirstName={setFirstName}
+                            lastName={lastName}
+                            setLastName={setLastName}
+                            address1={address1}
+                            setAddress1={setAddress1}
+                            address2={address2}
+                            setAddress2={setAddress2}
+                            city={city}
+                            setCity={setCity}
+                            zipCode={zipCode}
+                            setZipCode={setZipCode}
+                            country={country}
+                            setCountry={setCountry}
+                            phone={phone}
+                            setPhone={setPhone}
+                            setShowCountryPicker={setShowCountryPicker}
+                            handleSaveAddress={handleSaveAddress}
+                            handleDeleteAddress={handleDeleteAddress}
+                            totalWeightGrams={totalWeightGrams}
+                            formattedWeight={formatWeight(totalWeightGrams)}
+                            sellerShipping={sellerShipping}
+                            shippingZone={shippingZone}
+                            liveShippingApisEnabled={LIVE_SHIPPING_APIS_ENABLED}
+                            loadingRates={loadingRates}
+                            filteredShippoRates={filteredShippoRates}
+                            selectedShippoRate={selectedShippoRate}
+                            setSelectedShippoRate={setSelectedShippoRate}
+                            integratedCarrierOptions={integratedCarrierOptions}
+                            selectedCarrier={selectedCarrier}
+                            setSelectedCarrier={setSelectedCarrier}
+                            cartWeightTier={cartWeightTier}
+                            shippingMethod={shippingMethod}
+                            setShippingMethod={setShippingMethod}
+                            selectedLocker={selectedLocker}
+                            setSelectedLocker={setSelectedLocker}
+                            setLockerSearch={setLockerSearch}
+                            lockerSearch={lockerSearch}
+                            lockerSearchContext={lockerSearchContext}
+                            setLockerSearchContext={setLockerSearchContext}
+                            onOpenPickupPointPicker={openPickupPointPicker}
+                            orderNote={orderNote}
+                            setOrderNote={setOrderNote}
+                        />
+                    )}
+                    {step === 2 && (
+                        <PaymentStep
+                            styles={styles}
+                            country={country}
+                            selectedPaymentMethod={selectedPaymentMethod}
+                            setSelectedPaymentMethod={setSelectedPaymentMethod}
+                            loadingCards={loadingCards}
+                            savedCards={savedCards}
+                            selectedSavedCardId={selectedSavedCardId}
+                            setSelectedSavedCardId={setSelectedSavedCardId}
+                            saveCard={saveCard}
+                            setSaveCard={setSaveCard}
+                            cardHolderName={cardHolderName}
+                            setCardHolderName={setCardHolderName}
+                            setCardDetails={setCardDetails}
+                        />
+                    )}
+                    {step === 3 && (
+                        <ReviewStep
+                            styles={styles}
+                            cartItems={cartItems}
+                            promoCode={promoCode}
+                            setPromoCode={setPromoCode}
+                            handleApplyCoupon={handleApplyCoupon}
+                            checkingCoupon={checkingCoupon}
+                            appliedDiscount={appliedDiscount}
+                            totals={totals}
+                            firstName={firstName}
+                            lastName={lastName}
+                            address1={address1}
+                            city={city}
+                            selectedCarrier={selectedCarrier}
+                            selectedShippoRate={selectedShippoRate}
+                            shippingMethod={shippingMethod}
+                            cardNumber={cardNumber}
+                            selectedSavedCardId={selectedSavedCardId}
+                            savedCards={savedCards}
+                            onEditDelivery={() => setStep(1)}
+                            onEditPayment={() => setStep(2)}
+                        />
+                    )}
                 </ScrollView>
 
                 <View style={styles.footer}>
