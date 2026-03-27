@@ -127,7 +127,7 @@ export default function PickupPointsScreen() {
         router.back();
     };
 
-    const renderSearchSection = () => (
+    const searchSection = (
         <View>
             <Text style={styles.subtitle}>
                 Search by city, postcode, or street to find nearby {carrierName || 'pickup points'}.
@@ -241,37 +241,42 @@ export default function PickupPointsScreen() {
                 <View style={styles.headerSpacer} />
             </View>
 
-            <FlatList
-                data={results}
-                keyExtractor={(item) => item.id}
-                style={styles.content}
-                contentContainerStyle={styles.contentContainer}
-                keyboardShouldPersistTaps="handled"
-                ListHeaderComponent={renderSearchSection}
-                renderItem={({ item: pickupPoint }) => (
-                    <TouchableOpacity
-                        style={[
-                            styles.resultItem,
-                            selectedPickupPoint?.id === pickupPoint.id && styles.resultItemSelected,
-                        ]}
-                        onPress={() => {
-                            Keyboard.dismiss();
-                            setSelectedPickupPoint(pickupPoint);
-                        }}
-                    >
-                        <View style={styles.resultContent}>
-                            <Text style={styles.resultId}>{pickupPoint.id}</Text>
-                            <Text style={styles.resultAddress}>{pickupPoint.address}</Text>
-                            <Text style={styles.resultHint}>{pickupPoint.hint}</Text>
-                        </View>
-                        {selectedPickupPoint?.id === pickupPoint.id && (
-                            <View style={styles.resultCheck}>
-                                <Text style={styles.resultCheckText}>✓</Text>
+            <View style={styles.content}>
+                <View style={styles.searchSection}>
+                    {searchSection}
+                </View>
+
+                <FlatList
+                    data={results}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={styles.resultsContentContainer}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    renderItem={({ item: pickupPoint }) => (
+                        <TouchableOpacity
+                            style={[
+                                styles.resultItem,
+                                selectedPickupPoint?.id === pickupPoint.id && styles.resultItemSelected,
+                            ]}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                setSelectedPickupPoint(pickupPoint);
+                            }}
+                        >
+                            <View style={styles.resultContent}>
+                                <Text style={styles.resultId}>{pickupPoint.id}</Text>
+                                <Text style={styles.resultAddress}>{pickupPoint.address}</Text>
+                                <Text style={styles.resultHint}>{pickupPoint.hint}</Text>
                             </View>
-                        )}
-                    </TouchableOpacity>
-                )}
-            />
+                            {selectedPickupPoint?.id === pickupPoint.id && (
+                                <View style={styles.resultCheck}>
+                                    <Text style={styles.resultCheckText}>✓</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
 
             <View style={styles.footer}>
                 <TouchableOpacity
@@ -324,8 +329,12 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
     },
-    contentContainer: {
+    searchSection: {
         padding: 16,
+        paddingBottom: 8,
+    },
+    resultsContentContainer: {
+        paddingHorizontal: 16,
         paddingBottom: 24,
     },
     subtitle: {
