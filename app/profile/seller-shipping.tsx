@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -25,11 +25,13 @@ import {
     buildProviderConfigs,
     getCountryFlag,
     getLockedDefaultProvidersForMode,
+    getSupportedLockerProviderNamesForCountry,
     hydrateShippingConfig,
     normalizeCountryName,
     type ShippingProviderMode,
     type SellerShippingConfig,
 } from '../../lib/shippingUtils';
+import { fetchSendcloudServicePointCarrierCodes } from '../../lib/services/sendcloudService';
 import {
     ChevronLeftIcon,
     TruckIcon,
@@ -50,30 +52,45 @@ export default function SellerShippingScreen() {
     const [showProcessingModal, setShowProcessingModal] = useState(false);
     const [showCountryModal, setShowCountryModal] = useState(false);
     const [shipping, setShipping] = useState<SellerShippingConfig>(DEFAULT_SHIPPING_CONFIG);
+    const [sendcloudCarrierCodes, setSendcloudCarrierCodes] = useState<string[]>([]);
+    const [servicePointCapabilitiesLoaded, setServicePointCapabilitiesLoaded] = useState(false);
+    const supportedLockerProviderNames = useMemo(
+        () => getSupportedLockerProviderNamesForCountry(shipping.origin_country, sendcloudCarrierCodes),
+        [sendcloudCarrierCodes, shipping.origin_country]
+    );
     const providersByMode = {
         home_delivery: shipping.providers.filter((provider) => provider.mode === 'home_delivery'),
         locker_pickup: shipping.providers.filter((provider) => provider.mode === 'locker_pickup'),
     };
     const lockedHomeProviders = getLockedDefaultProvidersForMode(shipping.origin_country, 'home_delivery');
-    const lockedLockerProviders = getLockedDefaultProvidersForMode(shipping.origin_country, 'locker_pickup');
+    const lockedLockerProviders = getLockedDefaultProvidersForMode(
+        shipping.origin_country,
+        'locker_pickup',
+        supportedLockerProviderNames
+    );
     const lockedProviders = new Set([...lockedHomeProviders, ...lockedLockerProviders]);
 
-    useEffect(() => {
-        if (user) fetchShippingSettings();
-    }, [user]);
-
-    const fetchShippingSettings = async () => {
+    const fetchShippingSettings = useCallback(async () => {
         try {
-            const { data } = await supabase
-                .from('profiles')
-                .select('shop_shipping')
-                .eq('id', user!.id)
-                .single();
+            const [{ data }, carrierCapabilityResult] = await Promise.all([
+                supabase
+                    .from('profiles')
+                    .select('shop_shipping')
+                    .eq('id', user!.id)
+                    .single(),
+                fetchSendcloudServicePointCarrierCodes(),
+            ]);
+
+            const carrierCodes = carrierCapabilityResult.success ? carrierCapabilityResult.carrierCodes : [];
+            setSendcloudCarrierCodes(carrierCodes);
+            setServicePointCapabilitiesLoaded(true);
 
             if (data) {
                 if (data.shop_shipping) {
                     const saved = (data.shop_shipping as unknown) as Partial<SellerShippingConfig>;
-                    setShipping(hydrateShippingConfig(saved));
+                    const savedCountry = normalizeCountryName(saved.origin_country || '');
+                    const liveSupportedLockerProviders = getSupportedLockerProviderNamesForCountry(savedCountry, carrierCodes);
+                    setShipping(hydrateShippingConfig(saved, liveSupportedLockerProviders));
                     setHasUnsavedChanges(false);
                 } else {
                     setShipping(DEFAULT_SHIPPING_CONFIG);
@@ -83,13 +100,18 @@ export default function SellerShippingScreen() {
         } catch (e) {
             console.error('Error fetching shipping settings:', e);
         } finally {
+            setServicePointCapabilitiesLoaded(true);
             setLoading(false);
         }
-    };
+    }, [user]);
+
+    useEffect(() => {
+        if (user) fetchShippingSettings();
+    }, [fetchShippingSettings, user]);
 
     const persistShipping = async (updatedSettings = shipping) => {
         if (!user) return;
-        const normalizedSettings = hydrateShippingConfig(updatedSettings);
+        const normalizedSettings = hydrateShippingConfig(updatedSettings, supportedLockerProviderNames);
         try {
             setSaving(true);
             const { error } = await supabase
@@ -112,9 +134,13 @@ export default function SellerShippingScreen() {
             const next = typeof updater === 'function'
                 ? (updater as (current: SellerShippingConfig) => SellerShippingConfig)(current)
                 : updater;
+            const liveSupportedLockerProviders = getSupportedLockerProviderNamesForCountry(
+                next.origin_country,
+                sendcloudCarrierCodes
+            );
 
             setHasUnsavedChanges(true);
-            return hydrateShippingConfig(next);
+            return hydrateShippingConfig(next, liveSupportedLockerProviders);
         });
     };
 
@@ -130,7 +156,11 @@ export default function SellerShippingScreen() {
         const newSettings = {
             ...shipping,
             origin_country: normalizedCountry,
-            providers: buildProviderConfigs(normalizedCountry, shipping.providers),
+            providers: buildProviderConfigs(
+                normalizedCountry,
+                shipping.providers,
+                getSupportedLockerProviderNamesForCountry(normalizedCountry, sendcloudCarrierCodes)
+            ),
         };
         updateShipping(newSettings);
         setShowCountryModal(false);
@@ -140,7 +170,11 @@ export default function SellerShippingScreen() {
         if (
             shipping.origin_country &&
             (mode === 'home_delivery' || mode === 'locker_pickup') &&
-            getLockedDefaultProvidersForMode(shipping.origin_country, mode).length > 0
+            getLockedDefaultProvidersForMode(
+                shipping.origin_country,
+                mode,
+                mode === 'locker_pickup' ? supportedLockerProviderNames : []
+            ).length > 0
         ) {
             return;
         }
@@ -436,10 +470,12 @@ export default function SellerShippingScreen() {
                                 <Text style={styles.providerGroupTitle}>{group.title}</Text>
                                 {!group.enabled ? (
                                     <Text style={styles.providerGroupHint}>Turn this mode on above to configure available providers.</Text>
+                                ) : group.mode === 'locker_pickup' && !servicePointCapabilitiesLoaded ? (
+                                    <Text style={styles.providerGroupHint}>Loading live Sendcloud pickup-point carriers...</Text>
                                 ) : group.items.length === 0 ? (
                                     <Text style={styles.providerGroupHint}>
                                         {group.mode === 'locker_pickup'
-                                            ? 'No Sendcloud-backed pickup-point providers are available for this country yet.'
+                                            ? 'No live Sendcloud pickup-point providers are enabled for this country right now.'
                                             : 'No suggested providers for this country yet. Add a custom provider.'}
                                     </Text>
                                 ) : (

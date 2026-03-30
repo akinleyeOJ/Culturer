@@ -1,4 +1,5 @@
 // Shared shipping configuration model and helpers.
+import { providerSupportsSendcloudCarrierCodes } from './sendcloudCarrierMap';
 
 // EU Member States (for zone detection)
 export const EU_COUNTRIES = [
@@ -342,37 +343,89 @@ export const normalizeCountryName = (country: string) => {
 export const getCountryFlag = (name: string) =>
     AVAILABLE_ORIGIN_COUNTRIES.find((country) => country.name === name)?.flag || '🌍';
 
-export const getProviderTemplatesForCountry = (country: string) => {
+const filterTemplatesBySupportedLockerProviders = (
+    templates: CarrierTemplate[],
+    supportedLockerProviders?: string[]
+) => {
+    if (supportedLockerProviders === undefined) {
+        return templates;
+    }
+
+    if (supportedLockerProviders.length === 0) {
+        return templates.filter((template) => template.mode !== 'locker_pickup');
+    }
+
+    const supportedProviderNames = new Set(supportedLockerProviders);
+    return templates.filter(
+        (template) =>
+            template.mode !== 'locker_pickup' || supportedProviderNames.has(template.name)
+    );
+};
+
+export const getSupportedLockerProviderNamesForCountry = (
+    country: string,
+    enabledCarrierCodes: string[] = []
+) => {
+    const normalizedCountry = normalizeCountryName(country);
+    if (!normalizedCountry || enabledCarrierCodes.length === 0) return [];
+
+    const baseTemplates = COUNTRY_PROVIDER_TEMPLATES[normalizedCountry] ||
+        (
+            AVAILABLE_ORIGIN_COUNTRIES.some((item) => item.name === normalizedCountry)
+                ? FALLBACK_EU_PROVIDER_TEMPLATES
+                : []
+        );
+
+    return baseTemplates
+        .filter((template) => template.mode === 'locker_pickup')
+        .filter((template) => providerSupportsSendcloudCarrierCodes(template.name, enabledCarrierCodes))
+        .map((template) => template.name);
+};
+
+export const getProviderTemplatesForCountry = (
+    country: string,
+    supportedLockerProviders?: string[]
+) => {
     const normalizedCountry = normalizeCountryName(country);
     if (!normalizedCountry) return [];
 
     if (COUNTRY_PROVIDER_TEMPLATES[normalizedCountry]) {
-        return COUNTRY_PROVIDER_TEMPLATES[normalizedCountry];
+        return filterTemplatesBySupportedLockerProviders(
+            COUNTRY_PROVIDER_TEMPLATES[normalizedCountry],
+            supportedLockerProviders
+        );
     }
 
     const isSupportedCountry = AVAILABLE_ORIGIN_COUNTRIES.some(
         (item) => item.name === normalizedCountry
     );
 
-    return isSupportedCountry ? FALLBACK_EU_PROVIDER_TEMPLATES : [];
+    return isSupportedCountry
+        ? filterTemplatesBySupportedLockerProviders(FALLBACK_EU_PROVIDER_TEMPLATES, supportedLockerProviders)
+        : [];
 };
 
 export const getLockedDefaultProvidersForMode = (
     country: string,
-    mode: ShippingProviderMode
+    mode: ShippingProviderMode,
+    supportedLockerProviders?: string[]
 ) =>
-    getProviderTemplatesForCountry(country)
+    getProviderTemplatesForCountry(country, supportedLockerProviders)
         .filter((provider) => provider.mode === mode)
         .slice(0, 2)
         .map((provider) => provider.name);
 
-export const buildProviderConfigs = (country: string, existingProviders: CarrierConfig[] = []) => {
-    const templates = getProviderTemplatesForCountry(country);
+export const buildProviderConfigs = (
+    country: string,
+    existingProviders: CarrierConfig[] = [],
+    supportedLockerProviders?: string[]
+) => {
+    const templates = getProviderTemplatesForCountry(country, supportedLockerProviders);
     const existingByName = new Map(existingProviders.map((provider) => [provider.name, normalizeCarrier(provider)]));
     const hasExplicitSelections = existingProviders.some((provider) => normalizeCarrier(provider).enabled);
     const lockedDefaults = new Set([
-        ...getLockedDefaultProvidersForMode(country, 'home_delivery'),
-        ...getLockedDefaultProvidersForMode(country, 'locker_pickup'),
+        ...getLockedDefaultProvidersForMode(country, 'home_delivery', supportedLockerProviders),
+        ...getLockedDefaultProvidersForMode(country, 'locker_pickup', supportedLockerProviders),
     ]);
 
     const suggestedProviders = templates.map((template) => {
@@ -417,14 +470,21 @@ const derivePreferredCarriers = (
         .map((provider) => provider.name);
 };
 
-export const hydrateShippingConfig = (saved?: Partial<SellerShippingConfig> | null): SellerShippingConfig => {
+export const hydrateShippingConfig = (
+    saved?: Partial<SellerShippingConfig> | null,
+    supportedLockerProviders?: string[]
+): SellerShippingConfig => {
     const normalizedCountry = normalizeCountryName(saved?.origin_country || DEFAULT_SHIPPING_CONFIG.origin_country);
     const legacyProviders = Array.isArray(saved?.providers)
         ? saved.providers
         : Array.isArray(saved?.carriers)
             ? saved.carriers
             : [];
-    const providers = buildProviderConfigs(normalizedCountry, legacyProviders as CarrierConfig[]);
+    const providers = buildProviderConfigs(
+        normalizedCountry,
+        legacyProviders as CarrierConfig[],
+        supportedLockerProviders
+    );
 
     const savedModes = saved?.modes;
     const hasExplicitProviderSelections = legacyProviders.some((provider) => normalizeCarrier(provider as CarrierConfig).enabled);

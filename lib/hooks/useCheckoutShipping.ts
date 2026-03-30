@@ -3,12 +3,14 @@ import { useFocusEffect } from 'expo-router';
 import { supabase } from '../supabase';
 import { type CartItem } from '../services/cartService';
 import { type PickupPointResult, type PickupPointSearchContext } from '../services/pickupPointService';
+import { fetchSendcloudServicePointCarrierCodes } from '../services/sendcloudService';
 import { fetchShippingRates, type ShippoParcel, type ShippoRate } from '../services/shippingService';
 import {
     buildLocalPickupOption,
     detectShippingZone,
     getEnabledCarriers,
     getIntegratedRate,
+    getSupportedLockerProviderNamesForCountry,
     hydrateShippingConfig,
     sortProvidersByPreference,
     WEIGHT_TIER_GRAMS,
@@ -161,14 +163,22 @@ export const useCheckoutShipping = ({
             if (!sellerId || sellerId === 'system') return;
 
             try {
-                const { data: profile, error } = await supabase
-                    .from('profiles' as any)
-                    .select('shop_shipping')
-                    .eq('id', sellerId)
-                    .single();
+                const [{ data: profile, error }, carrierCapabilityResult] = await Promise.all([
+                    supabase
+                        .from('profiles' as any)
+                        .select('shop_shipping')
+                        .eq('id', sellerId)
+                        .single(),
+                    fetchSendcloudServicePointCarrierCodes(),
+                ]);
 
                 if (!error && (profile as any)?.shop_shipping) {
-                    const config = hydrateShippingConfig((profile as any).shop_shipping as SellerShippingConfig);
+                    const rawShipping = (profile as any).shop_shipping as SellerShippingConfig;
+                    const liveSupportedLockerProviders = getSupportedLockerProviderNamesForCountry(
+                        rawShipping?.origin_country || '',
+                        carrierCapabilityResult.success ? carrierCapabilityResult.carrierCodes : []
+                    );
+                    const config = hydrateShippingConfig(rawShipping, liveSupportedLockerProviders);
                     setSellerShipping(config);
                 }
             } catch (err) {

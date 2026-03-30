@@ -1,31 +1,17 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import {
+    getSendcloudCarrierCodesForProvider,
+    normalizeCarrierLookupValue,
+} from '../../../lib/sendcloudCarrierMap.ts'
 
 const SENDCLOUD_PUBLIC_KEY = Deno.env.get('SENDCLOUD_PUBLIC_KEY') || ''
 const SENDCLOUD_SECRET_KEY = Deno.env.get('SENDCLOUD_SECRET_KEY') || ''
+const SENDCLOUD_SERVICE_POINT_CARRIERS_API_URL = 'https://servicepoints.sendcloud.sc/api/v2/carriers'
 const SENDCLOUD_SERVICE_POINTS_API_URL = 'https://servicepoints.sendcloud.sc/api/v2/service-points'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const PROVIDER_CARRIER_CODES: Record<string, string[]> = {
-    'colissimo pickup': ['colissimo', 'la_poste'],
-    'correos pickup': ['correos'],
-    'dhl packstation': ['dhl'],
-    'dhl servicepoint / locker': ['dhl'],
-    'dpd pickup': ['dpd'],
-    'evri parcelshop': ['evri', 'hermes'],
-    'gls parcelshop': ['gls'],
-    'hermes paketshop': ['hermes'],
-    'inpost locker 24/7': ['inpost'],
-    'mondial relay': ['mondial_relay', 'mondialrelay'],
-    'poczta polska pickup': ['poczta_polska', 'pocztex'],
-    'postnl pickup point': ['postnl'],
-    'poste italiane punto poste': ['poste_italiane', 'posteitaliane'],
-    'postnord pickup point': ['postnord'],
-    'seur pickup': ['seur'],
-    'ups access point': ['ups'],
 }
 
 const COUNTRY_NAME_TO_CODE: Record<string, string> = {
@@ -59,21 +45,13 @@ const COUNTRY_NAME_TO_CODE: Record<string, string> = {
     'united kingdom': 'GB',
 }
 
-const normalize = (value: string) =>
-    value
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, ' ')
-        .trim()
-
 const normalizeCountryCode = (country: string) => {
     const trimmed = country.trim()
     if (trimmed.length === 2) {
         return trimmed.toUpperCase()
     }
 
-    return COUNTRY_NAME_TO_CODE[normalize(country)] || trimmed.toUpperCase()
+    return COUNTRY_NAME_TO_CODE[normalizeCarrierLookupValue(country)] || trimmed.toUpperCase()
 }
 
 const buildAuthHeader = () => {
@@ -82,8 +60,8 @@ const buildAuthHeader = () => {
 }
 
 const matchesCarrier = (carrierName: string, payload: any) => {
-    const normalizedCarrierName = normalize(carrierName)
-    const expectedCodes = PROVIDER_CARRIER_CODES[normalizedCarrierName] || []
+    const normalizedCarrierName = normalizeCarrierLookupValue(carrierName)
+    const expectedCodes = getSendcloudCarrierCodesForProvider(carrierName)
     const candidateValues = [
         payload?.carrier,
         payload?.name,
@@ -91,15 +69,38 @@ const matchesCarrier = (carrierName: string, payload: any) => {
         payload?.extra_data?.partner_name,
     ]
         .filter(Boolean)
-        .map((value) => normalize(String(value)))
+        .map((value) => normalizeCarrierLookupValue(String(value)))
 
     if (expectedCodes.length === 0) {
         return candidateValues.some((value) => value.includes(normalizedCarrierName))
     }
 
     return candidateValues.some((value) =>
-        expectedCodes.some((code) => value.includes(normalize(code)))
+        expectedCodes.some((code) => value.includes(normalizeCarrierLookupValue(code)))
     )
+}
+
+const parseCarrierCodes = (input: unknown) =>
+    Array.isArray(input)
+        ? input
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+        : []
+
+const fetchSendcloudPayload = async (url: URL) => {
+    const response = await fetch(url.toString(), {
+        headers: {
+            'Authorization': buildAuthHeader(),
+        },
+    })
+
+    const payload = await response.json()
+
+    if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || 'Failed to fetch Sendcloud data')
+    }
+
+    return payload
 }
 
 serve(async (req) => {
@@ -114,6 +115,24 @@ serve(async (req) => {
 
         const { action, ...data } = await req.json()
 
+        if (action === 'list-service-point-carriers') {
+            const payload = await fetchSendcloudPayload(new URL(SENDCLOUD_SERVICE_POINT_CARRIERS_API_URL))
+            const rawCarriers = Array.isArray(payload?.carriers)
+                ? payload.carriers
+                : Array.isArray(payload)
+                    ? payload
+                    : []
+
+            const carrierCodes = rawCarriers
+                .map((carrier: any) => String(carrier?.code || carrier?.carrier || carrier || '').trim())
+                .filter(Boolean)
+
+            return new Response(
+                JSON.stringify({ success: true, carrier_codes: carrierCodes }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            )
+        }
+
         if (action !== 'list-service-points') {
             throw new Error(`Invalid action: ${action}`)
         }
@@ -121,6 +140,7 @@ serve(async (req) => {
         const country = normalizeCountryCode(data.country || '')
         const address = (data.address || '').trim()
         const radius = Number(data.radius) || 15000
+        const requestedCarrierCodes = parseCarrierCodes(data.carrier_codes)
 
         if (!country || !address) {
             throw new Error('Missing required fields: country and address')
@@ -130,18 +150,11 @@ serve(async (req) => {
         url.searchParams.set('country', country)
         url.searchParams.set('address', address)
         url.searchParams.set('radius', String(radius))
-
-        const response = await fetch(url.toString(), {
-            headers: {
-                'Authorization': buildAuthHeader(),
-            },
-        })
-
-        const payload = await response.json()
-
-        if (!response.ok) {
-            throw new Error(payload?.message || payload?.error || 'Failed to fetch service points')
+        if (requestedCarrierCodes.length > 0) {
+            url.searchParams.set('carrier', requestedCarrierCodes.join(','))
         }
+
+        const payload = await fetchSendcloudPayload(url)
 
         const rawServicePoints = Array.isArray(payload?.service_points)
             ? payload.service_points
@@ -149,9 +162,11 @@ serve(async (req) => {
                 ? payload
                 : []
 
-        const filtered = rawServicePoints.filter((servicePoint: any) =>
-            matchesCarrier(data.carrier_name || '', servicePoint)
-        )
+        const filtered = requestedCarrierCodes.length > 0
+            ? rawServicePoints
+            : rawServicePoints.filter((servicePoint: any) =>
+                matchesCarrier(data.carrier_name || '', servicePoint)
+            )
 
         const servicePoints = filtered.map((servicePoint: any) => ({
             id: String(servicePoint.id),
