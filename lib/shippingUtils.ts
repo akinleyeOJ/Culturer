@@ -291,27 +291,6 @@ export const DEFAULT_SHIPPING_CONFIG: SellerShippingConfig = {
     carriers: [],
 };
 
-export const INTEGRATED_POSTAGE_RATES: Record<
-    ShippingModeKey,
-    Record<ShippingZone, Record<WeightTier, number>>
-> = {
-    home_delivery: {
-        domestic: { small: 4.49, medium: 5.99, large: 7.99 },
-        eu: { small: 8.99, medium: 11.99, large: 15.99 },
-        international: { small: 14.99, medium: 19.99, large: 27.99 },
-    },
-    locker_pickup: {
-        domestic: { small: 3.49, medium: 4.49, large: 5.99 },
-        eu: { small: 6.99, medium: 8.99, large: 11.99 },
-        international: { small: 11.99, medium: 14.99, large: 19.99 },
-    },
-    local_pickup: {
-        domestic: { small: 0, medium: 0, large: 0 },
-        eu: { small: 0, medium: 0, large: 0 },
-        international: { small: 0, medium: 0, large: 0 },
-    },
-};
-
 const normalizeProviderMode = (carrier: Partial<CarrierConfig>): ShippingProviderMode =>
     carrier.mode || (carrier.type === 'locker' ? 'locker_pickup' : 'home_delivery');
 
@@ -591,12 +570,6 @@ export const getCarrierPrice = (
         default: return carrier.price_medium;
     }
 };
-
-export const getIntegratedRate = (
-    mode: ShippingModeKey,
-    zone: ShippingZone,
-    weightTier: WeightTier
-): number => INTEGRATED_POSTAGE_RATES[mode][zone][weightTier];
 
 export const sellerShipsToZone = (
     config: SellerShippingConfig,

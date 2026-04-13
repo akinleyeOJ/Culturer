@@ -4,7 +4,6 @@ import { Colors } from '../../constants/color';
 import { type CartItem } from '../../lib/services/cartService';
 import { type CarrierConfig } from '../../lib/shippingUtils';
 import { type ShippoRate } from '../../lib/services/shippingService';
-import { type CheckoutShippingMethod } from './types';
 
 interface ReviewStepProps {
     styles: any;
@@ -27,7 +26,6 @@ interface ReviewStepProps {
     city: string;
     selectedCarrier: CarrierConfig | null;
     selectedShippoRate: ShippoRate | null;
-    shippingMethod: CheckoutShippingMethod | null;
     cardNumber: string;
     selectedSavedCardId: string | null;
     savedCards: any[];
@@ -50,7 +48,6 @@ export function ReviewStep({
     city,
     selectedCarrier,
     selectedShippoRate,
-    shippingMethod,
     cardNumber,
     selectedSavedCardId,
     savedCards,
@@ -65,11 +62,7 @@ export function ReviewStep({
         ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}`
         : selectedCarrier?.name
             ? selectedCarrier.name
-            : shippingMethod === 'express'
-                ? 'Express Delivery'
-                : shippingMethod === 'standard'
-                    ? 'Standard Delivery'
-                    : 'No shipping selected';
+            : 'No shipping selected';
 
     const paymentLabel = selectedSavedCard
         ? `${selectedSavedCard.brand?.toUpperCase?.() || 'CARD'} ${selectedSavedCard.last4 || ''}`.trim()

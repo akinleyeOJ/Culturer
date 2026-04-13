@@ -1,4 +1,5 @@
 import { fetchSendcloudServicePoints } from './sendcloudService';
+import { providerSupportsPickupSearch } from '../shippingProviders/registry';
 
 export interface PickupPointResult {
     id: string;
@@ -177,6 +178,10 @@ export const fetchPickupPoints = async (
     context: PickupPointSearchContext,
     fallbackAddress?: PickupPointSearchContext
 ) => {
+    if (!providerSupportsPickupSearch(carrierName)) {
+        return [];
+    }
+
     const query = context.query?.trim() || '';
     const city = context.city?.trim() || fallbackAddress?.city?.trim() || '';
     const postalCode = context.postalCode?.trim() || fallbackAddress?.postalCode?.trim() || '';

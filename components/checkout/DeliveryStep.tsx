@@ -4,7 +4,7 @@ import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplet
 import { ChevronDownIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { clearPickupPointSelectionState } from '../../lib/pickupPointSelectionStore';
-import { getIntegratedRate, sellerShipsToZone, type CarrierConfig, type SellerShippingConfig, type ShippingZone, type WeightTier } from '../../lib/shippingUtils';
+import { sellerShipsToZone, type CarrierConfig, type SellerShippingConfig, type ShippingZone, type WeightTier } from '../../lib/shippingUtils';
 import { type ShippoRate } from '../../lib/services/shippingService';
 import { type PickupPointResult, type PickupPointSearchContext } from '../../lib/services/pickupPointService';
 import { type CheckoutAddress, type CheckoutShippingMethod } from './types';
@@ -50,7 +50,6 @@ interface DeliveryStepProps {
     selectedCarrier: CarrierConfig | null;
     setSelectedCarrier: (carrier: CarrierConfig | null) => void;
     cartWeightTier: WeightTier;
-    shippingMethod: CheckoutShippingMethod | null;
     setShippingMethod: (method: CheckoutShippingMethod | null) => void;
     selectedLocker: PickupPointResult | null;
     setSelectedLocker: (pickupPoint: PickupPointResult | null) => void;
@@ -104,7 +103,6 @@ export function DeliveryStep({
     selectedCarrier,
     setSelectedCarrier,
     cartWeightTier,
-    shippingMethod,
     setShippingMethod,
     selectedLocker,
     setSelectedLocker,
@@ -331,7 +329,7 @@ export function DeliveryStep({
                 {sellerShipping && (
                     <View style={styles.apiCostHintBox}>
                         <Text style={styles.apiCostHintText}>
-                            Buyers always pay postage. The platform calculates the shipping amount at checkout based on parcel size, route, and delivery option.
+                            Live shipping quotes appear only for delivery options that can return a real provider rate for this route.
                         </Text>
                     </View>
                 )}
@@ -386,9 +384,6 @@ export function DeliveryStep({
                             {filteredShippoRates.length > 0 ? 'Pickup & Local Options' : 'Integrated Delivery Options'}
                         </Text>
                         {integratedCarrierOptions.map((carrier) => {
-                            const price = carrier.type === 'pickup'
-                                ? 0
-                                : getIntegratedRate(carrier.mode, shippingZone, cartWeightTier);
                             const isSelected = selectedCarrier?.name === carrier.name;
                             return (
                                 <TouchableOpacity
@@ -423,7 +418,7 @@ export function DeliveryStep({
                                         </View>
                                     </View>
                                     <Text style={styles.radioPrice}>
-                                        {price === 0 ? 'Free' : `€${price.toFixed(2)}`}
+                                        {carrier.type === 'pickup' ? 'Free' : 'Live quote'}
                                     </Text>
                                 </TouchableOpacity>
                             );
@@ -431,56 +426,12 @@ export function DeliveryStep({
                     </>
                 )}
 
-                {!sellerShipping && filteredShippoRates.length === 0 && (
-                    <>
-                        <TouchableOpacity
-                            style={[styles.radioOption, shippingMethod === 'standard' && styles.radioOptionSelected]}
-                            onPress={() => {
-                                setShippingMethod('standard');
-                                setSelectedCarrier(null);
-                                setSelectedShippoRate(null);
-                                setSelectedLocker(null);
-                                setLockerSearch('');
-                                setLockerSearchContext(null);
-                                clearPickupPointSelectionState();
-                            }}
-                        >
-                            <View style={styles.radioRow}>
-                                <View style={styles.radioCircle}>
-                                    {shippingMethod === 'standard' && <View style={styles.radioDot} />}
-                                </View>
-                                <View>
-                                    <Text style={styles.radioTitle}>Standard Delivery</Text>
-                                    <Text style={styles.radioSubtitle}>Est. 3-5 Business Days</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.radioPrice}>Free</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[styles.radioOption, shippingMethod === 'express' && styles.radioOptionSelected]}
-                            onPress={() => {
-                                setShippingMethod('express');
-                                setSelectedCarrier(null);
-                                setSelectedShippoRate(null);
-                                setSelectedLocker(null);
-                                setLockerSearch('');
-                                setLockerSearchContext(null);
-                                clearPickupPointSelectionState();
-                            }}
-                        >
-                            <View style={styles.radioRow}>
-                                <View style={styles.radioCircle}>
-                                    {shippingMethod === 'express' && <View style={styles.radioDot} />}
-                                </View>
-                                <View>
-                                    <Text style={styles.radioTitle}>Express Delivery</Text>
-                                    <Text style={styles.radioSubtitle}>Est. 1-2 Business Days</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.radioPrice}>$15.00</Text>
-                        </TouchableOpacity>
-                    </>
+                {!loadingRates && filteredShippoRates.length === 0 && integratedCarrierOptions.length === 0 && (
+                    <View style={styles.loadingRatesBox}>
+                        <Text style={styles.loadingRatesText}>
+                            No live shipping quotes are available for this route yet. Try a different delivery address or country.
+                        </Text>
+                    </View>
                 )}
 
                 {selectedCarrier?.type === 'locker' && (

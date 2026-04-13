@@ -5,11 +5,11 @@ import { type CartItem } from '../services/cartService';
 import { type PickupPointResult, type PickupPointSearchContext } from '../services/pickupPointService';
 import { fetchSendcloudServicePointCarrierCodes } from '../services/sendcloudService';
 import { fetchShippingRates, type ShippoParcel, type ShippoRate } from '../services/shippingService';
+import { getShippingProviderAdapter, providerSupportsLiveRates } from '../shippingProviders/registry';
 import {
     buildLocalPickupOption,
     detectShippingZone,
     getEnabledCarriers,
-    getIntegratedRate,
     getSupportedLockerProviderNamesForCountry,
     hydrateShippingConfig,
     sortProvidersByPreference,
@@ -115,7 +115,12 @@ export const useCheckoutShipping = ({
     const shippoRateCacheRef = useRef<Map<string, { rates: ShippoRate[]; shipmentId: string | null }>>(new Map());
 
     const enabledHomeProviders = useMemo(
-        () => (sellerShipping ? getEnabledCarriers(sellerShipping, 'home_delivery') : []),
+        () =>
+            sellerShipping
+                ? getEnabledCarriers(sellerShipping, 'home_delivery').filter((provider) =>
+                    providerSupportsLiveRates(provider.name)
+                )
+                : [],
         [sellerShipping]
     );
 
@@ -139,21 +144,22 @@ export const useCheckoutShipping = ({
     const integratedCarrierOptions = useMemo(() => {
         if (!sellerShipping) return [];
 
-        const preferredLockerProviders = sortProvidersByPreference(
-            enabledLockerProviders,
-            sellerShipping.modes.locker_pickup.preferred_carriers
-        );
-        const preferredHomeProviders = sortProvidersByPreference(
-            enabledHomeProviders,
-            sellerShipping.modes.home_delivery.preferred_carriers
+        const liveRateNonShippoProviders = sortProvidersByPreference(
+            [...enabledHomeProviders, ...enabledLockerProviders].filter((provider) => {
+                const adapter = getShippingProviderAdapter(provider.name);
+                return !!adapter?.supportsLiveRates && adapter.rateSource !== 'shippo';
+            }),
+            [
+                ...sellerShipping.modes.home_delivery.preferred_carriers,
+                ...sellerShipping.modes.locker_pickup.preferred_carriers,
+            ]
         );
 
         return [
-            ...(filteredShippoRates.length === 0 ? preferredHomeProviders : []),
-            ...preferredLockerProviders,
+            ...liveRateNonShippoProviders,
             ...(localPickupOption ? [localPickupOption] : []),
         ];
-    }, [sellerShipping, enabledHomeProviders, enabledLockerProviders, localPickupOption, filteredShippoRates]);
+    }, [sellerShipping, enabledHomeProviders, enabledLockerProviders, localPickupOption]);
 
     useEffect(() => {
         const fetchSellerShipping = async () => {
@@ -419,13 +425,11 @@ export const useCheckoutShipping = ({
         }
 
         if (selectedCarrier) {
-            return selectedCarrier.type === 'pickup'
-                ? 0
-                : getIntegratedRate(selectedCarrier.mode, shippingZone, cartWeightTier);
+            return selectedCarrier.type === 'pickup' ? 0 : 0;
         }
 
         return 0;
-    }, [selectedShippoRate, selectedCarrier, shippingZone, cartWeightTier]);
+    }, [selectedShippoRate, selectedCarrier]);
 
     return {
         sellerShipping,

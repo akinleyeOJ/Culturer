@@ -535,11 +535,7 @@ const Checkout = () => {
 
     const totals = useMemo(() => {
         const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-
-        const resolvedShippingCost =
-            shippingMethod === 'express' && !selectedShippoRate && !selectedCarrier
-                ? 15.0
-                : shippingCost;
+        const resolvedShippingCost = shippingCost;
 
         const tax = subtotal * 0.10; // 10% Tax
 
@@ -561,7 +557,7 @@ const Checkout = () => {
         const total = Math.max(0, subtotal + resolvedShippingCost + tax - discountAmount);
 
         return { subtotal, shippingCost: resolvedShippingCost, tax, discount: discountAmount, total };
-    }, [appliedDiscount, cartItems, selectedCarrier, selectedShippoRate, shippingCost, shippingMethod]);
+    }, [appliedDiscount, cartItems, shippingCost]);
 
     // Filtered Countries
     const filteredCountries = useMemo(() => {
@@ -649,7 +645,7 @@ const Checkout = () => {
                 if (!selectedShippoRate && !selectedCarrier) return false;
                 if (selectedCarrier?.type === 'locker' && !selectedLocker) return false;
             } else {
-                if (!shippingMethod) return false;
+                return false;
             }
             return true;
         }
@@ -686,11 +682,8 @@ const Checkout = () => {
                     return;
                 }
             } else {
-                // Legacy fallback check
-                if (!shippingMethod) {
-                    Alert.alert('Shipping Method', 'Please select a shipping method.');
-                    return;
-                }
+                Alert.alert('No Live Shipping Rates', 'No live shipping quotes are available for this route yet. Please try a different delivery address or country.');
+                return;
             }
 
             setStep(2);
@@ -837,7 +830,7 @@ const Checkout = () => {
                         payment_method: selectedPaymentMethod,
                         carrier_name: selectedShippoRate ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}` : (selectedCarrier?.name || null),
                         shipping_method_details: (selectedCarrier || selectedShippoRate) ? {
-                            carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || 'Manual'),
+                            carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || null),
                             type: selectedShippoRate
                                 ? 'home_delivery'
                                 : selectedCarrier?.type === 'locker'
@@ -849,7 +842,7 @@ const Checkout = () => {
                                 ? 'integrated_live'
                                 : selectedCarrier?.type === 'pickup'
                                     ? 'local_pickup'
-                                    : 'integrated_table',
+                                    : 'provider_live',
                             weight_tier: cartWeightTier,
                             total_weight_grams: totalWeightGrams,
                             handling_fee: 0,
@@ -879,7 +872,7 @@ const Checkout = () => {
                     carrier_name: selectedShippoRate ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}` : (selectedCarrier?.name || null),
                     shipping_zone: shippingZone,
                     shipping_method_details: (selectedCarrier || selectedShippoRate) ? {
-                        carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || 'Manual'),
+                        carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || null),
                         type: selectedShippoRate
                             ? 'home_delivery'
                             : selectedCarrier?.type === 'locker'
@@ -891,7 +884,7 @@ const Checkout = () => {
                             ? 'integrated_live'
                             : selectedCarrier?.type === 'pickup'
                                 ? 'local_pickup'
-                                : 'integrated_table',
+                                : 'provider_live',
                         weight_tier: cartWeightTier,
                         total_weight_grams: totalWeightGrams,
                         handling_fee: 0,
@@ -1196,7 +1189,6 @@ const Checkout = () => {
                             selectedCarrier={selectedCarrier}
                             setSelectedCarrier={setSelectedCarrier}
                             cartWeightTier={cartWeightTier}
-                            shippingMethod={shippingMethod}
                             setShippingMethod={setShippingMethod}
                             selectedLocker={selectedLocker}
                             setSelectedLocker={setSelectedLocker}
@@ -1242,7 +1234,6 @@ const Checkout = () => {
                             city={city}
                             selectedCarrier={selectedCarrier}
                             selectedShippoRate={selectedShippoRate}
-                            shippingMethod={shippingMethod}
                             cardNumber={cardNumber}
                             selectedSavedCardId={selectedSavedCardId}
                             savedCards={savedCards}
