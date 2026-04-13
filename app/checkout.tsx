@@ -29,7 +29,7 @@ import { useCheckoutShipping } from '../lib/hooks/useCheckoutShipping';
 import { supabase } from '../lib/supabase';
 import { fetchCart, clearCart, CartItem } from '../lib/services/cartService';
 import { trackProductSale } from '../lib/services/productService';
-import { formatWeight } from '../lib/shippingUtils';
+import { formatWeight, SHIPPING_LAUNCH_COUNTRY } from '../lib/shippingUtils';
 import {
     ChevronLeftIcon,
     LockClosedIcon,
@@ -41,17 +41,8 @@ import {
 } from '../lib/pickupPointSelectionStore';
 
 const COUNTRIES = [
-    { name: "Austria", flag: "🇦🇹" }, { name: "Belgium", flag: "🇧🇪" }, { name: "Bulgaria", flag: "🇧🇬" },
-    { name: "Croatia", flag: "🇭🇷" }, { name: "Cyprus", flag: "🇨🇾" }, { name: "Czech Republic", flag: "🇨🇿" },
-    { name: "Denmark", flag: "🇩🇰" }, { name: "Estonia", flag: "🇪🇪" }, { name: "Finland", flag: "🇫🇮" },
-    { name: "France", flag: "🇫🇷" }, { name: "Germany", flag: "🇩🇪" }, { name: "Greece", flag: "🇬🇷" },
-    { name: "Hungary", flag: "🇭🇺" }, { name: "Ireland", flag: "🇮🇪" }, { name: "Italy", flag: "🇮🇹" },
-    { name: "Latvia", flag: "🇱🇻" }, { name: "Lithuania", flag: "🇱🇹" }, { name: "Luxembourg", flag: "🇱🇺" },
-    { name: "Malta", flag: "🇲🇹" }, { name: "Netherlands", flag: "🇳🇱" }, { name: "Poland", flag: "🇵🇱" },
-    { name: "Portugal", flag: "🇵🇹" }, { name: "Romania", flag: "🇷🇴" }, { name: "Slovakia", flag: "🇸🇰" },
-    { name: "Slovenia", flag: "🇸🇮" }, { name: "Spain", flag: "🇪🇸" }, { name: "Sweden", flag: "🇸🇪" },
-    { name: "United Kingdom", flag: "🇬🇧" }
-].sort((a, b) => a.name.localeCompare(b.name));
+    { name: SHIPPING_LAUNCH_COUNTRY, flag: '🇵🇱' },
+];
 
 const LIVE_SHIPPING_APIS_ENABLED =
     process.env.EXPO_PUBLIC_ENABLE_LIVE_SHIPPING_APIS === 'true' ||
@@ -113,6 +104,12 @@ const Checkout = () => {
     const [savedCards, setSavedCards] = useState<any[]>([]);
     const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null);
     const [loadingCards, setLoadingCards] = useState(false);
+
+    useEffect(() => {
+        if (country !== SHIPPING_LAUNCH_COUNTRY) {
+            setCountry(SHIPPING_LAUNCH_COUNTRY);
+        }
+    }, [country]);
 
     const {
         sellerShipping,

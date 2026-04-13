@@ -1,6 +1,8 @@
 // Shared shipping configuration model and helpers.
 import { providerSupportsSendcloudCarrierCodes } from './sendcloudCarrierMap';
 
+export const SHIPPING_LAUNCH_COUNTRY = 'Poland';
+
 // EU Member States (for zone detection)
 export const EU_COUNTRIES = [
     'Austria', 'Belgium', 'Bulgaria', 'Croatia', 'Cyprus', 'Czech Republic',
@@ -171,24 +173,8 @@ export const FALLBACK_EU_PROVIDER_TEMPLATES: CarrierTemplate[] = [
 ];
 
 export const AVAILABLE_ORIGIN_COUNTRIES = [
-    { name: 'Poland', flag: '🇵🇱' },
-    { name: 'United Kingdom', flag: '🇬🇧' },
-    { name: 'Germany', flag: '🇩🇪' },
-    { name: 'Italy', flag: '🇮🇹' },
-    { name: 'France', flag: '🇫🇷' },
-    { name: 'Spain', flag: '🇪🇸' },
-    { name: 'Netherlands', flag: '🇳🇱' },
-    { name: 'Austria', flag: '🇦🇹' },
-    { name: 'Belgium', flag: '🇧🇪' },
-    { name: 'Czech Republic', flag: '🇨🇿' },
-    { name: 'Denmark', flag: '🇩🇰' },
-    { name: 'Ireland', flag: '🇮🇪' },
-    { name: 'Portugal', flag: '🇵🇹' },
-    { name: 'Sweden', flag: '🇸🇪' },
-    { name: 'Romania', flag: '🇷🇴' },
-    { name: 'Hungary', flag: '🇭🇺' },
-    { name: 'Greece', flag: '🇬🇷' },
-].sort((a, b) => a.name.localeCompare(b.name));
+    { name: SHIPPING_LAUNCH_COUNTRY, flag: '🇵🇱' },
+];
 
 export const COUNTRY_CODE_TO_NAME: Record<string, string> = {
     AT: 'Austria',

@@ -10,6 +10,7 @@ import {
     buildLocalPickupOption,
     detectShippingZone,
     getEnabledCarriers,
+    SHIPPING_LAUNCH_COUNTRY,
     getSupportedLockerProviderNamesForCountry,
     hydrateShippingConfig,
     sortProvidersByPreference,
@@ -113,25 +114,26 @@ export const useCheckoutShipping = ({
     const [shippoShipmentId, setShippoShipmentId] = useState<string | null>(null);
     const shippoRequestSignatureRef = useRef<string | null>(null);
     const shippoRateCacheRef = useRef<Map<string, { rates: ShippoRate[]; shipmentId: string | null }>>(new Map());
+    const isPolandDomesticRoute = sellerShipping?.origin_country === SHIPPING_LAUNCH_COUNTRY && country === SHIPPING_LAUNCH_COUNTRY;
 
     const enabledHomeProviders = useMemo(
         () =>
-            sellerShipping
+            sellerShipping && isPolandDomesticRoute
                 ? getEnabledCarriers(sellerShipping, 'home_delivery').filter((provider) =>
                     providerSupportsLiveRates(provider.name)
                 )
                 : [],
-        [sellerShipping]
+        [isPolandDomesticRoute, sellerShipping]
     );
 
     const enabledLockerProviders = useMemo(
-        () => (sellerShipping ? getEnabledCarriers(sellerShipping, 'locker_pickup') : []),
-        [sellerShipping]
+        () => (sellerShipping && isPolandDomesticRoute ? getEnabledCarriers(sellerShipping, 'locker_pickup') : []),
+        [isPolandDomesticRoute, sellerShipping]
     );
 
     const localPickupOption = useMemo(
-        () => (sellerShipping ? buildLocalPickupOption(sellerShipping) : null),
-        [sellerShipping]
+        () => (sellerShipping && isPolandDomesticRoute ? buildLocalPickupOption(sellerShipping) : null),
+        [isPolandDomesticRoute, sellerShipping]
     );
 
     const filteredShippoRates = useMemo(() => {
@@ -257,6 +259,7 @@ export const useCheckoutShipping = ({
     const refreshShippoRates = useCallback(async () => {
         if (
             !liveShippingApisEnabled ||
+            country.trim() !== SHIPPING_LAUNCH_COUNTRY ||
             !zipCode.trim() ||
             !country.trim() ||
             !city.trim() ||
@@ -291,6 +294,7 @@ export const useCheckoutShipping = ({
             };
 
             if (
+                normalizedShipping.origin_country !== SHIPPING_LAUNCH_COUNTRY ||
                 !normalizedShipping.modes.home_delivery.enabled ||
                 !originAddress.street ||
                 !originAddress.city ||
