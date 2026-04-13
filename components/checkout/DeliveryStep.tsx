@@ -3,11 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator 
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { ChevronDownIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
-import { clearPickupPointSelectionState } from '../../lib/pickupPointSelectionStore';
-import { sellerShipsToZone, type CarrierConfig, type SellerShippingConfig, type ShippingZone, type WeightTier } from '../../lib/shippingUtils';
+import { sellerShipsToZone, type CarrierConfig, type SellerShippingConfig, type ShippingZone } from '../../lib/shippingUtils';
 import { type ShippoRate } from '../../lib/services/shippingService';
-import { type PickupPointResult, type PickupPointSearchContext } from '../../lib/services/pickupPointService';
-import { type CheckoutAddress, type CheckoutShippingMethod } from './types';
+import { type PickupPointResult } from '../../lib/services/pickupPointService';
+import { type CheckoutAddress } from './types';
 
 interface DeliveryStepProps {
     styles: any;
@@ -49,14 +48,9 @@ interface DeliveryStepProps {
     integratedCarrierOptions: CarrierConfig[];
     selectedCarrier: CarrierConfig | null;
     setSelectedCarrier: (carrier: CarrierConfig | null) => void;
-    cartWeightTier: WeightTier;
-    setShippingMethod: (method: CheckoutShippingMethod | null) => void;
     selectedLocker: PickupPointResult | null;
     setSelectedLocker: (pickupPoint: PickupPointResult | null) => void;
-    setLockerSearch: (value: string) => void;
-    lockerSearch: string;
-    lockerSearchContext: PickupPointSearchContext | null;
-    setLockerSearchContext: (context: PickupPointSearchContext | null) => void;
+    clearPickupPointDraft: () => void;
     onOpenPickupPointPicker: () => void;
     orderNote: string;
     setOrderNote: (value: string) => void;
@@ -102,14 +96,9 @@ export function DeliveryStep({
     integratedCarrierOptions,
     selectedCarrier,
     setSelectedCarrier,
-    cartWeightTier,
-    setShippingMethod,
     selectedLocker,
     setSelectedLocker,
-    setLockerSearch,
-    lockerSearch,
-    lockerSearchContext,
-    setLockerSearchContext,
+    clearPickupPointDraft,
     onOpenPickupPointPicker,
     orderNote,
     setOrderNote,
@@ -350,12 +339,9 @@ export function DeliveryStep({
                                     style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
                                     onPress={() => {
                                         setSelectedShippoRate(rate);
-                                        setShippingMethod('carrier');
                                         setSelectedCarrier(null);
                                         setSelectedLocker(null);
-                                        setLockerSearch('');
-                                        setLockerSearchContext(null);
-                                        clearPickupPointSelectionState();
+                                        clearPickupPointDraft();
                                     }}
                                 >
                                     <View style={styles.radioRow}>
@@ -392,12 +378,9 @@ export function DeliveryStep({
                                     onPress={() => {
                                         setSelectedCarrier(carrier);
                                         setSelectedShippoRate(null);
-                                        setShippingMethod('carrier');
                                         if (carrier.type !== 'locker') {
                                             setSelectedLocker(null);
-                                            setLockerSearch('');
-                                            setLockerSearchContext(null);
-                                            clearPickupPointSelectionState();
+                                            clearPickupPointDraft();
                                         }
                                     }}
                                 >

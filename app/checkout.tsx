@@ -22,7 +22,7 @@ import CustomButton from '../components/Button';
 import { DeliveryStep } from '../components/checkout/DeliveryStep';
 import { PaymentStep } from '../components/checkout/PaymentStep';
 import { ReviewStep } from '../components/checkout/ReviewStep';
-import { type CheckoutAddress as Address, type CheckoutShippingMethod as ShippingMethod, type CheckoutStep } from '../components/checkout/types';
+import { type CheckoutAddress as Address, type CheckoutStep } from '../components/checkout/types';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCheckoutShipping } from '../lib/hooks/useCheckoutShipping';
@@ -86,9 +86,7 @@ const Checkout = () => {
     const [city, setCity] = useState('');
     const [zipCode, setZipCode] = useState('');
     const [country, setCountry] = useState('');
-    const [shippingMethod, setShippingMethod] = useState<ShippingMethod | null>(null);
     const [orderNote, setOrderNote] = useState('');
-    const [saveAddress] = useState(false);
 
     // Payment State
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'apple_pay' | 'p24'>('card');
@@ -394,7 +392,6 @@ const Checkout = () => {
                     if (draft.zipCode) setZipCode(draft.zipCode);
                     if (draft.country) setCountry(draft.country);
                     if (draft.phone) setPhone(draft.phone);
-                    if (draft.shippingMethod) setShippingMethod(draft.shippingMethod);
                     // Payment - only restore if not empty
                     if (draft.cardHolderName) setCardHolderName(draft.cardHolderName);
                     if (draft.cardNumber) setCardNumber(draft.cardNumber);
@@ -422,7 +419,7 @@ const Checkout = () => {
             try {
                 const draft = {
                     email, firstName, lastName, address1, address2,
-                    city, zipCode, country, phone, shippingMethod,
+                    city, zipCode, country, phone,
                     cardHolderName, cardNumber, cardExpiry
                 };
                 await AsyncStorage.setItem('checkout_draft', JSON.stringify(draft));
@@ -432,7 +429,7 @@ const Checkout = () => {
         }, 500); // 500ms debounce
 
         return () => clearTimeout(timeout);
-    }, [email, firstName, lastName, address1, address2, city, zipCode, country, phone, shippingMethod, cardHolderName, cardNumber, cardExpiry]);
+    }, [email, firstName, lastName, address1, address2, city, zipCode, country, phone, cardHolderName, cardNumber, cardExpiry]);
 
     // Address Management
     const fillAddressForm = (addr: Address) => {
@@ -780,22 +777,6 @@ const Checkout = () => {
                 lastName,
             };
 
-            // Save Address if requested (Appends to list)
-            if (saveAddress) {
-                const updatedAddresses = [...savedAddresses, shippingAddressObj];
-                // Check for duplicates roughly to avoid spam
-                const isDuplicate = savedAddresses.some(a =>
-                    a.line1 === shippingAddressObj.line1 &&
-                    a.zipCode === shippingAddressObj.zipCode
-                );
-
-                if (!isDuplicate) {
-                    await supabase.from('profiles').update({
-                        saved_address: updatedAddresses
-                    }).eq('id', user.id);
-                }
-            }
-
             // Save Payment Method preference (Token only)
             if (saveCard && paymentMethodId) {
                 await supabase.from('profiles').update({
@@ -1113,6 +1094,17 @@ const Checkout = () => {
         } as any);
     };
 
+    const clearPickupPointDraft = () => {
+        setLockerSearch('');
+        setLockerSearchContext(null);
+        setPickupPointSelectionState({
+            carrierName: '',
+            selection: null,
+            search: '',
+            context: null,
+        });
+    };
+
     if (loading) {
         return (
             <SafeAreaView style={styles.loadingContainer}>
@@ -1188,14 +1180,9 @@ const Checkout = () => {
                             integratedCarrierOptions={integratedCarrierOptions}
                             selectedCarrier={selectedCarrier}
                             setSelectedCarrier={setSelectedCarrier}
-                            cartWeightTier={cartWeightTier}
-                            setShippingMethod={setShippingMethod}
                             selectedLocker={selectedLocker}
                             setSelectedLocker={setSelectedLocker}
-                            setLockerSearch={setLockerSearch}
-                            lockerSearch={lockerSearch}
-                            lockerSearchContext={lockerSearchContext}
-                            setLockerSearchContext={setLockerSearchContext}
+                            clearPickupPointDraft={clearPickupPointDraft}
                             onOpenPickupPointPicker={openPickupPointPicker}
                             orderNote={orderNote}
                             setOrderNote={setOrderNote}

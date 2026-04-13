@@ -1,5 +1,4 @@
 export type CheckoutStep = 1 | 2 | 3;
-export type CheckoutShippingMethod = 'standard' | 'express' | 'carrier';
 
 export interface CheckoutAddress {
     line1: string;
