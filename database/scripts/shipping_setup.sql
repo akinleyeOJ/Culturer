@@ -1,4 +1,4 @@
--- Shipping & Tracking Integration (Shippo)
+-- Shipping & Tracking Integration
 -- Run this in your Supabase SQL Editor
 
 -- 1. Add tracking and label columns to orders
@@ -7,8 +7,6 @@ ADD COLUMN IF NOT EXISTS tracking_number TEXT,
 ADD COLUMN IF NOT EXISTS courier_name TEXT,
 ADD COLUMN IF NOT EXISTS tracking_url TEXT,
 ADD COLUMN IF NOT EXISTS label_url TEXT,
-ADD COLUMN IF NOT EXISTS shippo_shipment_id TEXT,
-ADD COLUMN IF NOT EXISTS shippo_transaction_id TEXT,
 ADD COLUMN IF NOT EXISTS shipping_status TEXT DEFAULT 'pending', -- pre_transit, in_transit, delivered, returned
 ADD COLUMN IF NOT EXISTS shipping_method_details JSONB;
 
@@ -46,4 +44,4 @@ ADD COLUMN IF NOT EXISTS shop_shipping JSONB DEFAULT '{
   "carriers": []
 }'::jsonb;
 
-COMMENT ON COLUMN orders.shipping_status IS 'Shipping status synced from Shippo: pending, pre_transit, in_transit, out_for_delivery, delivered, returned, failure';
+COMMENT ON COLUMN orders.shipping_status IS 'Shipping status from the active carrier integration: pending, pre_transit, in_transit, out_for_delivery, delivered, returned, failure';

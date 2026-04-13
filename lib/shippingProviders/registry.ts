@@ -1,11 +1,11 @@
 import { normalizeCarrierLookupValue } from '../sendcloudCarrierMap';
 import { type ShippingProviderAdapter } from './types';
 
-const createShippoHomeAdapter = (providerName: string): ShippingProviderAdapter => ({
+const createDirectHomeAdapter = (providerName: string): ShippingProviderAdapter => ({
     providerName,
-    supportsLiveRates: true,
+    supportsLiveRates: false,
     supportsPickupSearch: false,
-    rateSource: 'shippo',
+    rateSource: 'provider_api',
     pickupSearchSource: 'none',
 });
 
@@ -34,18 +34,18 @@ const createLocalPickupAdapter = (): ShippingProviderAdapter => ({
 });
 
 const SHIPPING_PROVIDER_ADAPTERS: Record<string, ShippingProviderAdapter> = {
-    'inpost home delivery': createShippoHomeAdapter('InPost Home Delivery'),
-    dhl: createShippoHomeAdapter('DHL'),
-    dpd: createShippoHomeAdapter('DPD'),
-    ups: createShippoHomeAdapter('UPS'),
-    fedex: createShippoHomeAdapter('FedEx'),
-    'royal mail': createShippoHomeAdapter('Royal Mail'),
-    'evri (hermes)': createShippoHomeAdapter('Evri (Hermes)'),
-    colissimo: createShippoHomeAdapter('Colissimo'),
-    chronopost: createShippoHomeAdapter('Chronopost'),
-    correos: createShippoHomeAdapter('Correos'),
-    'deutsche post': createShippoHomeAdapter('Deutsche Post'),
-    'poste italiane': createShippoHomeAdapter('Poste Italiane'),
+    'inpost home delivery': createDirectHomeAdapter('InPost Home Delivery'),
+    dhl: createDirectHomeAdapter('DHL'),
+    dpd: createDirectHomeAdapter('DPD'),
+    ups: createDirectHomeAdapter('UPS'),
+    fedex: createDirectHomeAdapter('FedEx'),
+    'royal mail': createDirectHomeAdapter('Royal Mail'),
+    'evri (hermes)': createDirectHomeAdapter('Evri (Hermes)'),
+    colissimo: createDirectHomeAdapter('Colissimo'),
+    chronopost: createDirectHomeAdapter('Chronopost'),
+    correos: createDirectHomeAdapter('Correos'),
+    'deutsche post': createDirectHomeAdapter('Deutsche Post'),
+    'poste italiane': createDirectHomeAdapter('Poste Italiane'),
     'evri parcelshop': createSendcloudPickupAdapter('Evri ParcelShop'),
     'dpd pickup': createSendcloudPickupAdapter('DPD Pickup'),
     'dhl servicepoint / locker': createSendcloudPickupAdapter('DHL ServicePoint / Locker'),

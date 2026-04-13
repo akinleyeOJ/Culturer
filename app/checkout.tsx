@@ -125,10 +125,6 @@ const Checkout = () => {
         lockerSearchContext,
         setLockerSearchContext,
         loadingRates,
-        filteredShippoRates,
-        selectedShippoRate,
-        setSelectedShippoRate,
-        shippoShipmentId,
         integratedCarrierOptions,
         shippingCost,
     } = useCheckoutShipping({
@@ -525,7 +521,7 @@ const Checkout = () => {
 
 
     // Total cost calculations 
-    const hasIntegratedShippingOptions = filteredShippoRates.length > 0 || integratedCarrierOptions.length > 0;
+    const hasIntegratedShippingOptions = integratedCarrierOptions.length > 0;
 
     const totals = useMemo(() => {
         const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -636,7 +632,7 @@ const Checkout = () => {
             if (!hasBasicInfo) return false;
 
             if (hasIntegratedShippingOptions) {
-                if (!selectedShippoRate && !selectedCarrier) return false;
+                if (!selectedCarrier) return false;
                 if (selectedCarrier?.type === 'locker' && !selectedLocker) return false;
             } else {
                 return false;
@@ -665,7 +661,7 @@ const Checkout = () => {
 
             // 2. Shipping Method Validation
             if (hasIntegratedShippingOptions) {
-                if (!selectedShippoRate && !selectedCarrier) {
+                if (!selectedCarrier) {
                     Alert.alert('Carrier Selection', 'Please select a shipping option for your order.');
                     return;
                 }
@@ -676,7 +672,7 @@ const Checkout = () => {
                     return;
                 }
             } else {
-                Alert.alert('No Live Shipping Rates', 'No live shipping quotes are available for this route yet. Please try a different delivery address or country.');
+                Alert.alert('No Shipping Options', 'No direct carrier shipping options are available for this route yet. Please try a different delivery address.');
                 return;
             }
 
@@ -805,27 +801,21 @@ const Checkout = () => {
                     // Update shipping info if changed during resume
                     await supabase.from('orders' as any).update({
                         shipping_address: shippingAddressObj,
-                        payment_method: selectedPaymentMethod,
-                        carrier_name: selectedShippoRate ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}` : (selectedCarrier?.name || null),
-                        shipping_method_details: (selectedCarrier || selectedShippoRate) ? {
-                            carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || null),
-                            type: selectedShippoRate
-                                ? 'home_delivery'
-                                : selectedCarrier?.type === 'locker'
+                            payment_method: selectedPaymentMethod,
+                            carrier_name: selectedCarrier?.name || null,
+                            shipping_method_details: selectedCarrier ? {
+                                carrier: selectedCarrier.name,
+                            type: selectedCarrier?.type === 'locker'
                                     ? 'locker_pickup'
                                     : selectedCarrier?.type === 'pickup'
                                         ? 'local_pickup'
                                         : 'home_delivery',
-                            pricing_mode: selectedShippoRate
-                                ? 'integrated_live'
-                                : selectedCarrier?.type === 'pickup'
+                                pricing_mode: selectedCarrier?.type === 'pickup'
                                     ? 'local_pickup'
-                                    : 'provider_live',
-                            weight_tier: cartWeightTier,
-                            total_weight_grams: totalWeightGrams,
-                            handling_fee: 0,
-                            shippo_rate_id: selectedShippoRate?.object_id || null,
-                            shippo_shipment_id: shippoShipmentId || null,
+                                    : 'provider_direct',
+                                weight_tier: cartWeightTier,
+                                total_weight_grams: totalWeightGrams,
+                                handling_fee: 0,
                             locker: (selectedCarrier?.type === 'locker' && selectedLocker) ? {
                                 id: selectedLocker.id,
                                 address: selectedLocker.address,
@@ -847,27 +837,21 @@ const Checkout = () => {
                     shipping_address: shippingAddressObj,
                     payment_method: selectedPaymentMethod,
                     notes: orderNote,
-                    carrier_name: selectedShippoRate ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}` : (selectedCarrier?.name || null),
+                    carrier_name: selectedCarrier?.name || null,
                     shipping_zone: shippingZone,
-                    shipping_method_details: (selectedCarrier || selectedShippoRate) ? {
-                        carrier: selectedShippoRate ? selectedShippoRate.provider : (selectedCarrier?.name || null),
-                        type: selectedShippoRate
-                            ? 'home_delivery'
-                            : selectedCarrier?.type === 'locker'
+                    shipping_method_details: selectedCarrier ? {
+                        carrier: selectedCarrier.name,
+                        type: selectedCarrier?.type === 'locker'
                                 ? 'locker_pickup'
                                 : selectedCarrier?.type === 'pickup'
                                     ? 'local_pickup'
                                     : 'home_delivery',
-                        pricing_mode: selectedShippoRate
-                            ? 'integrated_live'
-                            : selectedCarrier?.type === 'pickup'
+                        pricing_mode: selectedCarrier?.type === 'pickup'
                                 ? 'local_pickup'
-                                : 'provider_live',
+                                : 'provider_direct',
                         weight_tier: cartWeightTier,
                         total_weight_grams: totalWeightGrams,
                         handling_fee: 0,
-                        shippo_rate_id: selectedShippoRate?.object_id || null,
-                        shippo_shipment_id: shippoShipmentId || null,
                         locker: selectedCarrier?.type === 'locker' && selectedLocker ? {
                             id: selectedLocker.id,
                             address: selectedLocker.address,
@@ -1171,9 +1155,6 @@ const Checkout = () => {
                             shippingZone={shippingZone}
                             liveShippingApisEnabled={LIVE_SHIPPING_APIS_ENABLED}
                             loadingRates={loadingRates}
-                            filteredShippoRates={filteredShippoRates}
-                            selectedShippoRate={selectedShippoRate}
-                            setSelectedShippoRate={setSelectedShippoRate}
                             integratedCarrierOptions={integratedCarrierOptions}
                             selectedCarrier={selectedCarrier}
                             setSelectedCarrier={setSelectedCarrier}
@@ -1217,7 +1198,6 @@ const Checkout = () => {
                             address1={address1}
                             city={city}
                             selectedCarrier={selectedCarrier}
-                            selectedShippoRate={selectedShippoRate}
                             cardNumber={cardNumber}
                             selectedSavedCardId={selectedSavedCardId}
                             savedCards={savedCards}

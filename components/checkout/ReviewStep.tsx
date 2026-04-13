@@ -3,7 +3,6 @@ import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } fro
 import { Colors } from '../../constants/color';
 import { type CartItem } from '../../lib/services/cartService';
 import { type CarrierConfig } from '../../lib/shippingUtils';
-import { type ShippoRate } from '../../lib/services/shippingService';
 
 interface ReviewStepProps {
     styles: any;
@@ -25,7 +24,6 @@ interface ReviewStepProps {
     address1: string;
     city: string;
     selectedCarrier: CarrierConfig | null;
-    selectedShippoRate: ShippoRate | null;
     cardNumber: string;
     selectedSavedCardId: string | null;
     savedCards: any[];
@@ -47,7 +45,6 @@ export function ReviewStep({
     address1,
     city,
     selectedCarrier,
-    selectedShippoRate,
     cardNumber,
     selectedSavedCardId,
     savedCards,
@@ -58,11 +55,9 @@ export function ReviewStep({
         ? savedCards.find((card) => card.id === selectedSavedCardId)
         : null;
 
-    const shippingMethodLabel = selectedShippoRate
-        ? `${selectedShippoRate.provider} ${selectedShippoRate.servicelevel.name}`
-        : selectedCarrier?.name
-            ? selectedCarrier.name
-            : 'No shipping selected';
+    const shippingMethodLabel = selectedCarrier?.name
+        ? selectedCarrier.name
+        : 'No shipping selected';
 
     const paymentLabel = selectedSavedCard
         ? `${selectedSavedCard.brand?.toUpperCase?.() || 'CARD'} ${selectedSavedCard.last4 || ''}`.trim()

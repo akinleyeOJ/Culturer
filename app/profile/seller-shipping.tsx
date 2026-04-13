@@ -272,7 +272,7 @@ export default function SellerShippingScreen() {
                     </Text>
                 </View>
 
-                {/* ─── Origin Address (Required for Shippo) ─── */}
+                {/* ─── Origin Address (Required for Direct Carrier Quotes) ─── */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>SHIP FROM ADDRESS</Text>
                     <View style={styles.addressContainer}>

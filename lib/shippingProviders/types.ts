@@ -1,4 +1,4 @@
-export type ShippingRateSource = 'shippo' | 'provider_api' | 'none';
+export type ShippingRateSource = 'provider_api' | 'none';
 export type PickupSearchSource = 'sendcloud' | 'inpost' | 'provider_api' | 'none';
 
 export interface ShippingProviderAdapter {

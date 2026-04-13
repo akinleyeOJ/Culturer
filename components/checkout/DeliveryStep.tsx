@@ -4,7 +4,6 @@ import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplet
 import { ChevronDownIcon } from 'react-native-heroicons/outline';
 import { Colors } from '../../constants/color';
 import { sellerShipsToZone, type CarrierConfig, type SellerShippingConfig, type ShippingZone } from '../../lib/shippingUtils';
-import { type ShippoRate } from '../../lib/services/shippingService';
 import { type PickupPointResult } from '../../lib/services/pickupPointService';
 import { type CheckoutAddress } from './types';
 
@@ -42,9 +41,6 @@ interface DeliveryStepProps {
     shippingZone: ShippingZone;
     liveShippingApisEnabled: boolean;
     loadingRates: boolean;
-    filteredShippoRates: ShippoRate[];
-    selectedShippoRate: ShippoRate | null;
-    setSelectedShippoRate: (rate: ShippoRate | null) => void;
     integratedCarrierOptions: CarrierConfig[];
     selectedCarrier: CarrierConfig | null;
     setSelectedCarrier: (carrier: CarrierConfig | null) => void;
@@ -90,9 +86,6 @@ export function DeliveryStep({
     shippingZone,
     liveShippingApisEnabled,
     loadingRates,
-    filteredShippoRates,
-    selectedShippoRate,
-    setSelectedShippoRate,
     integratedCarrierOptions,
     selectedCarrier,
     setSelectedCarrier,
@@ -310,7 +303,7 @@ export function DeliveryStep({
                 {!liveShippingApisEnabled && sellerShipping?.modes.home_delivery.enabled && (
                     <View style={styles.apiCostHintBox}>
                         <Text style={styles.apiCostHintText}>
-                            Live courier quotes are off in this environment. Platform postage will fall back to standard integrated rates at checkout.
+                            Direct carrier integrations are off in this environment.
                         </Text>
                     </View>
                 )}
@@ -326,48 +319,14 @@ export function DeliveryStep({
                 {loadingRates ? (
                     <View style={styles.loadingRatesBox}>
                         <ActivityIndicator color={Colors.primary[500]} size="small" />
-                        <Text style={styles.loadingRatesText}>Fetching live courier rates...</Text>
+                        <Text style={styles.loadingRatesText}>Checking direct carrier availability...</Text>
                     </View>
-                ) : filteredShippoRates.length > 0 && (
-                    <View style={{ marginBottom: 16 }}>
-                        <Text style={styles.subSectionTitle}>Home Delivery</Text>
-                        {filteredShippoRates.map((rate) => {
-                            const isSelected = selectedShippoRate?.object_id === rate.object_id;
-                            return (
-                                <TouchableOpacity
-                                    key={rate.object_id}
-                                    style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
-                                    onPress={() => {
-                                        setSelectedShippoRate(rate);
-                                        setSelectedCarrier(null);
-                                        setSelectedLocker(null);
-                                        clearPickupPointDraft();
-                                    }}
-                                >
-                                    <View style={styles.radioRow}>
-                                        <View style={styles.radioCircle}>
-                                            {isSelected && <View style={styles.radioDot} />}
-                                        </View>
-                                        <View>
-                                            <Text style={styles.radioTitle}>{rate.provider} {rate.servicelevel.name}</Text>
-                                            <Text style={styles.radioSubtitle}>
-                                                Buyer-paid integrated postage • Est. {rate.estimated_days} days
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Text style={styles.radioPrice}>
-                                        {rate.currency} {Number(rate.amount).toFixed(2)}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                )}
+                ) : null}
 
                 {integratedCarrierOptions.length > 0 && (
                     <>
                         <Text style={styles.subSectionTitle}>
-                            {filteredShippoRates.length > 0 ? 'Pickup & Local Options' : 'Integrated Delivery Options'}
+                            Integrated Delivery Options
                         </Text>
                         {integratedCarrierOptions.map((carrier) => {
                             const isSelected = selectedCarrier?.name === carrier.name;
@@ -377,7 +336,6 @@ export function DeliveryStep({
                                     style={[styles.radioOption, isSelected && styles.radioOptionSelected]}
                                     onPress={() => {
                                         setSelectedCarrier(carrier);
-                                        setSelectedShippoRate(null);
                                         if (carrier.type !== 'locker') {
                                             setSelectedLocker(null);
                                             clearPickupPointDraft();
@@ -401,7 +359,7 @@ export function DeliveryStep({
                                         </View>
                                     </View>
                                     <Text style={styles.radioPrice}>
-                                        {carrier.type === 'pickup' ? 'Free' : 'Live quote'}
+                                        {carrier.type === 'pickup' ? 'Free' : 'Quoted at checkout'}
                                     </Text>
                                 </TouchableOpacity>
                             );
@@ -409,10 +367,10 @@ export function DeliveryStep({
                     </>
                 )}
 
-                {!loadingRates && filteredShippoRates.length === 0 && integratedCarrierOptions.length === 0 && (
+                {!loadingRates && integratedCarrierOptions.length === 0 && (
                     <View style={styles.loadingRatesBox}>
                         <Text style={styles.loadingRatesText}>
-                            No live shipping quotes are available for this route yet. Try a different delivery address or country.
+                            No direct carrier integrations are live for this route yet.
                         </Text>
                     </View>
                 )}
