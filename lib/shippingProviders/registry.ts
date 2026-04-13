@@ -34,6 +34,7 @@ const createLocalPickupAdapter = (): ShippingProviderAdapter => ({
 });
 
 const SHIPPING_PROVIDER_ADAPTERS: Record<string, ShippingProviderAdapter> = {
+    'inpost home delivery': createShippoHomeAdapter('InPost Home Delivery'),
     dhl: createShippoHomeAdapter('DHL'),
     dpd: createShippoHomeAdapter('DPD'),
     ups: createShippoHomeAdapter('UPS'),

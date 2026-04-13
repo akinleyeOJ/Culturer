@@ -68,6 +68,7 @@ export const COUNTRY_PROVIDER_TEMPLATES: Record<string, CarrierTemplate[]> = {
         { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
         { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
         { name: 'Poczta Polska Pickup', type: 'locker', mode: 'locker_pickup' },
+        { name: 'InPost Home Delivery', type: 'home', mode: 'home_delivery' },
         { name: 'DHL', type: 'home', mode: 'home_delivery' },
         { name: 'UPS', type: 'home', mode: 'home_delivery' },
         { name: 'FedEx', type: 'home', mode: 'home_delivery' },
