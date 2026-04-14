@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '../supabase';
 import { type CartItem } from '../services/cartService';
+import { fetchInPostCalculatedRates } from '../services/inpostService';
 import { type PickupPointResult, type PickupPointSearchContext } from '../services/pickupPointService';
 import { fetchSendcloudServicePointCarrierCodes } from '../services/sendcloudService';
 import { getShippingProviderAdapter, providerSupportsLiveRates } from '../shippingProviders/registry';
@@ -26,6 +27,7 @@ import {
 
 interface UseCheckoutShippingParams {
     cartItems: CartItem[];
+    email: string;
     country: string;
     city: string;
     zipCode: string;
@@ -40,6 +42,7 @@ interface UseCheckoutShippingParams {
 
 export const useCheckoutShipping = ({
     cartItems,
+    email,
     country,
     city,
     zipCode,
@@ -51,6 +54,12 @@ export const useCheckoutShipping = ({
     step,
     liveShippingApisEnabled,
 }: UseCheckoutShippingParams) => {
+    const [quoteMap, setQuoteMap] = useState<Record<string, {
+        amount: number | null;
+        currency: string | null;
+        quoteId: string | null;
+        status: 'ready' | 'loading' | 'requires_pickup_point' | 'missing_address' | 'unavailable';
+    }>>({});
     const [sellerShipping, setSellerShipping] = useState<SellerShippingConfig | null>(null);
     const [shippingZone, setShippingZone] = useState<ShippingZone>('domestic');
     const [selectedCarrier, setSelectedCarrier] = useState<CarrierConfig | null>(null);
@@ -97,10 +106,19 @@ export const useCheckoutShipping = ({
         );
 
         return [
-            ...liveRateProviders,
+            ...liveRateProviders.map((provider) => {
+                const quote = quoteMap[provider.name];
+                return {
+                    ...provider,
+                    quote_amount: quote?.amount ?? null,
+                    quote_currency: quote?.currency ?? null,
+                    quote_id: quote?.quoteId ?? null,
+                    quote_status: quote?.status,
+                };
+            }),
             ...(localPickupOption ? [localPickupOption] : []),
         ];
-    }, [sellerShipping, enabledHomeProviders, enabledLockerProviders, localPickupOption]);
+    }, [sellerShipping, enabledHomeProviders, enabledLockerProviders, localPickupOption, quoteMap]);
 
     useEffect(() => {
         const fetchSellerShipping = async () => {
@@ -184,8 +202,186 @@ export const useCheckoutShipping = ({
     }, [cartItems]);
 
     useEffect(() => {
-        setLoadingRates(false);
-    }, [step, liveShippingApisEnabled, zipCode, city, address1, country, cartItems.length]);
+        if (!liveShippingApisEnabled || !sellerShipping || !isPolandDomesticRoute) {
+            setQuoteMap({});
+            setLoadingRates(false);
+            return;
+        }
+
+        const directProviders = [...enabledHomeProviders, ...enabledLockerProviders].filter((provider) => {
+            const adapter = getShippingProviderAdapter(provider.name);
+            return adapter?.providerKey === 'inpost' && adapter.supportsLiveRates;
+        });
+
+        if (directProviders.length === 0) {
+            setQuoteMap({});
+            setLoadingRates(false);
+            return;
+        }
+
+        const hasReceiverAddress =
+            !!email.trim() &&
+            !!firstName.trim() &&
+            !!lastName.trim() &&
+            !!phone.trim() &&
+            !!address1.trim() &&
+            !!city.trim() &&
+            !!zipCode.trim() &&
+            country === SHIPPING_LAUNCH_COUNTRY;
+
+        if (!hasReceiverAddress) {
+            setQuoteMap(
+                Object.fromEntries(
+                    directProviders.map((provider) => [
+                        provider.name,
+                        {
+                            amount: null,
+                            currency: null,
+                            quoteId: null,
+                            status: provider.type === 'locker' ? 'requires_pickup_point' : 'missing_address',
+                        },
+                    ])
+                )
+            );
+            setLoadingRates(false);
+            return;
+        }
+
+        const requestShipments = directProviders.flatMap((provider) => {
+            const adapter = getShippingProviderAdapter(provider.name);
+            if (!adapter?.serviceCode) return [];
+
+            if (provider.type === 'locker' && !selectedLocker?.id) {
+                return [];
+            }
+
+            return [{
+                id: `${provider.name}-${provider.type}`,
+                service: adapter.serviceCode,
+                parcelTemplate: cartWeightTier,
+                receiver: {
+                    email: email.trim(),
+                    phone: phone.trim(),
+                    firstName: firstName.trim(),
+                    lastName: lastName.trim(),
+                    address1: address1.trim(),
+                    address2: address2.trim(),
+                    city: city.trim(),
+                    postalCode: zipCode.trim(),
+                    countryCode: 'PL' as const,
+                },
+                ...(provider.type === 'locker' && selectedLocker?.id ? { targetPoint: selectedLocker.id } : {}),
+            }];
+        });
+
+        setQuoteMap(
+            Object.fromEntries(
+                directProviders.map((provider) => [
+                    provider.name,
+                    {
+                        amount: null,
+                        currency: null,
+                        quoteId: null,
+                        status: provider.type === 'locker' && !selectedLocker?.id ? 'requires_pickup_point' : 'loading',
+                    },
+                ])
+            )
+        );
+
+        if (requestShipments.length === 0) {
+            setLoadingRates(false);
+            return;
+        }
+
+        let isCancelled = false;
+        setLoadingRates(true);
+
+        const run = async () => {
+            const result = await fetchInPostCalculatedRates(requestShipments);
+            if (isCancelled) return;
+
+            const ratesById = new Map(result.rates.map((rate) => [rate.id, rate]));
+
+            setQuoteMap(
+                Object.fromEntries(
+                    directProviders.map((provider) => {
+                        const quoteId = `${provider.name}-${provider.type}`;
+                        const rate = ratesById.get(quoteId);
+
+                        if (provider.type === 'locker' && !selectedLocker?.id) {
+                            return [provider.name, {
+                                amount: null,
+                                currency: null,
+                                quoteId: null,
+                                status: 'requires_pickup_point' as const,
+                            }];
+                        }
+
+                        if (rate?.amount != null) {
+                            return [provider.name, {
+                                amount: rate.amount,
+                                currency: rate.currency || 'PLN',
+                                quoteId,
+                                status: 'ready' as const,
+                            }];
+                        }
+
+                        return [provider.name, {
+                            amount: null,
+                            currency: rate?.currency || 'PLN',
+                            quoteId,
+                            status: 'unavailable' as const,
+                        }];
+                    })
+                )
+            );
+
+            setLoadingRates(false);
+        };
+
+        run().catch((error) => {
+            console.error('Error fetching direct provider quotes:', error);
+            if (!isCancelled) {
+                setQuoteMap(
+                    Object.fromEntries(
+                        directProviders.map((provider) => [
+                            provider.name,
+                            {
+                                amount: null,
+                                currency: 'PLN',
+                                quoteId: `${provider.name}-${provider.type}`,
+                                status: provider.type === 'locker' && !selectedLocker?.id ? 'requires_pickup_point' : 'unavailable',
+                            },
+                        ])
+                    )
+                );
+                setLoadingRates(false);
+            }
+        });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [
+        address1,
+        address2,
+        cartItems.length,
+        cartWeightTier,
+        city,
+        country,
+        email,
+        enabledHomeProviders,
+        enabledLockerProviders,
+        firstName,
+        isPolandDomesticRoute,
+        lastName,
+        liveShippingApisEnabled,
+        phone,
+        selectedLocker?.id,
+        sellerShipping,
+        step,
+        zipCode,
+    ]);
 
     useFocusEffect(
         useCallback(() => {
@@ -204,7 +400,11 @@ export const useCheckoutShipping = ({
 
     const shippingCost = useMemo(() => {
         if (selectedCarrier) {
-            return selectedCarrier.type === 'pickup' ? 0 : 0;
+            if (selectedCarrier.type === 'pickup') {
+                return 0;
+            }
+
+            return Number(selectedCarrier.quote_amount) || 0;
         }
 
         return 0;

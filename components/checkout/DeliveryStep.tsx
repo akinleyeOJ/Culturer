@@ -97,6 +97,18 @@ export function DeliveryStep({
     setOrderNote,
 }: DeliveryStepProps) {
     const sellerShipsToCurrentZone = sellerShipping ? sellerShipsToZone(sellerShipping, shippingZone) : true;
+    const getCarrierPriceLabel = (carrier: CarrierConfig) => {
+        if (carrier.type === 'pickup') return 'Free';
+        if (carrier.quote_status === 'loading') return 'Loading...';
+        if (carrier.type === 'locker' && carrier.quote_status === 'requires_pickup_point') {
+            return 'Pick point first';
+        }
+        if (carrier.quote_status === 'missing_address') return 'Enter address';
+        if (carrier.quote_status === 'ready' && typeof carrier.quote_amount === 'number') {
+            return `${carrier.quote_currency || 'PLN'} ${carrier.quote_amount.toFixed(2)}`;
+        }
+        return 'Unavailable';
+    };
 
     return (
         <View style={styles.stepContainer}>
@@ -359,7 +371,7 @@ export function DeliveryStep({
                                         </View>
                                     </View>
                                     <Text style={styles.radioPrice}>
-                                        {carrier.type === 'pickup' ? 'Free' : 'Quoted at checkout'}
+                                        {getCarrierPriceLabel(carrier)}
                                     </Text>
                                 </TouchableOpacity>
                             );

@@ -34,6 +34,9 @@ yarn-error.*
 .env.local
 .env*.local
 
+# Supabase local config (contains project ref, DB connection string, etc.)
+supabase/.temp/
+
 # typescript
 *.tsbuildinfo
 

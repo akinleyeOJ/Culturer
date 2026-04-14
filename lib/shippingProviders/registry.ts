@@ -2,6 +2,7 @@ import { normalizeCarrierLookupValue } from '../sendcloudCarrierMap';
 import { type ShippingProviderAdapter } from './types';
 
 const createDirectHomeAdapter = (providerName: string): ShippingProviderAdapter => ({
+    providerKey: 'generic',
     providerName,
     supportsLiveRates: false,
     supportsPickupSearch: false,
@@ -10,6 +11,7 @@ const createDirectHomeAdapter = (providerName: string): ShippingProviderAdapter 
 });
 
 const createSendcloudPickupAdapter = (providerName: string): ShippingProviderAdapter => ({
+    providerKey: 'generic',
     providerName,
     supportsLiveRates: false,
     supportsPickupSearch: true,
@@ -18,14 +20,27 @@ const createSendcloudPickupAdapter = (providerName: string): ShippingProviderAda
 });
 
 const createInPostLockerAdapter = (providerName: string): ShippingProviderAdapter => ({
+    providerKey: 'inpost',
     providerName,
-    supportsLiveRates: false,
+    supportsLiveRates: true,
     supportsPickupSearch: true,
-    rateSource: 'none',
+    rateSource: 'provider_api',
     pickupSearchSource: 'inpost',
+    serviceCode: 'inpost_locker_standard',
+});
+
+const createInPostHomeAdapter = (providerName: string): ShippingProviderAdapter => ({
+    providerKey: 'inpost',
+    providerName,
+    supportsLiveRates: true,
+    supportsPickupSearch: false,
+    rateSource: 'provider_api',
+    pickupSearchSource: 'none',
+    serviceCode: 'inpost_courier_standard',
 });
 
 const createLocalPickupAdapter = (): ShippingProviderAdapter => ({
+    providerKey: 'generic',
     providerName: 'Local Pickup',
     supportsLiveRates: false,
     supportsPickupSearch: false,
@@ -34,7 +49,7 @@ const createLocalPickupAdapter = (): ShippingProviderAdapter => ({
 });
 
 const SHIPPING_PROVIDER_ADAPTERS: Record<string, ShippingProviderAdapter> = {
-    'inpost home delivery': createDirectHomeAdapter('InPost Home Delivery'),
+    'inpost home delivery': createInPostHomeAdapter('InPost Home Delivery'),
     dhl: createDirectHomeAdapter('DHL'),
     dpd: createDirectHomeAdapter('DPD'),
     ups: createDirectHomeAdapter('UPS'),
@@ -74,3 +89,6 @@ export const providerSupportsLiveRates = (providerName: string) =>
 
 export const providerSupportsPickupSearch = (providerName: string) =>
     !!getShippingProviderAdapter(providerName)?.supportsPickupSearch;
+
+export const providerSupportsShipmentQuotes = (providerName: string) =>
+    !!getShippingProviderAdapter(providerName)?.supportsLiveRates;

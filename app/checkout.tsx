@@ -129,6 +129,7 @@ const Checkout = () => {
         shippingCost,
     } = useCheckoutShipping({
         cartItems,
+        email,
         country,
         city,
         zipCode,
@@ -634,6 +635,7 @@ const Checkout = () => {
             if (hasIntegratedShippingOptions) {
                 if (!selectedCarrier) return false;
                 if (selectedCarrier?.type === 'locker' && !selectedLocker) return false;
+                if (selectedCarrier?.type !== 'pickup' && selectedCarrier?.quote_status !== 'ready') return false;
             } else {
                 return false;
             }
@@ -669,6 +671,11 @@ const Checkout = () => {
                 // Locker validation
                 if (selectedCarrier?.type === 'locker' && !selectedLocker) {
                     Alert.alert('Pickup Point', 'Please select a pickup point/locker for this carrier.');
+                    return;
+                }
+
+                if (selectedCarrier?.type !== 'pickup' && selectedCarrier?.quote_status !== 'ready') {
+                    Alert.alert('Live Quote Needed', 'This delivery option does not have a live quote yet. Please choose a different option or complete pickup point selection first.');
                     return;
                 }
             } else {
@@ -813,6 +820,9 @@ const Checkout = () => {
                                 pricing_mode: selectedCarrier?.type === 'pickup'
                                     ? 'local_pickup'
                                     : 'provider_direct',
+                                quote_amount: selectedCarrier?.quote_amount ?? null,
+                                quote_currency: selectedCarrier?.quote_currency ?? null,
+                                quote_id: selectedCarrier?.quote_id ?? null,
                                 weight_tier: cartWeightTier,
                                 total_weight_grams: totalWeightGrams,
                                 handling_fee: 0,
@@ -849,6 +859,9 @@ const Checkout = () => {
                         pricing_mode: selectedCarrier?.type === 'pickup'
                                 ? 'local_pickup'
                                 : 'provider_direct',
+                        quote_amount: selectedCarrier?.quote_amount ?? null,
+                        quote_currency: selectedCarrier?.quote_currency ?? null,
+                        quote_id: selectedCarrier?.quote_id ?? null,
                         weight_tier: cartWeightTier,
                         total_weight_grams: totalWeightGrams,
                         handling_fee: 0,

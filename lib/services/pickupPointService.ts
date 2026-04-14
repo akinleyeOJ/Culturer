@@ -1,4 +1,5 @@
 import { fetchSendcloudServicePoints } from './sendcloudService';
+import { fetchInPostPointPayloads } from './inpostService';
 import { providerSupportsPickupSearch } from '../shippingProviders/registry';
 
 export interface PickupPointResult {
@@ -90,6 +91,20 @@ const mapInPostPoint = (item: any): PickupPointResult => ({
     latitude: item.location?.latitude,
     longitude: item.location?.longitude,
 });
+
+const dedupeInPostPayloads = (payloads: any[]) => {
+    const dedupedPickupPoints = new Map<string, PickupPointResult>();
+
+    payloads.forEach((payload: any) => {
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        items.forEach((item: any) => {
+            const pickupPoint = mapInPostPoint(item);
+            dedupedPickupPoints.set(pickupPoint.id, pickupPoint);
+        });
+    });
+
+    return Array.from(dedupedPickupPoints.values());
+};
 
 const sortPickupPoints = (
     pickupPoints: PickupPointResult[],
@@ -192,6 +207,22 @@ export const fetchPickupPoints = async (
         return [];
     }
 
+    if (carrierName.includes('InPost')) {
+        const searchUrls = buildInPostSearchUrls(context, fallbackAddress);
+        const proxiedResult = await fetchInPostPointPayloads({ searchUrls });
+
+        if (proxiedResult.success) {
+            const pickupPoints = dedupeInPostPayloads(proxiedResult.payloads);
+            if (pickupPoints.length > 0) {
+                return sortPickupPoints(pickupPoints, context).slice(0, 8);
+            }
+        }
+
+        const responses = await Promise.all(searchUrls.map((url) => fetch(url).then((response) => response.json())));
+        const pickupPoints = dedupeInPostPayloads(responses);
+        return sortPickupPoints(pickupPoints, context).slice(0, 8);
+    }
+
     const sendcloudAddressQuery = query || postalCode || city;
     if (country && sendcloudAddressQuery) {
         const sendcloudResult = await fetchSendcloudServicePoints({
@@ -213,23 +244,5 @@ export const fetchPickupPoints = async (
         }
     }
 
-    if (!carrierName.includes('InPost')) {
-        return [];
-    }
-
-    const searchUrls = buildInPostSearchUrls(context, fallbackAddress);
-    const responses = await Promise.all(searchUrls.map((url) => fetch(url).then((response) => response.json())));
-
-    const dedupedPickupPoints = new Map<string, PickupPointResult>();
-
-    responses.forEach((payload: any) => {
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        items.forEach((item: any) => {
-            const pickupPoint = mapInPostPoint(item);
-            dedupedPickupPoints.set(pickupPoint.id, pickupPoint);
-        });
-    });
-
-    const pickupPoints = Array.from(dedupedPickupPoints.values());
-    return sortPickupPoints(pickupPoints, context).slice(0, 8);
+    return [];
 };

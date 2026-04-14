@@ -471,11 +471,11 @@ export default function SellerShippingScreen() {
                                 {!group.enabled ? (
                                     <Text style={styles.providerGroupHint}>Turn this mode on above to configure available providers.</Text>
                                 ) : group.mode === 'locker_pickup' && !servicePointCapabilitiesLoaded ? (
-                                    <Text style={styles.providerGroupHint}>Loading live Sendcloud pickup-point carriers...</Text>
+                                    <Text style={styles.providerGroupHint}>Loading pickup-point provider capabilities...</Text>
                                 ) : group.items.length === 0 ? (
                                     <Text style={styles.providerGroupHint}>
                                         {group.mode === 'locker_pickup'
-                                            ? 'No live Sendcloud pickup-point providers are enabled for this country right now.'
+                                            ? 'No live pickup-point providers are available for this country right now.'
                                             : 'No suggested providers for this country yet. Add a custom provider.'}
                                     </Text>
                                 ) : (

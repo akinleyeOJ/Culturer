@@ -33,6 +33,10 @@ export interface CarrierConfig {
     price_medium: number;
     price_large: number;
     is_custom?: boolean;
+    quote_amount?: number | null;
+    quote_currency?: string | null;
+    quote_id?: string | null;
+    quote_status?: 'ready' | 'loading' | 'requires_pickup_point' | 'missing_address' | 'unavailable';
 }
 
 export interface ShippingModeConfig {
@@ -66,10 +70,6 @@ export interface SellerShippingConfig {
 export const COUNTRY_PROVIDER_TEMPLATES: Record<string, CarrierTemplate[]> = {
     Poland: [
         { name: 'InPost Locker 24/7', type: 'locker', mode: 'locker_pickup' },
-        { name: 'DHL ServicePoint / Locker', type: 'locker', mode: 'locker_pickup' },
-        { name: 'DPD Pickup', type: 'locker', mode: 'locker_pickup' },
-        { name: 'UPS Access Point', type: 'locker', mode: 'locker_pickup' },
-        { name: 'Poczta Polska Pickup', type: 'locker', mode: 'locker_pickup' },
         { name: 'InPost Home Delivery', type: 'home', mode: 'home_delivery' },
         { name: 'DHL', type: 'home', mode: 'home_delivery' },
         { name: 'UPS', type: 'home', mode: 'home_delivery' },
@@ -252,6 +252,10 @@ const normalizeCarrier = (carrier: Partial<CarrierConfig>): CarrierConfig => ({
     price_medium: Number(carrier.price_medium) || 0,
     price_large: Number(carrier.price_large) || 0,
     is_custom: !!carrier.is_custom,
+    quote_amount: carrier.quote_amount ?? null,
+    quote_currency: carrier.quote_currency ?? null,
+    quote_id: carrier.quote_id ?? null,
+    quote_status: carrier.quote_status,
 });
 
 export const normalizeCountryName = (country: string) => {
@@ -295,6 +299,9 @@ export const getSupportedLockerProviderNamesForCountry = (
     enabledCarrierCodes: string[] = []
 ) => {
     const normalizedCountry = normalizeCountryName(country);
+    if (normalizedCountry === 'Poland') {
+        return ['InPost Locker 24/7'];
+    }
     if (!normalizedCountry || enabledCarrierCodes.length === 0) return [];
 
     const baseTemplates = COUNTRY_PROVIDER_TEMPLATES[normalizedCountry] ||
