@@ -35,7 +35,14 @@
     },
     "plugins": [
       "expo-font",
-      "expo-router"
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Culturer uses your location to find the nearest pickup points.",
+          "locationWhenInUsePermission": "Culturer uses your location to find the nearest pickup points."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

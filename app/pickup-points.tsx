@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react";
 import {
   View,
   Text,
@@ -9,6 +15,7 @@ import {
   ActivityIndicator,
   Keyboard,
   Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,7 +24,9 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
   MapPinIcon,
+  ArchiveBoxIcon,
 } from "react-native-heroicons/outline";
+import * as Location from "expo-location";
 import { CheckCircleIcon } from "react-native-heroicons/solid";
 import { Colors } from "../constants/color";
 import {
@@ -47,6 +56,37 @@ const geocodeQuery = async (
     return null;
   }
   return null;
+};
+
+/** Build a Nominatim query from checkout shipping fields — more specific than a bare street fragment. */
+const buildDeliveryGeocodeQuery = (fb: {
+  query: string;
+  city: string;
+  postalCode: string;
+  country: string;
+}): string | null => {
+  const line = fb.query.trim();
+  const city = fb.city.trim();
+  const pc = fb.postalCode.trim();
+  const country = fb.country.trim() || "Poland";
+  if (line && city) {
+    const mid = pc ? `${pc} ${city}` : city;
+    return `${line}, ${mid}, ${country}`;
+  }
+  if (city && pc) return `${pc} ${city}, ${country}`;
+  if (line && pc) return `${line}, ${pc}, ${country}`;
+  return null;
+};
+
+const canGeocodeDelivery = (fb: {
+  query: string;
+  city: string;
+  postalCode: string;
+}): boolean => {
+  const line = fb.query.trim();
+  const city = fb.city.trim();
+  const pc = fb.postalCode.trim();
+  return !!(line && city) || !!(city && pc) || !!(line && pc);
 };
 
 export default function PickupPointsScreen() {
@@ -87,14 +127,18 @@ export default function PickupPointsScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   const [isNearbyLoad, setIsNearbyLoad] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const requestIdRef = useRef(0);
   const searchInputRef = useRef<TextInput>(null);
 
-  const getEmptyResultsMessage = (autoLoaded: boolean) =>
-    autoLoaded
-      ? `No ${carrierName} lockers found near your delivery address. Try searching by city or postcode.`
-      : "No pickup points found. Try a different search.";
+  const getEmptyResultsMessage = useCallback(
+    (autoLoaded: boolean) =>
+      autoLoaded
+        ? `No ${carrierName} lockers found near your delivery address. Try searching by city or postcode.`
+        : "No pickup points found. Try a different search.",
+    [carrierName],
+  );
 
   // Auto-focus search input on mount
   useEffect(() => {
@@ -108,8 +152,9 @@ export default function PickupPointsScreen() {
   useEffect(() => {
     const requestId = ++requestIdRef.current;
     const hasFallback = !!(fallbackAddress.city || fallbackAddress.postalCode);
+    const hasGpsContext = searchContext?.latitude != null;
     const isTyping = search.trim().length >= MIN_SEARCH_LENGTH;
-    const shouldFetch = isTyping || hasFallback;
+    const shouldFetch = isTyping || hasFallback || hasGpsContext;
 
     if (!shouldFetch) {
       setResults([]);
@@ -119,7 +164,7 @@ export default function PickupPointsScreen() {
       return;
     }
 
-    const isAutoLoad = !isTyping && hasFallback;
+    const isAutoLoad = !isTyping && (hasFallback || hasGpsContext);
     const delay = isTyping ? SEARCH_DEBOUNCE_MS : 0;
 
     setLoading(true);
@@ -129,11 +174,22 @@ export default function PickupPointsScreen() {
       try {
         setError(null);
 
-        // Geocode for distance calculation — works for both typed search and auto-load
+        // Reference point for distance + InPost relative_point:
+        // 1) Explicit GPS from "Use my location"
+        // 2) Geocode full checkout delivery address (NOT the locker search box) —
+        //    typing "lukowa" alone resolves to the village Łukowa, which wrongly
+        //    makes Warszawa Łukowa 1 look hundreds of km away.
+        // 3) Fall back to geocoding search / city / postcode only when no delivery hint.
         let coords =
-          searchContext?.latitude != null
-            ? { lat: searchContext.latitude, lng: searchContext.longitude! }
+          searchContext?.latitude != null && searchContext?.longitude != null
+            ? { lat: searchContext.latitude, lng: searchContext.longitude }
             : null;
+
+        if (!coords && canGeocodeDelivery(fallbackAddress)) {
+          const deliveryQ = buildDeliveryGeocodeQuery(fallbackAddress);
+          if (deliveryQ) coords = await geocodeQuery(deliveryQ);
+        }
+
         if (!coords) {
           const queryToGeocode =
             search.trim() || fallbackAddress.postalCode || fallbackAddress.city;
@@ -179,7 +235,64 @@ export default function PickupPointsScreen() {
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [carrierName, fallbackAddress, search, searchContext]);
+  }, [
+    carrierName,
+    fallbackAddress,
+    getEmptyResultsMessage,
+    search,
+    searchContext,
+  ]);
+
+  const handleNearMe = async () => {
+    try {
+      setLocating(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location Permission Needed",
+          "Enable location access in your device Settings to find pickup points nearest to you.",
+        );
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const { latitude, longitude } = pos.coords;
+
+      // Reverse-geocode to get a human-readable label for the search bar.
+      // Prefer city name over postal code — postal codes used as a text query
+      // can accidentally match a different city (e.g. "94107" → Łódź 94-107).
+      let label = "Near me";
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`;
+        const res = await fetch(url, {
+          headers: { "User-Agent": "Culturer/1.0" },
+        });
+        const data = await res.json();
+        const addr = data?.address;
+        // City name first — InPost's text search handles city names reliably.
+        if (addr?.city || addr?.town || addr?.village)
+          label = (addr.city ?? addr.town ?? addr.village) as string;
+        else if (addr?.postcode) label = addr.postcode as string;
+      } catch {
+        // keep "Near me" label, coords alone still drive sortPickupPoints
+      }
+
+      // Store label for display only — NOT as the InPost text query.
+      // Pass it as a separate field so the fetch effect can show a label
+      // without feeding a city name into the text search alongside relative_point.
+      setSearch("");
+      setSearchContext({ latitude, longitude, city: label });
+      setError(null);
+    } catch {
+      Alert.alert(
+        "Location Error",
+        "Could not get your current location. Please search by city or postcode instead.",
+      );
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const handleConfirm = () => {
     if (!selectedPickupPoint) return;
@@ -195,8 +308,11 @@ export default function PickupPointsScreen() {
   const handleClearSearch = () => {
     setSearch("");
     setSearchContext(null);
+    setHasSearched(false);
+    setResults([]);
     setError(null);
-    searchInputRef.current?.focus();
+    // Delay focus slightly so the TextInput is mounted when GPS label clears
+    setTimeout(() => searchInputRef.current?.focus(), 50);
   };
 
   const formatDistance = (km?: number) => {
@@ -260,13 +376,10 @@ export default function PickupPointsScreen() {
               isSelected && styles.lockerBadgeSelected,
             ]}
           >
-            <Text
-              style={[
-                styles.lockerBadgeText,
-              ]}
-            >
-              📦
-            </Text>
+            <ArchiveBoxIcon
+              size={20}
+              color={isSelected ? Colors.primary[500] : Colors.neutral[400]}
+            />
           </View>
         </View>
 
@@ -357,29 +470,45 @@ export default function PickupPointsScreen() {
       </View>
 
       {/* ── Search Bar ── */}
-      <View style={styles.searchContainer}>
+      <View
+        style={[
+          styles.searchContainer,
+          searchContext?.latitude != null && styles.searchContainerGps,
+        ]}
+      >
         <MagnifyingGlassIcon
           size={18}
-          color={Colors.neutral[400]}
+          color={
+            searchContext?.latitude != null
+              ? Colors.primary[500]
+              : Colors.neutral[400]
+          }
           style={styles.searchIcon}
         />
-        <TextInput
-          ref={searchInputRef}
-          style={styles.searchInput}
-          placeholder="City, postcode, or street…"
-          placeholderTextColor={Colors.neutral[400]}
-          value={search}
-          onChangeText={(text) => {
-            setSearch(text);
-            setSearchContext(null);
-            setError(null);
-          }}
-          autoCorrect={false}
-          autoCapitalize="none"
-          returnKeyType="search"
-          clearButtonMode="never"
-        />
-        {search.length > 0 && (
+        {/* When GPS is active, show city label as non-editable chip */}
+        {searchContext?.latitude != null && !search ? (
+          <Text style={styles.gpsLabel} numberOfLines={1}>
+            📍 {searchContext.city ?? "Near me"}
+          </Text>
+        ) : (
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="City, postcode, or street…"
+            placeholderTextColor={Colors.neutral[400]}
+            value={search}
+            onChangeText={(text) => {
+              setSearch(text);
+              setSearchContext(null);
+              setError(null);
+            }}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            clearButtonMode="never"
+          />
+        )}
+        {(search.length > 0 || searchContext?.latitude != null) && (
           <TouchableOpacity
             onPress={handleClearSearch}
             style={styles.clearBtn}
@@ -389,6 +518,31 @@ export default function PickupPointsScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* ── Near Me Button ── */}
+      <TouchableOpacity
+        style={styles.nearMeBtn}
+        onPress={handleNearMe}
+        disabled={locating}
+        activeOpacity={0.75}
+      >
+        {locating ? (
+          <ActivityIndicator
+            size="small"
+            color={Colors.primary[500]}
+            style={{ marginRight: 6 }}
+          />
+        ) : (
+          <MapPinIcon
+            size={15}
+            color={Colors.primary[500]}
+            style={{ marginRight: 5 }}
+          />
+        )}
+        <Text style={styles.nearMeBtnText}>
+          {locating ? "Getting location…" : "Use my location"}
+        </Text>
+      </TouchableOpacity>
 
       {/* ── Loading Bar ── */}
       {loading && (
@@ -511,6 +665,17 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
+  searchContainerGps: {
+    borderColor: Colors.primary[300] || Colors.primary[200],
+    backgroundColor: Colors.primary[50] || "#FFF5F0",
+  },
+  gpsLabel: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.primary[600] || Colors.primary[500],
+    fontWeight: "500",
+    padding: 0,
+  },
   searchIcon: {
     marginRight: 8,
   },
@@ -523,6 +688,24 @@ const styles = StyleSheet.create({
   clearBtn: {
     marginLeft: 6,
     padding: 2,
+  },
+  nearMeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Colors.primary[50] || "#FFF5F0",
+    borderWidth: 1,
+    borderColor: Colors.primary[200] || Colors.primary[100],
+  },
+  nearMeBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.primary[600] || Colors.primary[500],
   },
 
   // ── Loading ──────────────────────────────────────────────────────────────
@@ -605,9 +788,6 @@ const styles = StyleSheet.create({
   },
   lockerBadgeSelected: {
     backgroundColor: Colors.primary[100] || "#DBEAFE",
-  },
-  lockerBadgeText: {
-    fontSize: 18,
   },
   cardBody: {
     flex: 1,
