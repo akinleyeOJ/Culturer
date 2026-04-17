@@ -837,7 +837,7 @@ export const createListing = async (listingData: {
   images: string[];
   status?: 'active' | 'draft';
   stock_quantity?: number;
-  weight_tier?: 'small' | 'medium' | 'large';
+  weight_tier?: 'mini' | 'small' | 'medium' | 'large';
 }) => {
   const hasStock = (listingData.stock_quantity ?? 1) > 0;
 

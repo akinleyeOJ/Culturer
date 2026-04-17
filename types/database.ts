@@ -170,7 +170,7 @@ export interface Database {
           shipping_days_max: number | null
           discount_percentage: number
           promotion_ends_at: string | null
-          weight_tier: 'small' | 'medium' | 'large'
+          weight_tier: 'mini' | 'small' | 'medium' | 'large'
           created_at: string
           updated_at: string
         }

@@ -130,7 +130,10 @@ export async function handleCreateShipmentFromOrder(
         }
 
         const tierRaw = String(details.weight_tier || 'medium').toLowerCase()
-        const parcelTemplate = tierRaw === 'small' || tierRaw === 'large' ? tierRaw : 'medium'
+        const parcelTemplate =
+            tierRaw === 'mini' || tierRaw === 'small' || tierRaw === 'large'
+                ? tierRaw
+                : 'medium'
 
         const service =
             shipType === 'home_delivery' ? 'inpost_courier_standard' : 'inpost_locker_standard'

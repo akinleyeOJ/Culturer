@@ -35,7 +35,7 @@ export const EU_COUNTRIES = [
 ];
 
 export type ShippingZone = "domestic" | "eu" | "international";
-export type WeightTier = "small" | "medium" | "large";
+export type WeightTier = "mini" | "small" | "medium" | "large";
 export type CarrierType = "home" | "locker" | "pickup";
 export type ShippingProviderMode = "home_delivery" | "locker_pickup";
 export type ShippingModeKey = ShippingProviderMode | "local_pickup";
@@ -616,12 +616,14 @@ export const detectShippingZone = (
 };
 
 export const WEIGHT_TIER_GRAMS: Record<WeightTier, number> = {
+  mini: 250,
   small: 500,
   medium: 2000,
   large: 5000,
 };
 
 export const WEIGHT_TIER_LABELS: Record<WeightTier, string> = {
+  mini: "Mini (XS)",
   small: "Small (S)",
   medium: "Medium (M)",
   large: "Large (L)",
@@ -674,6 +676,8 @@ export const getCarrierPrice = (
   weightTier: WeightTier,
 ): number => {
   switch (weightTier) {
+    case "mini":
+      return carrier.price_small;
     case "small":
       return carrier.price_small;
     case "medium":

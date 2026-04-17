@@ -53,7 +53,7 @@ export const fetchInPostPointPayloads = async ({
 export interface InPostRateShipmentRequest {
   id: string;
   service: string;
-  parcelTemplate: "small" | "medium" | "large";
+  parcelTemplate: "mini" | "small" | "medium" | "large";
   receiver: {
     email: string;
     phone: string;

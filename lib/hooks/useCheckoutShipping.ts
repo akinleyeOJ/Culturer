@@ -255,7 +255,7 @@ export const useCheckoutShipping = ({
 
       let totalGrams = 0;
       let maxTier: WeightTier = "small";
-      const tierOrder: WeightTier[] = ["small", "medium", "large"];
+      const tierOrder: WeightTier[] = ["mini", "small", "medium", "large"];
 
       cartItems.forEach((item) => {
         const product = products?.find((p: any) => p.id === item.product_id);

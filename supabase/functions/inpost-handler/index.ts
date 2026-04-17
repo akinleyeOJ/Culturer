@@ -39,7 +39,8 @@ const buildShipxHeaders = () => {
     }
 }
 
-const parcelTemplateDimensions: Record<'small' | 'medium' | 'large', { length: string; width: string; height: string }> = {
+const parcelTemplateDimensions: Record<'mini' | 'small' | 'medium' | 'large', { length: string; width: string; height: string }> = {
+    mini: { length: '80', width: '380', height: '640' },
     small: { length: '80', width: '380', height: '640' },
     medium: { length: '190', width: '380', height: '640' },
     large: { length: '410', width: '380', height: '640' },
@@ -49,15 +50,15 @@ const parcelTemplateDimensions: Record<'small' | 'medium' | 'large', { length: s
 // Source: InPost official pricing, effective 1 March 2026.
 // Locker = Paczkomat® (inpost_locker_standard)
 // Courier = door-to-door delivery (inpost_courier_standard)
-const INPOST_STATIC_RATES: Record<string, Record<'small' | 'medium' | 'large', number>> = {
-    inpost_locker_standard: { small: 16.49, medium: 18.49, large: 20.49 },
-    inpost_courier_standard: { small: 19.49, medium: 20.49, large: 25.49 },
+const INPOST_STATIC_RATES: Record<string, Record<'mini' | 'small' | 'medium' | 'large', number>> = {
+    inpost_locker_standard: { mini: 16.49, small: 16.49, medium: 18.49, large: 20.49 },
+    inpost_courier_standard: { mini: 19.49, small: 19.49, medium: 20.49, large: 25.49 },
 }
 
 const buildStaticRates = (shipments: any[]) =>
     shipments.map((shipment: any) => {
         const service = String(shipment?.service || 'inpost_locker_standard').toLowerCase()
-        const template = String(shipment?.parcelTemplate || 'medium') as 'small' | 'medium' | 'large'
+        const template = String(shipment?.parcelTemplate || 'medium') as 'mini' | 'small' | 'medium' | 'large'
         const serviceRates = INPOST_STATIC_RATES[service] ?? INPOST_STATIC_RATES['inpost_locker_standard']
         const amount = serviceRates[template] ?? serviceRates['medium']
         return {
@@ -73,7 +74,7 @@ const normalizePostalCode = (value: string) => {
 }
 
 const mapShipmentToCalculatePayload = (shipment: any) => {
-    const template = parcelTemplateDimensions[shipment.parcelTemplate as 'small' | 'medium' | 'large']
+    const template = parcelTemplateDimensions[shipment.parcelTemplate as 'mini' | 'small' | 'medium' | 'large']
     if (!template) {
         throw new Error(`Unsupported InPost parcel template: ${shipment.parcelTemplate}`)
     }

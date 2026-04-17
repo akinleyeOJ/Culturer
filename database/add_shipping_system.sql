@@ -5,7 +5,7 @@
 -- ============================================
 
 -- 1. PRODUCTS: Add weight_tier column
--- Values: 'small', 'medium', 'large'
+-- Values: 'mini', 'small', 'medium', 'large'
 ALTER TABLE products
 ADD COLUMN IF NOT EXISTS weight_tier TEXT DEFAULT 'medium';
 

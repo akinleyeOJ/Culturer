@@ -37,6 +37,7 @@ const CONDITIONS = [
 ];
 
 const WEIGHT_TIERS = [
+    { id: 'mini', label: 'Mini (XS)', desc: 'Ultra-light items (e.g., rings, pins, stickers)', icon: '📦' },
     { id: 'small', label: 'Small (S)', desc: 'Light items (e.g., Jewelry, T-shirts, Phone cases)', icon: '📦' },
     { id: 'medium', label: 'Medium (M)', desc: 'Standard size (e.g., Shoes, Jeans, Books, Cameras)', icon: '📦' },
     { id: 'large', label: 'Large (L)', desc: 'Bulky items (e.g., Winter coats, Electronics, Handbags)', icon: '📦' },
@@ -68,7 +69,7 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
     const [zoomVisible, setZoomVisible] = useState(false);
     const [selectedZoomIndex, setSelectedZoomIndex] = useState(0);
     const [isPickingImage, setIsPickingImage] = useState(false);
-    const [weightTier, setWeightTier] = useState<'small' | 'medium' | 'large'>('medium');
+    const [weightTier, setWeightTier] = useState<'mini' | 'small' | 'medium' | 'large'>('medium');
     const [hasShippingAddress, setHasShippingAddress] = useState<boolean | null>(null);
 
     const checkShippingSetup = useCallback(async () => {
