@@ -32,6 +32,11 @@ import { useCheckoutShipping } from "../lib/hooks/useCheckoutShipping";
 import { supabase } from "../lib/supabase";
 import { fetchCart, clearCart, CartItem } from "../lib/services/cartService";
 import { trackProductSale } from "../lib/services/productService";
+import {
+  formatPln,
+  parseLoosePrice,
+  STRIPE_CHECKOUT_CURRENCY,
+} from "../lib/formatPln";
 import { formatWeight, SHIPPING_LAUNCH_COUNTRY } from "../lib/shippingUtils";
 import {
   ChevronLeftIcon,
@@ -157,6 +162,15 @@ const Checkout = () => {
     liveShippingApisEnabled: LIVE_SHIPPING_APIS_ENABLED,
   });
 
+  // Carrier row from the list (includes latest quote_status / amounts). `selectedCarrier`
+  // state can go stale after quotes refresh — especially InPost locker after pickup selection.
+  const resolvedSelectedCarrier = useMemo(
+    () =>
+      integratedCarrierOptions.find((c) => c.name === selectedCarrier?.name) ??
+      selectedCarrier,
+    [integratedCarrierOptions, selectedCarrier],
+  );
+
   // Fetch Saved Cards
   const fetchSavedCards = useCallback(async () => {
     if (!user) return;
@@ -266,10 +280,7 @@ const Checkout = () => {
             return;
           }
 
-          const priceNum =
-            typeof p.price === "string"
-              ? parseFloat((p.price as string).replace("$", ""))
-              : p.price;
+          const priceNum = parseLoosePrice(p.price as string | number);
 
           console.log("Setting direct purchase item:", {
             id: p.id,
@@ -323,10 +334,7 @@ const Checkout = () => {
           // Map to CartItem format
           const mappedItems = orderItems.map((item: any) => {
             const p = item.products;
-            const priceNum =
-              typeof p.price === "string"
-                ? parseFloat((p.price as string).replace("$", ""))
-                : p.price;
+            const priceNum = parseLoosePrice(p.price as string | number);
 
             const discount2 = p.discount_percentage || 0;
             const effectivePrice2 =
@@ -618,8 +626,6 @@ const Checkout = () => {
     );
     const resolvedShippingCost = shippingCost;
 
-    const tax = subtotal * 0.1; // 10% Tax
-
     let discountAmount = 0;
     if (appliedDiscount) {
       const discountableSubtotal = appliedDiscount.seller_id
@@ -641,15 +647,11 @@ const Checkout = () => {
       }
     }
 
-    const total = Math.max(
-      0,
-      subtotal + resolvedShippingCost + tax - discountAmount,
-    );
+    const total = Math.max(0, subtotal + resolvedShippingCost - discountAmount);
 
     return {
       subtotal,
       shippingCost: resolvedShippingCost,
-      tax,
       discount: discountAmount,
       total,
     };
@@ -688,6 +690,7 @@ const Checkout = () => {
           <TextInput
             style={styles.searchInput}
             placeholder="Search"
+            placeholderTextColor={Colors.neutral[600]}
             value={searchCountry}
             onChangeText={setSearchCountry}
             autoCorrect={false}
@@ -761,8 +764,8 @@ const Checkout = () => {
         if (!selectedCarrier) return false;
         if (selectedCarrier?.type === "locker" && !selectedLocker) return false;
         if (
-          selectedCarrier?.type !== "pickup" &&
-          selectedCarrier?.quote_status !== "ready"
+          resolvedSelectedCarrier?.type !== "pickup" &&
+          resolvedSelectedCarrier?.quote_status !== "ready"
         )
           return false;
       } else {
@@ -831,8 +834,8 @@ const Checkout = () => {
         }
 
         if (
-          selectedCarrier?.type !== "pickup" &&
-          selectedCarrier?.quote_status !== "ready"
+          resolvedSelectedCarrier?.type !== "pickup" &&
+          resolvedSelectedCarrier?.quote_status !== "ready"
         ) {
           Alert.alert(
             "Live Quote Needed",
@@ -988,28 +991,30 @@ const Checkout = () => {
             .update({
               shipping_address: shippingAddressObj,
               payment_method: selectedPaymentMethod,
-              carrier_name: selectedCarrier?.name || null,
-              shipping_method_details: selectedCarrier
+              carrier_name: resolvedSelectedCarrier?.name || null,
+              shipping_method_details: resolvedSelectedCarrier
                 ? {
-                    carrier: selectedCarrier.name,
+                    carrier: resolvedSelectedCarrier.name,
                     type:
-                      selectedCarrier?.type === "locker"
+                      resolvedSelectedCarrier?.type === "locker"
                         ? "locker_pickup"
-                        : selectedCarrier?.type === "pickup"
+                        : resolvedSelectedCarrier?.type === "pickup"
                           ? "local_pickup"
                           : "home_delivery",
                     pricing_mode:
-                      selectedCarrier?.type === "pickup"
+                      resolvedSelectedCarrier?.type === "pickup"
                         ? "local_pickup"
                         : "provider_direct",
-                    quote_amount: selectedCarrier?.quote_amount ?? null,
-                    quote_currency: selectedCarrier?.quote_currency ?? null,
-                    quote_id: selectedCarrier?.quote_id ?? null,
+                    quote_amount: resolvedSelectedCarrier?.quote_amount ?? null,
+                    quote_currency:
+                      resolvedSelectedCarrier?.quote_currency ?? null,
+                    quote_id: resolvedSelectedCarrier?.quote_id ?? null,
                     weight_tier: cartWeightTier,
                     total_weight_grams: totalWeightGrams,
                     handling_fee: 0,
                     locker:
-                      selectedCarrier?.type === "locker" && selectedLocker
+                      resolvedSelectedCarrier?.type === "locker" &&
+                      selectedLocker
                         ? {
                             id: selectedLocker.id,
                             address: selectedLocker.address,
@@ -1030,35 +1035,36 @@ const Checkout = () => {
             seller_id: cartItems[0]?.product.seller_id || "system",
             subtotal: totals.subtotal,
             shipping_cost: totals.shippingCost,
-            tax: totals.tax,
+            tax: 0,
             total_amount: totals.total,
             status: "pending",
             shipping_address: shippingAddressObj,
             payment_method: selectedPaymentMethod,
             notes: orderNote,
-            carrier_name: selectedCarrier?.name || null,
+            carrier_name: resolvedSelectedCarrier?.name || null,
             shipping_zone: shippingZone,
-            shipping_method_details: selectedCarrier
+            shipping_method_details: resolvedSelectedCarrier
               ? {
-                  carrier: selectedCarrier.name,
+                  carrier: resolvedSelectedCarrier.name,
                   type:
-                    selectedCarrier?.type === "locker"
+                    resolvedSelectedCarrier?.type === "locker"
                       ? "locker_pickup"
-                      : selectedCarrier?.type === "pickup"
+                      : resolvedSelectedCarrier?.type === "pickup"
                         ? "local_pickup"
                         : "home_delivery",
                   pricing_mode:
-                    selectedCarrier?.type === "pickup"
+                    resolvedSelectedCarrier?.type === "pickup"
                       ? "local_pickup"
                       : "provider_direct",
-                  quote_amount: selectedCarrier?.quote_amount ?? null,
-                  quote_currency: selectedCarrier?.quote_currency ?? null,
-                  quote_id: selectedCarrier?.quote_id ?? null,
+                  quote_amount: resolvedSelectedCarrier?.quote_amount ?? null,
+                  quote_currency:
+                    resolvedSelectedCarrier?.quote_currency ?? null,
+                  quote_id: resolvedSelectedCarrier?.quote_id ?? null,
                   weight_tier: cartWeightTier,
                   total_weight_grams: totalWeightGrams,
                   handling_fee: 0,
                   locker:
-                    selectedCarrier?.type === "locker" && selectedLocker
+                    resolvedSelectedCarrier?.type === "locker" && selectedLocker
                       ? {
                           id: selectedLocker.id,
                           address: selectedLocker.address,
@@ -1096,7 +1102,7 @@ const Checkout = () => {
           await supabase.functions.invoke("create-payment-intent", {
             body: {
               amount: totals.total,
-              currency: "eur",
+              currency: STRIPE_CHECKOUT_CURRENCY,
               paymentMethodId: paymentMethodId,
               orderId: order.id,
               userId: user.id, // Pass User ID for Customer creation
@@ -1472,7 +1478,7 @@ const Checkout = () => {
           ) : (
             <CustomButton
               title={
-                processing ? "Processing..." : `Pay €${totals.total.toFixed(2)}`
+                processing ? "Processing..." : `Pay ${formatPln(totals.total)}`
               }
               onPress={handlePlaceOrder}
               disabled={processing}

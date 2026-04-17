@@ -13,12 +13,22 @@ import { ChevronDownIcon } from "react-native-heroicons/outline";
 import { Colors } from "../../constants/color";
 import {
   sellerShipsToZone,
+  SHIPPING_LAUNCH_COUNTRY,
   type CarrierConfig,
   type SellerShippingConfig,
   type ShippingZone,
 } from "../../lib/shippingUtils";
 import { type PickupPointResult } from "../../lib/services/pickupPointService";
 import { type CheckoutAddress } from "./types";
+
+const PLACEHOLDER_TEXT_COLOR = Colors.neutral[600];
+
+const normalizePolishPostalFromPlaces = (raw: string) => {
+  const digits = String(raw).replace(/\D/g, "").slice(0, 5);
+  return digits.length === 5
+    ? `${digits.slice(0, 2)}-${digits.slice(2)}`
+    : String(raw).trim();
+};
 
 interface DeliveryStepProps {
   styles: any;
@@ -152,6 +162,7 @@ export function DeliveryStep({
           <TextInput
             style={styles.input}
             placeholder="Email Address"
+            placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -230,12 +241,14 @@ export function DeliveryStep({
           <TextInput
             style={[styles.input, styles.halfInput]}
             placeholder="First Name"
+            placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
             value={firstName}
             onChangeText={setFirstName}
           />
           <TextInput
             style={[styles.input, styles.halfInput]}
             placeholder="Last Name"
+            placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
             value={lastName}
             onChangeText={setLastName}
           />
@@ -268,8 +281,12 @@ export function DeliveryStep({
                   `${streetNumber} ${route}`.trim() || data.description,
                 );
                 if (locality) setCity(locality);
-                if (postalCode) setZipCode(postalCode);
-                if (countryCode) setCountry(countryCode);
+                if (postalCode)
+                  setZipCode(normalizePolishPostalFromPlaces(postalCode));
+                if (countryCode) {
+                  const cc = String(countryCode).toUpperCase();
+                  setCountry(cc === "PL" ? SHIPPING_LAUNCH_COUNTRY : cc);
+                }
               } else {
                 setAddress1(data.description);
               }
@@ -299,13 +316,14 @@ export function DeliveryStep({
             textInputProps={{
               value: address1,
               onChangeText: setAddress1,
-              placeholderTextColor: Colors.neutral[400],
+              placeholderTextColor: PLACEHOLDER_TEXT_COLOR,
             }}
           />
         </View>
         <TextInput
           style={styles.input}
           placeholder="Address Line 2 (Optional)"
+          placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
           value={address2}
           onChangeText={setAddress2}
         />
@@ -323,6 +341,7 @@ export function DeliveryStep({
           <TextInput
             style={[styles.input, styles.halfInput]}
             placeholder="City"
+            placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
             value={city}
             onChangeText={setCity}
           />
@@ -334,6 +353,7 @@ export function DeliveryStep({
                 showZipError && deliveryStyles.inputError,
               ]}
               placeholder="Zip (XX-XXX)"
+              placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
               value={zipCode}
               onChangeText={handleZipChange}
               onBlur={() => setZipTouched(true)}
@@ -350,6 +370,7 @@ export function DeliveryStep({
         <TextInput
           style={styles.input}
           placeholder="Phone Number"
+          placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
           value={phone}
           onChangeText={setPhone}
           keyboardType="phone-pad"
@@ -577,6 +598,7 @@ export function DeliveryStep({
         <TextInput
           style={[styles.input, { height: 80, textAlignVertical: "top" }]}
           placeholder="Add any special instructions/notes for delivery"
+          placeholderTextColor={PLACEHOLDER_TEXT_COLOR}
           multiline
           numberOfLines={3}
           value={orderNote}

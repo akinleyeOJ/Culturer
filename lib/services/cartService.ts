@@ -2,132 +2,141 @@ import { supabase } from "../supabase";
 
 // Cart item interface
 export interface CartItem {
+  id: string;
+  user_id: string;
+  product_id: string;
+  quantity: number;
+  created_at: string;
+  product: {
     id: string;
-    user_id: string;
-    product_id: string;
-    quantity: number;
-    created_at: string;
-    product: {
-        id: string;
-        name: string;
-        price: number;
-        image_url?: string;
-        images?: string[];
-        emoji: string;
-        seller_id: string;
-        seller_name: string;
-        shipping: string;
-        out_of_stock: boolean;
-        stock_quantity: number;
-    };
+    name: string;
+    price: number;
+    image_url?: string;
+    images?: string[];
+    emoji: string;
+    seller_id: string;
+    seller_name: string;
+    shipping: string;
+    out_of_stock: boolean;
+    stock_quantity: number;
+  };
 }
 
 // Grouped cart by seller
 export interface GroupedCart {
-    [sellerId: string]: {
-        sellerName: string;
-        items: CartItem[];
-        subtotal: number;
-        shipping: number;
-    };
+  [sellerId: string]: {
+    sellerName: string;
+    items: CartItem[];
+    subtotal: number;
+    shipping: number;
+  };
 }
 
 // Add item to cart
 export const addToCart = async (
-    userId: string,
-    productId: string,
-    quantity: number = 1
+  userId: string,
+  productId: string,
+  quantity: number = 1,
 ) => {
-    try {
-        console.log(`Adding to cart: User ${userId}, Product ${productId}, Qty ${quantity}`);
+  try {
+    console.log(
+      `Adding to cart: User ${userId}, Product ${productId}, Qty ${quantity}`,
+    );
 
-        // Check if item already exists in cart
-        const { data: existing, error: fetchError } = await supabase
-            .from('cart')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('product_id', productId)
-            .maybeSingle();
+    // Check if item already exists in cart
+    const { data: existing, error: fetchError } = await supabase
+      .from("cart")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("product_id", productId)
+      .maybeSingle();
 
-        // Stock Check
-        const { data: product } = await supabase
-            .from('products')
-            .select('stock_quantity')
-            .eq('id', productId)
-            .single();
+    // Stock Check
+    const { data: product } = await supabase
+      .from("products")
+      .select("stock_quantity")
+      .eq("id", productId)
+      .single();
 
-        const currentStock = (product as any)?.stock_quantity || 0;
-        const currentInCart = (existing as any)?.quantity || 0;
+    const currentStock = (product as any)?.stock_quantity || 0;
+    const currentInCart = (existing as any)?.quantity || 0;
 
-        if (currentStock <= 0) {
-            return { success: false, error: new Error('Item is sold out') };
-        }
-
-        if (currentInCart + quantity > currentStock) {
-            return { success: false, error: new Error(`Only ${currentStock} available in total`) };
-        }
-
-        if (fetchError) {
-            console.error('Error fetching existing cart item:', fetchError);
-            return { success: false, error: fetchError };
-        }
-
-        if (existing) {
-            // Update quantity
-            const existingItem = existing as any;
-            const newQuantity = (existingItem.quantity || 0) + quantity;
-            console.log(`Updating existing item ${existingItem.id} to quantity ${newQuantity}`);
-
-            const { error: updateError } = await (supabase
-                .from('cart') as any)
-                .update({ quantity: newQuantity })
-                .eq('id', existingItem.id);
-
-            if (updateError) {
-                console.error('Error updating cart quantity:', updateError);
-                return { success: false, error: updateError };
-            }
-            return { success: true, error: null };
-        } else {
-            // Insert new item
-            console.log('Inserting new cart item');
-            const { error: insertError } = await (supabase
-                .from('cart') as any)
-                .insert([{
-                    user_id: userId,
-                    product_id: productId,
-                    quantity: quantity
-                }]);
-
-            if (insertError) {
-                console.error('Error inserting cart item:', insertError);
-                return { success: false, error: insertError };
-            }
-            return { success: true, error: null };
-        }
-    } catch (error) {
-        console.error('Exception adding to cart:', error);
-        return { success: false, error };
+    if (currentStock <= 0) {
+      return { success: false, error: new Error("Item is sold out") };
     }
+
+    if (currentInCart + quantity > currentStock) {
+      return {
+        success: false,
+        error: new Error(`Only ${currentStock} available in total`),
+      };
+    }
+
+    if (fetchError) {
+      console.error("Error fetching existing cart item:", fetchError);
+      return { success: false, error: fetchError };
+    }
+
+    if (existing) {
+      // Update quantity
+      const existingItem = existing as any;
+      const newQuantity = (existingItem.quantity || 0) + quantity;
+      console.log(
+        `Updating existing item ${existingItem.id} to quantity ${newQuantity}`,
+      );
+
+      const { error: updateError } = await (supabase.from("cart") as any)
+        .update({ quantity: newQuantity })
+        .eq("id", existingItem.id);
+
+      if (updateError) {
+        console.error("Error updating cart quantity:", updateError);
+        return { success: false, error: updateError };
+      }
+      return { success: true, error: null };
+    } else {
+      // Insert new item
+      console.log("Inserting new cart item");
+      const { error: insertError } = await (
+        supabase.from("cart") as any
+      ).insert([
+        {
+          user_id: userId,
+          product_id: productId,
+          quantity: quantity,
+        },
+      ]);
+
+      if (insertError) {
+        console.error("Error inserting cart item:", insertError);
+        return { success: false, error: insertError };
+      }
+      return { success: true, error: null };
+    }
+  } catch (error) {
+    console.error("Exception adding to cart:", error);
+    return { success: false, error };
+  }
 };
 
 // Fetch cart items
 export const fetchCart = async (userId: string): Promise<CartItem[]> => {
-    try {
-        console.log(`Fetching cart for user ${userId}`);
-        
-        // 1. Fetch paused sellers
-        const { data: pausedSellers } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('is_shop_live', false);
-            
-        const pausedIds = new Set(pausedSellers?.map(s => s.id) || []);
+  try {
+    console.log(`Fetching cart for user ${userId}`);
 
-        // 2. Fetch cart items
-        const { data, error } = await supabase
-            .from('cart')
-            .select(`
+    // 1. Fetch paused sellers
+    const { data: pausedSellers } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("is_shop_live", false);
+
+    const pausedIds = new Set(pausedSellers?.map((s) => s.id) || []);
+
+    // 2. Fetch cart items
+    const { data, error } = await supabase
+      .from("cart")
+      .select(
+        `
                 *,
                 product:products (
                     id,
@@ -142,273 +151,280 @@ export const fetchCart = async (userId: string): Promise<CartItem[]> => {
                     stock_quantity,
                     seller_id
                 )
-            `)
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+            `,
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
-        if (error) {
-            console.error('Error fetching cart:', error);
-            return [];
-        }
-
-        // Filter out items where product is null or seller is paused
-        const validItems = (data || []).filter((item: any) => {
-            if (!item.product) return false;
-            const sellerId = item.product.seller_id || item.product.user_id;
-            return !pausedIds.has(sellerId);
-        });
-
-        console.log(`Fetched ${validItems.length} valid cart items`);
-
-        return validItems.map((item: any) => {
-            const p = item.product;
-            const sellerId = p.seller_id || p.user_id;
-            return {
-                ...item,
-                product: {
-                    ...p,
-                    seller_id: sellerId,
-                    seller_name: 'Seller ' + (sellerId ? sellerId.substr(0, 8) : 'Unknown')
-                }
-            } as CartItem;
-        });
-    } catch (error) {
-        console.error('Exception fetching cart:', error);
-        return [];
+    if (error) {
+      console.error("Error fetching cart:", error);
+      return [];
     }
+
+    // Filter out items where product is null or seller is paused
+    const validItems = (data || []).filter((item: any) => {
+      if (!item.product) return false;
+      const sellerId = item.product.seller_id || item.product.user_id;
+      return !pausedIds.has(sellerId);
+    });
+
+    console.log(`Fetched ${validItems.length} valid cart items`);
+
+    return validItems.map((item: any) => {
+      const p = item.product;
+      const sellerId = p.seller_id || p.user_id;
+      return {
+        ...item,
+        product: {
+          ...p,
+          seller_id: sellerId,
+          seller_name:
+            "Seller " + (sellerId ? sellerId.substr(0, 8) : "Unknown"),
+        },
+      } as CartItem;
+    });
+  } catch (error) {
+    console.error("Exception fetching cart:", error);
+    return [];
+  }
 };
 
 // Group cart items by seller
 export const groupCartBySeller = (cartItems: CartItem[]): GroupedCart => {
-    const grouped: GroupedCart = {};
+  const grouped: GroupedCart = {};
 
-    cartItems.forEach(item => {
-        if (!item.product) return; // Safety check
+  cartItems.forEach((item) => {
+    if (!item.product) return; // Safety check
 
-        // Use user_id as seller_id if seller_id is missing
-        const product = item.product as any;
-        const sellerId = product.seller_id || product.user_id || 'unknown';
-        const sellerName = product.seller_name || 'Seller ' + sellerId.substr(0, 8);
+    // Use user_id as seller_id if seller_id is missing
+    const product = item.product as any;
+    const sellerId = product.seller_id || product.user_id || "unknown";
+    const sellerName = product.seller_name || "Seller " + sellerId.substr(0, 8);
 
-        if (!grouped[sellerId]) {
-            grouped[sellerId] = {
-                sellerName,
-                items: [],
-                subtotal: 0,
-                shipping: 0,
-            };
-        }
+    if (!grouped[sellerId]) {
+      grouped[sellerId] = {
+        sellerName,
+        items: [],
+        subtotal: 0,
+        shipping: 0,
+      };
+    }
 
-        grouped[sellerId].items.push(item);
+    grouped[sellerId].items.push(item);
 
-        // Only add to subtotal if in stock
-        const isInStock = !item.product.out_of_stock && item.product.stock_quantity > 0;
-        if (isInStock) {
-            grouped[sellerId].subtotal += (item.product.price || 0) * item.quantity;
-        }
+    // Only add to subtotal if in stock
+    const isInStock =
+      !item.product.out_of_stock && item.product.stock_quantity > 0;
+    if (isInStock) {
+      grouped[sellerId].subtotal += (item.product.price || 0) * item.quantity;
+    }
 
-        // Parse shipping cost (e.g., "Free" or "$5.00")
-        let shippingCost = 0;
-        if (item.product.shipping && item.product.shipping !== 'Free') {
-            shippingCost = parseFloat(item.product.shipping.replace('$', '')) || 0;
-        }
-        grouped[sellerId].shipping = Math.max(grouped[sellerId].shipping, shippingCost);
-    });
+    // Parse shipping cost (e.g., "Free" or "$5.00")
+    let shippingCost = 0;
+    if (item.product.shipping && item.product.shipping !== "Free") {
+      shippingCost = parseFloat(item.product.shipping.replace("$", "")) || 0;
+    }
+    grouped[sellerId].shipping = Math.max(
+      grouped[sellerId].shipping,
+      shippingCost,
+    );
+  });
 
-    return grouped;
+  return grouped;
 };
 
 // Update cart item quantity
 export const updateCartQuantity = async (
-    cartItemId: string,
-    quantity: number
+  cartItemId: string,
+  quantity: number,
 ) => {
-    try {
-        if (quantity <= 0) {
-            // Remove item if quantity is 0 or negative
-            return await removeFromCart(cartItemId);
-        }
-
-        // Check stock before updating quantity
-        const { data: cartItem } = await supabase
-            .from('cart')
-            .select('product_id')
-            .eq('id', cartItemId)
-            .single();
-
-        if (cartItem) {
-            const { data: product } = await supabase
-                .from('products')
-                .select('stock_quantity')
-                .eq('id', cartItem.product_id)
-                .single();
-
-            const currentStock = (product as any)?.stock_quantity || 0;
-            if (quantity > currentStock) {
-                return {
-                    success: false,
-                    error: new Error(`Sorry, only ${currentStock} available in stock.`)
-                };
-            }
-        }
-
-        const { error } = await (supabase
-            .from('cart') as any)
-            .update({ quantity })
-            .eq('id', cartItemId);
-
-        if (error) {
-            console.error('Error updating quantity:', error);
-            return { success: false, error };
-        }
-        return { success: true, error: null };
-    } catch (error) {
-        console.error('Exception updating cart quantity:', error);
-        return { success: false, error };
+  try {
+    if (quantity <= 0) {
+      // Remove item if quantity is 0 or negative
+      return await removeFromCart(cartItemId);
     }
+
+    // Check stock before updating quantity
+    const { data: cartItem } = await supabase
+      .from("cart")
+      .select("product_id")
+      .eq("id", cartItemId)
+      .single();
+
+    if (cartItem) {
+      const { data: product } = await supabase
+        .from("products")
+        .select("stock_quantity")
+        .eq("id", cartItem.product_id)
+        .single();
+
+      const currentStock = (product as any)?.stock_quantity || 0;
+      if (quantity > currentStock) {
+        return {
+          success: false,
+          error: new Error(`Sorry, only ${currentStock} available in stock.`),
+        };
+      }
+    }
+
+    const { error } = await (supabase.from("cart") as any)
+      .update({ quantity })
+      .eq("id", cartItemId);
+
+    if (error) {
+      console.error("Error updating quantity:", error);
+      return { success: false, error };
+    }
+    return { success: true, error: null };
+  } catch (error) {
+    console.error("Exception updating cart quantity:", error);
+    return { success: false, error };
+  }
 };
 
 // Remove item from cart
 export const removeFromCart = async (cartItemId: string) => {
-    try {
-        const { error } = await supabase
-            .from('cart')
-            .delete()
-            .eq('id', cartItemId);
+  try {
+    const { error } = await supabase.from("cart").delete().eq("id", cartItemId);
 
-        if (error) {
-            console.error('Error removing item:', error);
-            return { success: false, error };
-        }
-        return { success: true, error: null };
-    } catch (error) {
-        console.error('Exception removing from cart:', error);
-        return { success: false, error };
+    if (error) {
+      console.error("Error removing item:", error);
+      return { success: false, error };
     }
+    return { success: true, error: null };
+  } catch (error) {
+    console.error("Exception removing from cart:", error);
+    return { success: false, error };
+  }
 };
 
 // Clear entire cart
 export const clearCart = async (userId: string) => {
-    try {
-        const { error } = await supabase
-            .from('cart')
-            .delete()
-            .eq('user_id', userId);
+  try {
+    const { error } = await supabase
+      .from("cart")
+      .delete()
+      .eq("user_id", userId);
 
-        if (error) {
-            console.error('Error clearing cart:', error);
-            return { success: false, error };
-        }
-        return { success: true, error: null };
-    } catch (error) {
-        console.error('Exception clearing cart:', error);
-        return { success: false, error };
+    if (error) {
+      console.error("Error clearing cart:", error);
+      return { success: false, error };
     }
+    return { success: true, error: null };
+  } catch (error) {
+    console.error("Exception clearing cart:", error);
+    return { success: false, error };
+  }
 };
 
 // Fetch cart count (total quantity of items)
 export const fetchCartCount = async (userId: string): Promise<number> => {
-    try {
-        const { data, error } = await supabase
-            .from('cart')
-            .select(`
+  try {
+    const { data, error } = await supabase
+      .from("cart")
+      .select(
+        `
                 quantity,
                 product:products (
                     out_of_stock,
                     stock_quantity
                 )
-            `)
-            .eq('user_id', userId);
+            `,
+      )
+      .eq("user_id", userId);
 
-        if (error) {
-            console.error('Error fetching cart count:', error);
-            return 0;
-        }
-
-        // Only count items that are in stock
-        const totalCount = (data as any[])?.reduce((sum, item) => {
-            const isInStock = item.product && !item.product.out_of_stock && item.product.stock_quantity > 0;
-            return isInStock ? sum + (item.quantity || 0) : sum;
-        }, 0) || 0;
-        return totalCount;
-    } catch (error) {
-        console.error('Exception fetching cart count:', error);
-        return 0;
+    if (error) {
+      console.error("Error fetching cart count:", error);
+      return 0;
     }
+
+    // Only count items that are in stock
+    const totalCount =
+      (data as any[])?.reduce((sum, item) => {
+        const isInStock =
+          item.product &&
+          !item.product.out_of_stock &&
+          item.product.stock_quantity > 0;
+        return isInStock ? sum + (item.quantity || 0) : sum;
+      }, 0) || 0;
+    return totalCount;
+  } catch (error) {
+    console.error("Exception fetching cart count:", error);
+    return 0;
+  }
 };
 
 // Calculate cart totals
 export const calculateCartTotals = (groupedCart: GroupedCart) => {
-    let subtotal = 0;
-    let shipping = 0;
-    let itemCount = 0;
+  let subtotal = 0;
+  let shipping = 0;
+  let itemCount = 0;
 
-    Object.values(groupedCart).forEach(seller => {
-        subtotal += seller.subtotal;
-        shipping += seller.shipping;
-        itemCount += seller.items.reduce((sum, item) => sum + item.quantity, 0);
-    });
+  Object.values(groupedCart).forEach((seller) => {
+    subtotal += seller.subtotal;
+    shipping += seller.shipping;
+    itemCount += seller.items.reduce((sum, item) => sum + item.quantity, 0);
+  });
 
-    const tax = subtotal * 0.1; // 10% tax (adjust as needed)
-    const total = subtotal + shipping + tax;
+  const tax = 0;
+  const total = subtotal + shipping + tax;
 
-    return {
-        subtotal,
-        shipping,
-        tax,
-        total,
-        itemCount,
-    };
+  return {
+    subtotal,
+    shipping,
+    tax,
+    total,
+    itemCount,
+  };
 };
 
 // Fetch complementary products (exclude items already in cart)
 export const fetchComplementaryProducts = async (
-    excludeProductIds: string[],
-    productId: string | null = null,
-    priceMin: number = 0,
-    priceMax: number = 999999,
-    limit: number = 10
+  excludeProductIds: string[],
+  productId: string | null = null,
+  priceMin: number = 0,
+  priceMax: number = 999999,
+  limit: number = 10,
 ): Promise<any[]> => {
-    try {
-        let query = supabase
-            .from('products')
-            .select('id, name, price, image_url, images, emoji, user_id')
-            .eq('status', 'active')
-            .gt('stock_quantity', 0);
+  try {
+    let query = supabase
+      .from("products")
+      .select("id, name, price, image_url, images, emoji, user_id")
+      .eq("status", "active")
+      .gt("stock_quantity", 0);
 
-        if (productId) {
-            query = query.neq('id', productId);
-        }
-        if (priceMin > 0) {
-            query = query.gte('price', priceMin);
-        }
-        if (priceMax < 999999) {
-            query = query.lte('price', priceMax);
-        }
-
-        query = query.limit(limit);
-
-        if (excludeProductIds.length > 0) {
-            // Supabase 'not' with 'in' expects the value to be the array usually, 
-            // but strictly 'not' might expect a string representation for 'in'.
-            // Simplest is to use .not('id', 'in', `(${excludeProductIds.join(',')})`) 
-            // OR better: use filter.
-            // Actually, Supabase JS client supports .not('id', 'in', array) usually?
-            // Let's stick to the tuple string format to be safe as per my previous attempt, but cleaner.
-            query = query.filter('id', 'not.in', `(${excludeProductIds.join(',')})`);
-        }
-
-        const { data, error } = await query;
-
-
-        if (error) {
-            console.error('Error fetching suggestions:', error);
-            return [];
-        }
-
-        return data || [];
-    } catch (error) {
-        console.error('Exception fetching suggestions:', error);
-        return [];
+    if (productId) {
+      query = query.neq("id", productId);
     }
+    if (priceMin > 0) {
+      query = query.gte("price", priceMin);
+    }
+    if (priceMax < 999999) {
+      query = query.lte("price", priceMax);
+    }
+
+    query = query.limit(limit);
+
+    if (excludeProductIds.length > 0) {
+      // Supabase 'not' with 'in' expects the value to be the array usually,
+      // but strictly 'not' might expect a string representation for 'in'.
+      // Simplest is to use .not('id', 'in', `(${excludeProductIds.join(',')})`)
+      // OR better: use filter.
+      // Actually, Supabase JS client supports .not('id', 'in', array) usually?
+      // Let's stick to the tuple string format to be safe as per my previous attempt, but cleaner.
+      query = query.filter("id", "not.in", `(${excludeProductIds.join(",")})`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching suggestions:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error("Exception fetching suggestions:", error);
+    return [];
+  }
 };
