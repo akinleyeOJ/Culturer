@@ -320,6 +320,14 @@ export default function SellerShippingScreen() {
                             </View>
                             <TextInput
                                 style={[styles.addressInput, { borderTopWidth: 1, borderTopColor: '#F3F4F6' }]}
+                                placeholder="Mobile (PL, for InPost labels — optional)"
+                                keyboardType="phone-pad"
+                                value={shipping.origin_phone || ''}
+                                onChangeText={(val) => updateShipping(prev => ({ ...prev, origin_phone: val }))}
+                                placeholderTextColor={Colors.neutral[400]}
+                            />
+                            <TextInput
+                                style={[styles.addressInput, { borderTopWidth: 1, borderTopColor: '#F3F4F6' }]}
                                 placeholder="State / Province (if applicable)"
                                 value={shipping.origin_state}
                                 onChangeText={(val) => updateShipping(prev => ({ ...prev, origin_state: val }))}

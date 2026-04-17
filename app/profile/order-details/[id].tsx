@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -24,9 +24,13 @@ import {
   StarIcon,
   TruckIcon,
   CheckCircleIcon,
+  ArchiveBoxIcon,
+  MapPinIcon,
 } from "react-native-heroicons/outline";
 import { supabase } from "../../../lib/supabase";
 import { formatPln } from "../../../lib/formatPln";
+import { getTrackingUrl } from "../../../lib/shippingUtils";
+import { createInPostShipmentFromOrder } from "../../../lib/services/inpostService";
 import { useAuth } from "../../../contexts/AuthContext";
 import { Colors } from "../../../constants/color";
 
@@ -62,6 +66,7 @@ interface Order {
     country: string;
     firstName: string;
     lastName: string;
+    phone?: string;
   };
   payment_method: string;
   carrier_name: string | null;
@@ -178,6 +183,69 @@ const OrderDetailsScreen = () => {
 
   const currentStatusIndex = order ? getStatusIndex(order.status) : 0;
 
+  const shippingMethodCard = useMemo(() => {
+    if (!order) return null;
+    const d = order.shipping_method_details as Record<string, unknown> | null;
+    if (!d) return null;
+
+    const type = String(d.type || "");
+    const carrier = String(d.carrier || order.carrier_name || "");
+
+    if (type === "locker_pickup") {
+      const locker = d.locker as
+        | { id?: string; address?: string | Record<string, unknown> }
+        | undefined;
+      const lockerId = locker?.id ? String(locker.id) : null;
+      const lockerAddress =
+        typeof locker?.address === "string"
+          ? locker.address
+          : locker?.address &&
+              typeof locker.address === "object" &&
+              "line1" in locker.address
+            ? [(locker.address as any).line1, (locker.address as any).city]
+                .filter(Boolean)
+                .join(", ")
+            : null;
+
+      return {
+        type: "locker" as const,
+        carrier,
+        lockerId,
+        lockerAddress,
+      };
+    }
+
+    if (type === "home_delivery") {
+      return { type: "home" as const, carrier };
+    }
+
+    if (type === "local_pickup") {
+      return { type: "local" as const, carrier };
+    }
+
+    return carrier ? { type: "other" as const, carrier } : null;
+  }, [order]);
+
+  const inPostAutoFulfillmentEligible = useMemo(() => {
+    if (!order || user?.id !== order.seller_id) return false;
+    const st = String(order.status || "").toLowerCase();
+    if (st !== "paid" && st !== "confirmed") return false;
+    if (order.tracking_number) return false;
+    const d = order.shipping_method_details as Record<string, unknown> | null;
+    const carrier = String(
+      (d?.carrier as string) || order.carrier_name || "",
+    ).toLowerCase();
+    if (!carrier.includes("inpost")) return false;
+    const t = String(d?.type || "");
+    if (t === "local_pickup") return false;
+    if (t === "locker_pickup") {
+      const locker = d?.locker as { id?: string } | undefined;
+      return Boolean(locker?.id);
+    }
+    if (t === "home_delivery") return true;
+    return false;
+  }, [order, user?.id]);
+
   const handleFinishPayment = () => {
     // Redirect back to checkout with this order context
     router.push({
@@ -216,12 +284,17 @@ const OrderDetailsScreen = () => {
     }
     try {
       setShipProcessing(true);
+      const carrier = shipCarrier.trim();
+      const tracking = shipTrackingNumber.trim();
+      const trackingUrl = getTrackingUrl(carrier, tracking);
+
       const { error } = await supabase
         .from("orders" as any)
         .update({
           status: "shipped",
-          carrier_name: shipCarrier.trim(),
-          tracking_number: shipTrackingNumber.trim(),
+          carrier_name: carrier,
+          tracking_number: tracking,
+          ...(trackingUrl ? { tracking_url: trackingUrl } : {}),
         })
         .eq("id", id);
 
@@ -243,38 +316,26 @@ const OrderDetailsScreen = () => {
     }
   };
 
-  const getTrackingUrl = (
-    carrier: string,
-    trackingNum: string,
-  ): string | null => {
-    // If we have a direct tracking URL saved, use it first
-    if (order?.tracking_url) return order.tracking_url;
-
-    const c = carrier.toLowerCase();
-    if (c.includes("inpost"))
-      return `https://inpost.pl/sledzenie-przesylek?number=${trackingNum}`;
-    if (c.includes("dhl"))
-      return `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNum}`;
-    if (c.includes("dpd"))
-      return `https://www.dpd.com/tracking?parcelno=${trackingNum}`;
-    if (c.includes("royal mail"))
-      return `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNum}`;
-    if (c.includes("evri") || c.includes("hermes"))
-      return `https://www.evri.com/track/parcel/${trackingNum}`;
-    if (c.includes("ups"))
-      return `https://www.ups.com/track?tracknum=${trackingNum}`;
-    if (c.includes("fedex"))
-      return `https://www.fedex.com/fedextrack/?trknbr=${trackingNum}`;
-    if (c.includes("poczta"))
-      return `https://śledzenie.poczta-polska.pl/?numer=${trackingNum}`;
-    if (c.includes("gls")) return `https://gls-group.com/track/${trackingNum}`;
-    if (c.includes("postnl"))
-      return `https://postnl.nl/tracktrace/?B=${trackingNum}`;
-    if (c.includes("colissimo"))
-      return `https://www.laposte.fr/outils/suivre-vos-envois?code=${trackingNum}`;
-    if (c.includes("correos"))
-      return `https://www.correos.es/ss/Satellite/site/aplicacion-localizador_702-sidioma=en_GB?numero=${trackingNum}`;
-    return null;
+  const handleCreateInPostShipment = async () => {
+    if (!order?.id) return;
+    try {
+      setShipProcessing(true);
+      const result = await createInPostShipmentFromOrder(order.id);
+      if (!result.success) {
+        Alert.alert("InPost", result.error);
+        return;
+      }
+      Alert.alert(
+        "Shipment created",
+        `Tracking number: ${result.tracking_number}\n\nThe buyer can track the parcel from this order screen.`,
+      );
+      fetchOrderDetails();
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Could not create InPost shipment.");
+    } finally {
+      setShipProcessing(false);
+    }
   };
 
   const handleContactUser = async () => {
@@ -573,9 +634,83 @@ const OrderDetailsScreen = () => {
           ))}
         </View>
 
+        {/* Delivery Method */}
+        {shippingMethodCard && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Delivery Method</Text>
+            <View style={styles.deliveryMethodCard}>
+              {shippingMethodCard.type === "locker" ? (
+                <>
+                  <View style={styles.deliveryMethodRow}>
+                    <ArchiveBoxIcon size={20} color={Colors.primary[600]} />
+                    <View style={styles.deliveryMethodTextWrap}>
+                      <Text style={styles.deliveryMethodLabel}>
+                        {shippingMethodCard.carrier || "InPost Locker"}
+                      </Text>
+                      <Text style={styles.deliveryMethodSub}>
+                        Paczkomat® pickup
+                      </Text>
+                    </View>
+                  </View>
+                  {shippingMethodCard.lockerId && (
+                    <View style={styles.lockerPointBox}>
+                      <MapPinIcon size={16} color={Colors.neutral[500]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.lockerPointId}>
+                          {shippingMethodCard.lockerId}
+                        </Text>
+                        {shippingMethodCard.lockerAddress ? (
+                          <Text style={styles.lockerPointAddress}>
+                            {shippingMethodCard.lockerAddress}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  )}
+                </>
+              ) : shippingMethodCard.type === "home" ? (
+                <View style={styles.deliveryMethodRow}>
+                  <TruckIcon size={20} color={Colors.primary[600]} />
+                  <View style={styles.deliveryMethodTextWrap}>
+                    <Text style={styles.deliveryMethodLabel}>
+                      {shippingMethodCard.carrier || "Home Delivery"}
+                    </Text>
+                    <Text style={styles.deliveryMethodSub}>
+                      Delivered to your door
+                    </Text>
+                  </View>
+                </View>
+              ) : shippingMethodCard.type === "local" ? (
+                <View style={styles.deliveryMethodRow}>
+                  <MapPinIcon size={20} color={Colors.primary[600]} />
+                  <View style={styles.deliveryMethodTextWrap}>
+                    <Text style={styles.deliveryMethodLabel}>Local Pickup</Text>
+                    <Text style={styles.deliveryMethodSub}>
+                      Collect from seller
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.deliveryMethodRow}>
+                  <TruckIcon size={20} color={Colors.primary[600]} />
+                  <View style={styles.deliveryMethodTextWrap}>
+                    <Text style={styles.deliveryMethodLabel}>
+                      {shippingMethodCard.carrier}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Shipping Address */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shipping Address</Text>
+          <Text style={styles.sectionTitle}>
+            {shippingMethodCard?.type === "locker"
+              ? "Your Contact Address"
+              : "Shipping Address"}
+          </Text>
           <View style={styles.addressCard}>
             <Text style={styles.addressName}>
               {order.shipping_address.firstName}{" "}
@@ -626,44 +761,49 @@ const OrderDetailsScreen = () => {
         </View>
 
         {/* Tracking Info (shown when shipped or delivered) */}
-        {(order.status === "shipped" || order.status === "delivered") &&
-          order.carrier_name && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📦 Shipping Information</Text>
-              <View style={styles.trackingCard}>
-                <View style={styles.trackingRow}>
-                  <Text style={styles.trackingLabel}>Carrier</Text>
-                  <Text style={styles.trackingValue}>{order.carrier_name}</Text>
-                </View>
-                <View style={styles.trackingRow}>
-                  <Text style={styles.trackingLabel}>Tracking #</Text>
-                  <Text style={styles.trackingValue}>
-                    {order.tracking_number}
-                  </Text>
-                </View>
-                {order.tracking_number &&
-                  (() => {
-                    const url = getTrackingUrl(
-                      order.carrier_name!,
-                      order.tracking_number,
-                    );
-                    return url ? (
-                      <TouchableOpacity
-                        style={styles.trackButton}
-                        onPress={() => Linking.openURL(url)}
-                      >
-                        <TruckIcon size={18} color="#FFF" />
-                        <Text style={styles.trackButtonText}>
-                          {user?.id === order.seller_id
-                            ? "Track Shipment"
-                            : "Track My Package"}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null;
-                  })()}
+        {Boolean(order.tracking_number) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>📦 Shipping Information</Text>
+            <View style={styles.trackingCard}>
+              <View style={styles.trackingRow}>
+                <Text style={styles.trackingLabel}>Carrier</Text>
+                <Text style={styles.trackingValue}>
+                  {order.carrier_name || "—"}
+                </Text>
               </View>
+              <View style={styles.trackingRow}>
+                <Text style={styles.trackingLabel}>Tracking #</Text>
+                <Text style={styles.trackingValue}>
+                  {order.tracking_number}
+                </Text>
+              </View>
+              {order.tracking_number &&
+                (() => {
+                  const url =
+                    order.tracking_url ||
+                    (order.carrier_name
+                      ? getTrackingUrl(
+                          order.carrier_name,
+                          order.tracking_number,
+                        )
+                      : null);
+                  return url ? (
+                    <TouchableOpacity
+                      style={styles.trackButton}
+                      onPress={() => Linking.openURL(url)}
+                    >
+                      <TruckIcon size={18} color="#FFF" />
+                      <Text style={styles.trackButtonText}>
+                        {user?.id === order.seller_id
+                          ? "Track Shipment"
+                          : "Track My Package"}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null;
+                })()}
             </View>
-          )}
+          </View>
+        )}
 
         {/* Seller Label Visibility */}
         {user?.id === order.seller_id && order.label_url && (
@@ -694,7 +834,39 @@ const OrderDetailsScreen = () => {
             // Seller Actions
             <>
               <Text style={styles.actionTitle}>Seller Controls</Text>
-              {currentStatusIndex === 1 && (
+              {currentStatusIndex === 1 && inPostAutoFulfillmentEligible && (
+                <TouchableOpacity
+                  style={[styles.primaryActionButton]}
+                  onPress={handleCreateInPostShipment}
+                  disabled={shipProcessing}
+                >
+                  {shipProcessing ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.primaryActionButtonText}>
+                      Create InPost shipment
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              {currentStatusIndex === 1 && inPostAutoFulfillmentEligible && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { marginBottom: 8 }]}
+                  onPress={() => {
+                    if (order.carrier_name) {
+                      setShipCarrier(order.carrier_name);
+                    }
+                    setShowShipModal(true);
+                  }}
+                  disabled={shipProcessing}
+                >
+                  <TruckIcon size={20} color={Colors.text.primary} />
+                  <Text style={styles.actionButtonText}>
+                    Enter tracking manually
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {currentStatusIndex === 1 && !inPostAutoFulfillmentEligible && (
                 <TouchableOpacity
                   style={[styles.primaryActionButton]}
                   onPress={() => {
@@ -1117,6 +1289,52 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#111827",
+  },
+  deliveryMethodCard: {
+    backgroundColor: "#F0F9FF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    padding: 12,
+    gap: 10,
+  },
+  deliveryMethodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  deliveryMethodTextWrap: {
+    flex: 1,
+  },
+  deliveryMethodLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0C4A6E",
+  },
+  deliveryMethodSub: {
+    fontSize: 13,
+    color: "#075985",
+    marginTop: 1,
+  },
+  lockerPointBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#E0F2FE",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 2,
+  },
+  lockerPointId: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0369A1",
+    letterSpacing: 0.5,
+  },
+  lockerPointAddress: {
+    fontSize: 13,
+    color: "#075985",
+    marginTop: 2,
   },
   addressCard: {
     backgroundColor: "#F9FAFB",

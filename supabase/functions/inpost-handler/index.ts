@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { handleCreateShipmentFromOrder } from './createShipmentFromOrder.ts'
 
 const INPOST_POINTS_API_ORIGIN = 'https://api-shipx-pl.easypack24.net'
 const INPOST_POINTS_API_PATH = '/v1/points'
@@ -118,6 +119,10 @@ serve(async (req) => {
         const body = await req.json()
         const { action, urls } = body
 
+        if (action === 'create-shipment-from-order') {
+            return await handleCreateShipmentFromOrder(req, body, corsHeaders)
+        }
+
         if (action !== 'search-points' && action !== 'calculate-rates') {
             throw new Error(`Invalid action: ${action}`)
         }
@@ -208,7 +213,7 @@ serve(async (req) => {
         console.error('InPost handler error:', error)
         return new Response(
             JSON.stringify({ success: false, error: error.message }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
         )
     }
 })

@@ -78,6 +78,8 @@ export interface SellerShippingConfig {
   origin_city?: string;
   origin_state?: string;
   origin_zip?: string;
+  /** PL mobile (9 digits) shown on InPost labels as sender contact; optional if platform sets INPOST_DEFAULT_SENDER_PHONE. */
+  origin_phone?: string;
   pickup_location: string;
   shipping_zones: ("domestic" | "eu" | "worldwide")[];
   modes: {
@@ -293,6 +295,7 @@ export const DEFAULT_SHIPPING_CONFIG: SellerShippingConfig = {
   origin_city: "",
   origin_state: "",
   origin_zip: "",
+  origin_phone: "",
   pickup_location: "",
   shipping_zones: ["domestic"],
   modes: {
