@@ -40,6 +40,11 @@ import { Colors } from '../../constants/color';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { updateShopStatus } from '../../lib/services/profileService';
+import {
+    emptyStripeConnectStatus,
+    fetchStripeConnectStatus,
+    type StripeConnectStatus,
+} from '../../lib/services/stripeConnectService';
 
 interface SellerStats {
     totalItems: number;
@@ -66,6 +71,9 @@ const SellerHubScreen = () => {
     const [isShopLive, setIsShopLive] = useState(true);
 
     const [profile, setProfile] = useState<any>(null);
+    const [connectStatus, setConnectStatus] = useState<StripeConnectStatus>(
+        emptyStripeConnectStatus(),
+    );
 
     const fetchSellerStats = async () => {
         if (!user) return;
@@ -128,10 +136,21 @@ const SellerHubScreen = () => {
         }
     };
 
+    const refreshConnectStatus = useCallback(async () => {
+        if (!user) return;
+        try {
+            const next = await fetchStripeConnectStatus();
+            setConnectStatus(next);
+        } catch (error) {
+            console.error('Stripe Connect status load failed:', error);
+        }
+    }, [user]);
+
     useFocusEffect(
         useCallback(() => {
             fetchSellerStats();
-        }, [user])
+            void refreshConnectStatus();
+        }, [user, refreshConnectStatus])
     );
 
     const onRefresh = () => {
@@ -313,6 +332,29 @@ const SellerHubScreen = () => {
                     )}
                 </View>
 
+                {!connectStatus.onboarded && (
+                    <TouchableOpacity
+                        style={styles.connectBanner}
+                        onPress={() => router.push('/profile/stripe-connect')}
+                        activeOpacity={0.85}
+                    >
+                        <View style={styles.connectBannerIcon}>
+                            <BanknotesIcon size={22} color={Colors.primary[700]} />
+                        </View>
+                        <View style={styles.connectBannerText}>
+                            <Text style={styles.connectBannerTitle}>
+                                {connectStatus.accountId
+                                    ? 'Finish Stripe payout setup'
+                                    : 'Set up payouts to start selling'}
+                            </Text>
+                            <Text style={styles.connectBannerBody}>
+                                Buyers can only pay once Stripe payouts are connected. Takes ~3 minutes.
+                            </Text>
+                        </View>
+                        <ChevronRightIcon size={20} color={Colors.primary[700]} />
+                    </TouchableOpacity>
+                )}
+
                 {/* Stats Row */}
                 <StatsSection />
 
@@ -358,7 +400,26 @@ const SellerHubScreen = () => {
                     />
                     <MenuItem
                         icon={BanknotesIcon}
-                        title="Payouts & earnings"
+                        title="Stripe payouts"
+                        subtitle={
+                            connectStatus.onboarded
+                                ? 'Connected — ready to receive buyer payments'
+                                : connectStatus.accountId
+                                    ? 'Action needed — finish your Stripe setup'
+                                    : 'Required to sell — add bank details'
+                        }
+                        badge={
+                            connectStatus.onboarded
+                                ? 'Active'
+                                : connectStatus.accountId
+                                    ? 'Action needed'
+                                    : 'Not set up'
+                        }
+                        onPress={() => router.push('/profile/stripe-connect')}
+                    />
+                    <MenuItem
+                        icon={BanknotesIcon}
+                        title="Earnings history"
                         subtitle="Balance, payout methods, and currency"
                         onPress={() => router.push('/profile/payouts')}
                     />
@@ -469,6 +530,40 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingBottom: 100,
+    },
+    connectBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginHorizontal: 16,
+        marginBottom: 12,
+        padding: 14,
+        borderRadius: 14,
+        backgroundColor: Colors.primary[100],
+        borderWidth: 1,
+        borderColor: Colors.primary[200],
+    },
+    connectBannerIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#FFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    connectBannerText: {
+        flex: 1,
+    },
+    connectBannerTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.primary[800],
+        marginBottom: 2,
+    },
+    connectBannerBody: {
+        fontSize: 12,
+        lineHeight: 16,
+        color: Colors.text.secondary,
     },
     profileOverview: {
         padding: 16,

@@ -185,7 +185,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.shipments;
 CREATE OR REPLACE FUNCTION public.set_shipments_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = NOW();
+    NEW.updated_at = NOW(); 
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
