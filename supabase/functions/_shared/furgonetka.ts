@@ -207,12 +207,19 @@ export async function getFurgonetkaToken(): Promise<string> {
   return cachedToken.accessToken;
 }
 
-export async function buildFurgonetkaHeaders(): Promise<HeadersInit> {
+// Furgonetka uses a versioned media type for v1 endpoints.
+// Some legacy endpoints still accept plain application/json — pass
+// `mediaType: "application/json"` to override per call.
+const DEFAULT_MEDIA_TYPE = "application/vnd.furgonetka.v1+json";
+
+export async function buildFurgonetkaHeaders(
+  mediaType: string = DEFAULT_MEDIA_TYPE,
+): Promise<HeadersInit> {
   const token = await getFurgonetkaToken();
   return {
     Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-    Accept: "application/json",
+    "Content-Type": mediaType,
+    Accept: mediaType,
     "X-Language": FURGONETKA_LANGUAGE,
   };
 }
@@ -226,6 +233,7 @@ export interface FurgonetkaRequestOptions {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: Record<string, unknown>;
   query?: Record<string, string | number | boolean | undefined>;
+  mediaType?: string;
 }
 
 export async function callFurgonetka<T = unknown>({
@@ -233,6 +241,7 @@ export async function callFurgonetka<T = unknown>({
   method = "GET",
   body,
   query,
+  mediaType,
 }: FurgonetkaRequestOptions): Promise<T> {
   const url = new URL(path, FURGONETKA_API_BASE);
   if (query) {
@@ -242,7 +251,7 @@ export async function callFurgonetka<T = unknown>({
   }
 
   const doFetch = async () => {
-    const headers = await buildFurgonetkaHeaders();
+    const headers = await buildFurgonetkaHeaders(mediaType);
     return fetch(url.toString(), {
       method,
       headers,
