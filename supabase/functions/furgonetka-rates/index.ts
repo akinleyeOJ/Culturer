@@ -113,6 +113,31 @@ const CARRIER_REGISTRY: Record<string, CarrierMeta> = {
     service_type: "home_delivery",
     requires_service_point: false,
   },
+  fedex: {
+    display_name: "FedEx",
+    service_type: "home_delivery",
+    requires_service_point: false,
+  },
+  ups: {
+    display_name: "UPS",
+    service_type: "home_delivery",
+    requires_service_point: false,
+  },
+  ups_access_point: {
+    display_name: "UPS Access Point",
+    service_type: "pickup_point",
+    requires_service_point: true,
+  },
+  geis: {
+    display_name: "Geis",
+    service_type: "home_delivery",
+    requires_service_point: false,
+  },
+  ruch: {
+    display_name: "Ruch",
+    service_type: "pickup_point",
+    requires_service_point: true,
+  },
 };
 
 const DEFAULT_CARRIERS = Object.keys(CARRIER_REGISTRY);
@@ -150,7 +175,7 @@ const CULTURAR_PICKUP = {
   phone: Deno.env.get("FURGONETKA_PICKUP_PHONE") || "+48000000000",
 };
 
-const buildPackagePayload = (req: RateRequestBody, carriers: string[]) => {
+const buildPackagePayload = (req: RateRequestBody, carriers: string[] | null) => {
   const dims = req.parcel?.dimensions_cm || {};
   const weightKg = Math.max(0.1, (req.parcel?.weight_grams || 0) / 1000);
 
@@ -178,11 +203,7 @@ const buildPackagePayload = (req: RateRequestBody, carriers: string[]) => {
     phone: "+48000000001",
   };
 
-  return {
-    services: {
-      service: carriers,
-      service_id: carriers.map(() => null),
-    },
+  const payload: Record<string, unknown> = {
     package: {
       pickup,
       receiver,
@@ -209,6 +230,15 @@ const buildPackagePayload = (req: RateRequestBody, carriers: string[]) => {
       ],
     },
   };
+
+  if (carriers && carriers.length > 0) {
+    payload.services = {
+      service: carriers,
+      service_id: carriers.map(() => null),
+    };
+  }
+
+  return payload;
 };
 
 const minutesToDays = (mins?: number): number | null => {
@@ -260,13 +290,18 @@ serve(async (req) => {
       return errorResponse("origin postcode is required");
     }
 
-    const requested = (body.carriers || DEFAULT_CARRIERS)
-      .map((c) => c.toLowerCase())
+    // Use explicit carrier list if provided, else send NO filter so we
+    // get whatever Furgonetka considers active on this account. This is
+    // also handy for diagnostics: we can see the actual service codes
+    // the account supports.
+    const explicitCarriers = body.carriers
+      ?.map((c) => c.toLowerCase())
       .filter((c) => CARRIER_REGISTRY[c] !== undefined);
 
-    if (requested.length === 0) {
-      return errorResponse("no supported carriers requested");
-    }
+    const requested =
+      explicitCarriers && explicitCarriers.length > 0
+        ? explicitCarriers
+        : null; // null = no filter, ask Furgonetka for everything
 
     const payload = buildPackagePayload(body, requested);
 
@@ -277,7 +312,9 @@ serve(async (req) => {
       mediaType: "application/vnd.furgonetka.v1+json",
     });
 
-    const rates = (response.services_prices || [])
+    const allRows = response.services_prices || [];
+
+    const rates = allRows
       .filter(
         (row) =>
           row.available !== false &&
@@ -286,7 +323,29 @@ serve(async (req) => {
       )
       .map(mapPriceRow);
 
-    return successResponse({ rates, source: "furgonetka" });
+    // Diagnostics: when no rates come back, the client (and the curl
+    // smoke test) gets a row-by-row reason so we can see *why* every
+    // carrier was dropped without having to hit Furgonetka logs.
+    const url = new URL(req.url);
+    const wantDebug =
+      url.searchParams.get("debug") === "1" || rates.length === 0;
+
+    const debug = wantDebug
+      ? {
+          requested_carriers: requested,
+          returned_count: allRows.length,
+          dropped: allRows.map((row) => ({
+            service: row.service,
+            service_id: row.service_id,
+            available: row.available,
+            error_messages: (row.errors || []).map((e) => e.message),
+            price_gross:
+              row.pricing?.price_gross ?? row.lowest_price?.price_gross ?? null,
+          })),
+        }
+      : undefined;
+
+    return successResponse({ rates, source: "furgonetka", debug });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("furgonetka-rates error:", message);
