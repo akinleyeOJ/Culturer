@@ -64,6 +64,13 @@ interface DeliveryStepProps {
   shippingZone: ShippingZone;
   liveShippingApisEnabled: boolean;
   loadingRates: boolean;
+  ratesError: string | null;
+  /** Why we are not calling Furgonetka yet (address incomplete, seller zip, etc.) */
+  ratesBlockedReason: string | null;
+  buyerReadyForQuotes: boolean;
+  hasLiveCarrierQuotes: boolean;
+  /** When seller enabled lockers but API returned none — explains why only home delivery appears */
+  lockerRatesHint: string | null;
   integratedCarrierOptions: CarrierConfig[];
   selectedCarrier: CarrierConfig | null;
   setSelectedCarrier: (carrier: CarrierConfig | null) => void;
@@ -109,6 +116,11 @@ export function DeliveryStep({
   shippingZone,
   liveShippingApisEnabled,
   loadingRates,
+  ratesError,
+  ratesBlockedReason,
+  buyerReadyForQuotes,
+  hasLiveCarrierQuotes,
+  lockerRatesHint,
   integratedCarrierOptions,
   selectedCarrier,
   setSelectedCarrier,
@@ -119,6 +131,8 @@ export function DeliveryStep({
   orderNote,
   setOrderNote,
 }: DeliveryStepProps) {
+  void liveShippingApisEnabled;
+
   const sellerShipsToCurrentZone = sellerShipping
     ? sellerShipsToZone(sellerShipping, shippingZone)
     : true;
@@ -451,38 +465,78 @@ export function DeliveryStep({
           </View>
         )}
 
-        {!liveShippingApisEnabled &&
-          sellerShipping?.modes.home_delivery.enabled && (
-            <View style={styles.apiCostHintBox}>
-              <Text style={styles.apiCostHintText}>
-                Direct carrier integrations are off in this environment.
-              </Text>
-            </View>
-          )}
-
         {sellerShipping && (
-          <View style={styles.apiCostHintBox}>
-            <Text style={styles.apiCostHintText}>
-              Live shipping quotes appear only for delivery options that can
-              return a real provider rate for this route.
-            </Text>
-          </View>
+          <>
+            {ratesError ? (
+              <View
+                style={[
+                  styles.apiCostHintBox,
+                  {
+                    backgroundColor: "#FEF2F2",
+                    borderColor: "#FECACA",
+                  },
+                ]}
+              >
+                <Text style={[styles.apiCostHintText, { color: "#B91C1C" }]}>
+                  {ratesError}
+                </Text>
+              </View>
+            ) : ratesBlockedReason ? (
+              <View
+                style={[
+                  styles.apiCostHintBox,
+                  {
+                    backgroundColor: "#FFFBEB",
+                    borderColor: "#FDE68A",
+                  },
+                ]}
+              >
+                <Text style={[styles.apiCostHintText, { color: "#92400E" }]}>
+                  {ratesBlockedReason}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.apiCostHintBox}>
+                <Text style={styles.apiCostHintText}>
+                  Live carrier prices load automatically once your delivery address
+                  is complete (name, email, phone, street, city, postcode).
+                </Text>
+              </View>
+            )}
+          </>
         )}
 
         {loadingRates ? (
           <View style={styles.loadingRatesBox}>
             <ActivityIndicator color={Colors.primary[500]} size="small" />
             <Text style={styles.loadingRatesText}>
-              Checking direct carrier availability...
+              Fetching live carrier rates…
+            </Text>
+          </View>
+        ) : null}
+
+        {!loadingRates &&
+        !ratesError &&
+        buyerReadyForQuotes &&
+        !ratesBlockedReason &&
+        !hasLiveCarrierQuotes &&
+        integratedCarrierOptions.some((c) => c.type === "pickup") ? (
+          <View style={styles.loadingRatesBox}>
+            <Text style={styles.loadingRatesText}>
+              No courier returned a price for this route yet. Check the postcode
+              or try again in a moment. Local Pickup is still available below.
             </Text>
           </View>
         ) : null}
 
         {integratedCarrierOptions.length > 0 && (
           <>
-            <Text style={styles.subSectionTitle}>
-              Integrated Delivery Options
-            </Text>
+            <Text style={styles.subSectionTitle}>Delivery Options</Text>
+            {lockerRatesHint ? (
+              <View style={styles.apiCostHintBox}>
+                <Text style={styles.apiCostHintText}>{lockerRatesHint}</Text>
+              </View>
+            ) : null}
             {integratedCarrierOptions.map((carrier) => {
               const isSelected = selectedCarrier?.name === carrier.name;
               return (
@@ -493,8 +547,13 @@ export function DeliveryStep({
                     isSelected && styles.radioOptionSelected,
                   ]}
                   onPress={() => {
+                    const prevName = selectedCarrier?.name;
                     setSelectedCarrier(carrier);
                     if (carrier.type !== "locker") {
+                      setSelectedLocker(null);
+                      clearPickupPointDraft();
+                    } else if (prevName && prevName !== carrier.name) {
+                      // Different locker network (e.g. InPost → DPD): old point is invalid.
                       setSelectedLocker(null);
                       clearPickupPointDraft();
                     }
@@ -526,10 +585,14 @@ export function DeliveryStep({
           </>
         )}
 
-        {!loadingRates && integratedCarrierOptions.length === 0 && (
+        {!loadingRates &&
+        integratedCarrierOptions.length === 0 &&
+        !ratesBlockedReason &&
+        !ratesError &&
+        buyerReadyForQuotes && (
           <View style={styles.loadingRatesBox}>
             <Text style={styles.loadingRatesText}>
-              No direct carrier integrations are live for this route yet.
+              No shipping options are available for this order yet.
             </Text>
           </View>
         )}

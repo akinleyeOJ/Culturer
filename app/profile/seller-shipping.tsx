@@ -20,21 +20,24 @@ import { supabase } from '../../lib/supabase';
 import {
     AVAILABLE_ORIGIN_COUNTRIES,
     DEFAULT_SHIPPING_CONFIG,
+    FURGONETKA_CARRIER_CATALOG,
+    LOCKED_FURGONETKA_CARRIERS,
     PROCESSING_TIMES,
     ZONE_OPTIONS,
     buildProviderConfigs,
     getCountryFlag,
+    getEffectiveFurgonetkaCarriers,
     getLockedDefaultProvidersForMode,
     getSupportedLockerProviderNamesForCountry,
     hydrateShippingConfig,
     normalizeCountryName,
+    type FurgonetkaCarrierMeta,
     type ShippingProviderMode,
     type SellerShippingConfig,
 } from '../../lib/shippingUtils';
 import { fetchSendcloudServicePointCarrierCodes } from '../../lib/services/sendcloudService';
 import {
     ChevronLeftIcon,
-    TruckIcon,
     ClockIcon,
     MapPinIcon,
     ChevronRightIcon,
@@ -53,23 +56,10 @@ export default function SellerShippingScreen() {
     const [showCountryModal, setShowCountryModal] = useState(false);
     const [shipping, setShipping] = useState<SellerShippingConfig>(DEFAULT_SHIPPING_CONFIG);
     const [sendcloudCarrierCodes, setSendcloudCarrierCodes] = useState<string[]>([]);
-    const [servicePointCapabilitiesLoaded, setServicePointCapabilitiesLoaded] = useState(false);
     const supportedLockerProviderNames = useMemo(
         () => getSupportedLockerProviderNamesForCountry(shipping.origin_country, sendcloudCarrierCodes),
         [sendcloudCarrierCodes, shipping.origin_country]
     );
-    const providersByMode = {
-        home_delivery: shipping.providers.filter((provider) => provider.mode === 'home_delivery'),
-        locker_pickup: shipping.providers.filter((provider) => provider.mode === 'locker_pickup'),
-    };
-    const lockedHomeProviders = getLockedDefaultProvidersForMode(shipping.origin_country, 'home_delivery');
-    const lockedLockerProviders = getLockedDefaultProvidersForMode(
-        shipping.origin_country,
-        'locker_pickup',
-        supportedLockerProviderNames
-    );
-    const lockedProviders = new Set([...lockedHomeProviders, ...lockedLockerProviders]);
-
     const fetchShippingSettings = useCallback(async () => {
         try {
             const [{ data }, carrierCapabilityResult] = await Promise.all([
@@ -83,7 +73,6 @@ export default function SellerShippingScreen() {
 
             const carrierCodes = carrierCapabilityResult.success ? carrierCapabilityResult.carrierCodes : [];
             setSendcloudCarrierCodes(carrierCodes);
-            setServicePointCapabilitiesLoaded(true);
 
             if (data) {
                 if (data.shop_shipping) {
@@ -100,7 +89,6 @@ export default function SellerShippingScreen() {
         } catch (e) {
             console.error('Error fetching shipping settings:', e);
         } finally {
-            setServicePointCapabilitiesLoaded(true);
             setLoading(false);
         }
     }, [user]);
@@ -190,19 +178,29 @@ export default function SellerShippingScreen() {
         }));
     };
 
-    const toggleProvider = (providerName: string) => {
-        if (lockedProviders.has(providerName)) {
-            return;
-        }
+    // ─── Furgonetka Carrier Toggle ───
+    const enabledFurgonetkaCarriers = useMemo(
+        () => new Set(getEffectiveFurgonetkaCarriers(shipping)),
+        [shipping]
+    );
 
-        updateShipping((current) => ({
-            ...current,
-            providers: current.providers.map((provider) =>
-                provider.name === providerName
-                    ? { ...provider, enabled: !provider.enabled }
-                    : provider
-            ),
-        }));
+    const toggleFurgonetkaCarrier = (code: string) => {
+        if (LOCKED_FURGONETKA_CARRIERS.includes(code)) return;
+
+        updateShipping((current) => {
+            const baseline = getEffectiveFurgonetkaCarriers(current);
+            const isOn = baseline.includes(code);
+            const next = isOn
+                ? baseline.filter((c) => c !== code)
+                : [...baseline, code];
+
+            // Always re-include locked carriers so we never accidentally
+            // strip the platform's required baseline.
+            const merged = Array.from(
+                new Set([...LOCKED_FURGONETKA_CARRIERS, ...next])
+            );
+            return { ...current, furgonetka_carriers: merged };
+        });
     };
 
     // ─── Zone Toggle ───
@@ -216,14 +214,6 @@ export default function SellerShippingScreen() {
             newZones.push(zone);
         }
         updateField('shipping_zones', newZones);
-    };
-
-    const getCarrierIcon = (type: string) => {
-        switch (type) {
-            case 'locker': return '📦';
-            case 'pickup': return '🏪';
-            default: return '🚚';
-        }
     };
 
     if (loading) {
@@ -268,8 +258,92 @@ export default function SellerShippingScreen() {
                 <View style={styles.infoBox}>
                     <InformationCircleIcon size={20} color={Colors.primary[600]} />
                     <Text style={styles.infoText}>
-                        Choose which shipping modes you support, then enable providers per mode. Buyers only see options that match their address.
+                        Live rates are powered by Furgonetka. Pick which carriers buyers can choose at checkout — InPost and DPD are always on so every cart has a locker and a courier option.
                     </Text>
+                </View>
+
+                {/* ─── Furgonetka Carriers (drives checkout rates) ─── */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>CARRIERS BUYERS CAN CHOOSE</Text>
+                    <Text style={styles.sectionSubtitle}>
+                        Toggle any optional carrier on or off. Locked carriers are part of the Culturar baseline and can't be turned off.
+                    </Text>
+
+                    {([
+                        {
+                            key: 'locker_pickup' as const,
+                            title: '📦 Lockers',
+                            subtitle: '24/7 self-service drop-off.',
+                        },
+                        {
+                            key: 'pickup_point' as const,
+                            title: '🏪 Parcel shops',
+                            subtitle: 'Staffed pickup points and shop-counters.',
+                        },
+                        {
+                            key: 'home_delivery' as const,
+                            title: '🚚 Home delivery',
+                            subtitle: 'Courier delivers to the buyer\'s door.',
+                        },
+                    ]).map((group) => {
+                        const items = FURGONETKA_CARRIER_CATALOG.filter(
+                            (c) => c.service_type === group.key,
+                        );
+                        if (items.length === 0) return null;
+
+                        return (
+                            <View key={group.key} style={styles.furgGroupBlock}>
+                                <Text style={styles.furgGroupTitle}>{group.title}</Text>
+                                <Text style={styles.furgGroupSubtitle}>{group.subtitle}</Text>
+                                <View style={styles.furgCarrierList}>
+                                    {items.map((carrier: FurgonetkaCarrierMeta, idx) => {
+                                        const isOn = enabledFurgonetkaCarriers.has(carrier.code);
+                                        const locked = carrier.locked;
+                                        const isLast = idx === items.length - 1;
+                                        return (
+                                            <View
+                                                key={carrier.code}
+                                                style={[
+                                                    styles.furgCarrierRow,
+                                                    !isLast && styles.furgCarrierRowDivider,
+                                                ]}
+                                            >
+                                                <View style={styles.furgCarrierBody}>
+                                                    <View style={styles.furgCarrierTitleRow}>
+                                                        <Text style={styles.furgCarrierTitle}>
+                                                            {carrier.display_name}
+                                                        </Text>
+                                                        {locked && (
+                                                            <View style={styles.furgCarrierBadge}>
+                                                                <Text style={styles.furgCarrierBadgeText}>Required</Text>
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                    <Text style={styles.furgCarrierBlurb} numberOfLines={2}>
+                                                        {carrier.blurb}
+                                                    </Text>
+                                                </View>
+                                                <Switch
+                                                    value={isOn}
+                                                    onValueChange={() => toggleFurgonetkaCarrier(carrier.code)}
+                                                    disabled={locked}
+                                                    trackColor={{ false: Colors.neutral[200], true: Colors.primary[400] }}
+                                                    thumbColor={isOn ? Colors.primary[600] : Colors.neutral[100]}
+                                                />
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+                        );
+                    })}
+
+                    <View style={styles.furgCarrierNote}>
+                        <InformationCircleIcon size={16} color={Colors.neutral[500]} />
+                        <Text style={styles.furgCarrierNoteText}>
+                            Carriers also need an active agreement on the Culturar Furgonetka account — if a toggled-on carrier never appears at checkout, the platform team needs to enable that agreement.
+                        </Text>
+                    </View>
                 </View>
 
                 {/* ─── Origin Address (Required for Direct Carrier Quotes) ─── */}
@@ -383,49 +457,18 @@ export default function SellerShippingScreen() {
                     ))}
                 </View>
 
+                {/* ─── Local Pickup ─── */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>SHIPPING MODES AS A SELLER</Text>
-                    <View style={styles.settingItem}>
-                        <View style={styles.settingIconBox}>
-                            <TruckIcon size={22} color={Colors.text.primary} />
-                        </View>
-                        <View style={styles.settingContent}>
-                            <Text style={styles.settingTitle}>Home Delivery</Text>
-                            <Text style={styles.settingSubtitle}>
-                                Buyers pay platform-calculated postage at checkout. Two popular country defaults stay on.
-                            </Text>
-                        </View>
-                        <Switch
-                            value={shipping.modes.home_delivery.enabled}
-                            onValueChange={(value) => updateMode('home_delivery', value)}
-                            trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
-                            disabled={lockedHomeProviders.length > 0}
-                        />
-                    </View>
-
-                    <View style={styles.settingItem}>
-                        <View style={styles.settingIconBox}>
-                            <Text style={{ fontSize: 20 }}>📦</Text>
-                        </View>
-                        <View style={styles.settingContent}>
-                            <Text style={styles.settingTitle}>Locker / Pickup Point</Text>
-                            <Text style={styles.settingSubtitle}>Provider-specific pickup point selection with two country defaults locked on.</Text>
-                        </View>
-                        <Switch
-                            value={shipping.modes.locker_pickup.enabled}
-                            onValueChange={(value) => updateMode('locker_pickup', value)}
-                            trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
-                            disabled={lockedLockerProviders.length > 0}
-                        />
-                    </View>
-
+                    <Text style={styles.sectionTitle}>LOCAL PICKUP</Text>
                     <View style={styles.settingItem}>
                         <View style={styles.settingIconBox}>
                             <MapPinIcon size={22} color={Colors.primary[600]} />
                         </View>
                         <View style={styles.settingContent}>
-                            <Text style={styles.settingTitle}>Local Pickup</Text>
-                            <Text style={styles.settingSubtitle}>Let buyers collect items in person</Text>
+                            <Text style={styles.settingTitle}>Allow local pickup</Text>
+                            <Text style={styles.settingSubtitle}>
+                                Let buyers collect items in person — no carrier involved.
+                            </Text>
                         </View>
                         <Switch
                             value={shipping.modes.local_pickup.enabled}
@@ -438,114 +481,21 @@ export default function SellerShippingScreen() {
                         <View style={[styles.settingItem, styles.nestedItem]}>
                             <View style={styles.settingContent}>
                                 <Text style={styles.settingTitle}>Pickup Location Info</Text>
-                                <Text style={styles.settingSubtitle}>General area only, not the full private address</Text>
+                                <Text style={styles.settingSubtitle}>
+                                    General area only, not the full private address.
+                                </Text>
                                 <TextInput
                                     style={[styles.textInput, { marginTop: 8 }]}
                                     value={shipping.pickup_location}
-                                    onChangeText={(text) => updateShipping((prev) => ({ ...prev, pickup_location: text }))}
+                                    onChangeText={(text) =>
+                                        updateShipping((prev) => ({ ...prev, pickup_location: text }))
+                                    }
                                     placeholder="Enter general area for pickup"
                                 />
                             </View>
                         </View>
                     )}
                 </View>
-
-                {/* ─── Providers ─── */}
-                {shipping.origin_country ? (
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeaderRow}>
-                            <Text style={styles.sectionTitle}>SHIPPING PROVIDERS</Text>
-                        </View>
-                        <Text style={styles.sectionSubtitle}>
-                            Default providers are selected based on popularity in the seller's country.
-                        </Text>
-
-                        {([
-                            {
-                                mode: 'home_delivery' as const,
-                                title: 'Home Delivery Providers',
-                                enabled: shipping.modes.home_delivery.enabled,
-                                items: providersByMode.home_delivery,
-                            },
-                            {
-                                mode: 'locker_pickup' as const,
-                                title: 'Locker / Pickup Providers',
-                                enabled: shipping.modes.locker_pickup.enabled,
-                                items: providersByMode.locker_pickup,
-                            },
-                        ]).map((group) => (
-                            <View key={group.mode} style={styles.providerGroup}>
-                                <Text style={styles.providerGroupTitle}>{group.title}</Text>
-                                {!group.enabled ? (
-                                    <Text style={styles.providerGroupHint}>Turn this mode on above to configure available providers.</Text>
-                                ) : group.mode === 'locker_pickup' && !servicePointCapabilitiesLoaded ? (
-                                    <Text style={styles.providerGroupHint}>Loading pickup-point provider capabilities...</Text>
-                                ) : group.items.length === 0 ? (
-                                    <Text style={styles.providerGroupHint}>
-                                        {group.mode === 'locker_pickup'
-                                            ? 'No live pickup-point providers are available for this country right now.'
-                                            : 'No suggested providers for this country yet. Add a custom provider.'}
-                                    </Text>
-                                ) : (
-                                    <>
-                                        {group.mode === 'locker_pickup' && (
-                                            <Text style={styles.providerGroupHint}>
-                                                Default providers are selected based on popularity in this country.
-                                            </Text>
-                                        )}
-                                        {group.items.map((carrier) => {
-                                        const isLockedDefault = lockedProviders.has(carrier.name);
-
-                                        return (
-                                            <View key={`${group.mode}-${carrier.name}`}>
-                                                <View style={styles.carrierItem}>
-                                                    <Text style={styles.carrierIcon}>{getCarrierIcon(carrier.type)}</Text>
-                                                    <View style={styles.carrierContent}>
-                                                        <View style={styles.carrierNameRow}>
-                                                            <Text style={styles.carrierName}>{carrier.name}</Text>
-                                                            {isLockedDefault && (
-                                                                <View style={styles.defaultBadge}>
-                                                                    <Text style={styles.defaultBadgeText}>Default</Text>
-                                                                </View>
-                                                            )}
-                                                        </View>
-                                                        <Text style={styles.carrierType}>
-                                                            {carrier.type === 'locker' ? 'Locker / Pickup Point' : 'Home Delivery'}
-                                                        </Text>
-                                                    </View>
-                                                    <Switch
-                                                        value={carrier.enabled}
-                                                        onValueChange={() => toggleProvider(carrier.name)}
-                                                        trackColor={{ false: '#D1D5DB', true: Colors.primary[500] }}
-                                                        disabled={isLockedDefault}
-                                                    />
-                                                </View>
-
-                                                {carrier.enabled && isLockedDefault && (
-                                                    <View style={styles.priceTierContainer}>
-                                                        <Text style={styles.providerActionsHint}>
-                                                            Selected by default based on carrier popularity in this country.
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        );
-                                    })}
-                                    </>
-                                )}
-                            </View>
-                        ))}
-                    </View>
-                ) : (
-                    <View style={styles.section}>
-                        <View style={styles.emptyCarrierBox}>
-                            <TruckIcon size={32} color={Colors.neutral[400]} />
-                            <Text style={styles.emptyCarrierText}>
-                                Select your origin country above to see suggested providers
-                            </Text>
-                        </View>
-                    </View>
-                )}
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -723,6 +673,88 @@ const styles = StyleSheet.create({
         color: '#9CA3AF',
         paddingHorizontal: 20,
         marginBottom: 12,
+    },
+    furgGroupBlock: {
+        marginBottom: 16,
+    },
+    furgGroupTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: Colors.text.primary,
+        paddingHorizontal: 20,
+        marginTop: 4,
+    },
+    furgGroupSubtitle: {
+        fontSize: 11,
+        color: Colors.text.secondary,
+        paddingHorizontal: 20,
+        marginBottom: 8,
+    },
+    furgCarrierList: {
+        backgroundColor: '#FFF',
+        marginHorizontal: 20,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+        overflow: 'hidden',
+    },
+    furgCarrierRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        gap: 12,
+    },
+    furgCarrierRowDivider: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    furgCarrierBody: {
+        flex: 1,
+    },
+    furgCarrierTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 2,
+    },
+    furgCarrierTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.text.primary,
+    },
+    furgCarrierBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+        backgroundColor: Colors.primary[50],
+    },
+    furgCarrierBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: Colors.primary[700],
+        letterSpacing: 0.4,
+    },
+    furgCarrierBlurb: {
+        fontSize: 12,
+        color: Colors.text.secondary,
+        lineHeight: 16,
+    },
+    furgCarrierNote: {
+        flexDirection: 'row',
+        gap: 8,
+        marginHorizontal: 20,
+        marginTop: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: Colors.neutral[50],
+        borderRadius: 8,
+    },
+    furgCarrierNoteText: {
+        flex: 1,
+        fontSize: 11,
+        color: Colors.neutral[600],
+        lineHeight: 15,
     },
     settingItem: {
         flexDirection: 'row',

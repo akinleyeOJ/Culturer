@@ -44,6 +44,11 @@
 //     a Phase 3.5 follow-up: after the buyer picks a service point we'll
 //     re-quote with the point ID for an exact price (most carriers price
 //     home vs locker identically, so this is a refinement, not a blocker).
+//
+//   * **Testing lockers in sandbox:** Furgonetka often returns no locker /
+//     parcel-shop prices on sandbox accounts. Set the Supabase secret
+//     `FURGONETKA_DEV_APPEND_LOCKER_FIXTURES=1` to append synthetic InPost +
+//     DPD Pickup rows when the API returns none — use only on dev/staging.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
@@ -137,6 +142,26 @@ const CARRIER_REGISTRY: Record<string, CarrierMeta> = {
     display_name: "Ruch",
     service_type: "pickup_point",
     requires_service_point: true,
+  },
+  allegro: {
+    display_name: "Allegro One Box",
+    service_type: "locker_pickup",
+    requires_service_point: true,
+  },
+  furgonetkapunkt: {
+    display_name: "Furgonetka Punkt",
+    service_type: "pickup_point",
+    requires_service_point: true,
+  },
+  meest: {
+    display_name: "Meest",
+    service_type: "home_delivery",
+    requires_service_point: false,
+  },
+  ambroexpress: {
+    display_name: "Ambro Express",
+    service_type: "home_delivery",
+    requires_service_point: false,
   },
 };
 
@@ -271,6 +296,49 @@ const mapPriceRow = (row: ServicePriceRow) => {
   };
 };
 
+/** Dev/staging only: append fake locker rows when sandbox omits them. */
+const appendLockerFixturesIfEnabled = (
+  rates: ReturnType<typeof mapPriceRow>[],
+): { rates: ReturnType<typeof mapPriceRow>[]; appended: boolean } => {
+  const flag = (Deno.env.get("FURGONETKA_DEV_APPEND_LOCKER_FIXTURES") || "")
+    .trim()
+    .toLowerCase();
+  if (flag !== "1" && flag !== "true" && flag !== "yes") {
+    return { rates, appended: false };
+  }
+  const hasPoint = rates.some((r) => r.requires_service_point);
+  if (hasPoint) return { rates, appended: false };
+
+  const codes = new Set(rates.map((r) => r.carrier));
+  const extra: ReturnType<typeof mapPriceRow>[] = [];
+  const fixturePln: Record<string, number> = {
+    inpost: 12.99,
+    dpd_pickup: 15.49,
+  };
+
+  const pushFixture = (carrier: string) => {
+    if (codes.has(carrier)) return;
+    const meta = CARRIER_REGISTRY[carrier];
+    if (!meta?.requires_service_point) return;
+    const pln = fixturePln[carrier] ?? 13.99;
+    extra.push({
+      carrier,
+      service_id: null,
+      display_name: meta.display_name,
+      service_type: meta.service_type,
+      price_pln: pln,
+      price_pln_adjusted: pln,
+      eta_days: 2,
+      requires_service_point: true,
+      quote_id: `dev_fixture_${carrier}`,
+    });
+    codes.add(carrier);
+  };
+  pushFixture("inpost");
+  pushFixture("dpd_pickup");
+  return { rates: [...rates, ...extra], appended: extra.length > 0 };
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -314,7 +382,7 @@ serve(async (req) => {
 
     const allRows = response.services_prices || [];
 
-    const rates = allRows
+    let rates = allRows
       .filter(
         (row) =>
           row.available !== false &&
@@ -322,6 +390,10 @@ serve(async (req) => {
           (row.pricing?.price_gross || row.lowest_price?.price_gross),
       )
       .map(mapPriceRow);
+
+    const { rates: withFixtures, appended: fixtureRatesAppended } =
+      appendLockerFixturesIfEnabled(rates);
+    rates = withFixtures;
 
     // Diagnostics: when no rates come back, the client (and the curl
     // smoke test) gets a row-by-row reason so we can see *why* every
@@ -334,6 +406,7 @@ serve(async (req) => {
       ? {
           requested_carriers: requested,
           returned_count: allRows.length,
+          fixture_rates_appended: fixtureRatesAppended,
           dropped: allRows.map((row) => ({
             service: row.service,
             service_id: row.service_id,
@@ -343,7 +416,9 @@ serve(async (req) => {
               row.pricing?.price_gross ?? row.lowest_price?.price_gross ?? null,
           })),
         }
-      : undefined;
+      : fixtureRatesAppended
+        ? { fixture_rates_appended: true as const }
+        : undefined;
 
     return successResponse({ rates, source: "furgonetka", debug });
   } catch (error: unknown) {

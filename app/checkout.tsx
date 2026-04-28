@@ -147,6 +147,11 @@ const Checkout = () => {
     loadingRates,
     integratedCarrierOptions,
     shippingCost,
+    ratesError,
+    ratesBlockedReason,
+    buyerReadyForQuotes,
+    hasLiveCarrierQuotes,
+    lockerRatesHint,
   } = useCheckoutShipping({
     cartItems,
     email,
@@ -1412,6 +1417,11 @@ const Checkout = () => {
               shippingZone={shippingZone}
               liveShippingApisEnabled={LIVE_SHIPPING_APIS_ENABLED}
               loadingRates={loadingRates}
+              ratesError={ratesError}
+              ratesBlockedReason={ratesBlockedReason}
+              buyerReadyForQuotes={buyerReadyForQuotes}
+              hasLiveCarrierQuotes={hasLiveCarrierQuotes}
+              lockerRatesHint={lockerRatesHint}
               integratedCarrierOptions={integratedCarrierOptions}
               selectedCarrier={selectedCarrier}
               setSelectedCarrier={setSelectedCarrier}

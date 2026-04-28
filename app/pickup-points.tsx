@@ -16,6 +16,7 @@ import {
   Keyboard,
   Platform,
   Alert,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -24,7 +25,6 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
   MapPinIcon,
-  ArchiveBoxIcon,
 } from "react-native-heroicons/outline";
 import * as Location from "expo-location";
 import { CheckCircleIcon } from "react-native-heroicons/solid";
@@ -38,6 +38,15 @@ import {
   getPickupPointSelectionState,
   setPickupPointSelectionState,
 } from "../lib/pickupPointSelectionStore";
+import type { PickupResultsMapHandle } from "../components/pickup/PickupResultsMap.types";
+
+// Metro splits web vs native; `tsc` does not resolve `.web` / `.native` filenames.
+/* eslint-disable import/no-commonjs, @typescript-eslint/no-require-imports */
+const PickupResultsMap =
+  Platform.OS === "web"
+    ? require("../components/pickup/PickupResultsMap.web").default
+    : require("../components/pickup/PickupResultsMap.native").default;
+/* eslint-enable import/no-commonjs, @typescript-eslint/no-require-imports */
 
 const MIN_SEARCH_LENGTH = 3;
 const SEARCH_DEBOUNCE_MS = 500;
@@ -89,8 +98,16 @@ const canGeocodeDelivery = (fb: {
   return !!(line && city) || !!(city && pc) || !!(line && pc);
 };
 
+const ESTIMATED_ROW_OFFSET = 124;
+
 export default function PickupPointsScreen() {
   const router = useRouter();
+  const { height: windowHeight } = useWindowDimensions();
+  const mapHeight = Math.min(
+    268,
+    Math.max(200, Math.round(windowHeight * 0.32)),
+  );
+
   const params = useLocalSearchParams<{
     carrierName?: string;
     address1?: string;
@@ -131,6 +148,20 @@ export default function PickupPointsScreen() {
 
   const requestIdRef = useRef(0);
   const searchInputRef = useRef<TextInput>(null);
+  const listRef = useRef<FlatList<PickupPointResult>>(null);
+  const mapRef = useRef<PickupResultsMapHandle>(null);
+
+  const mapPoints = useMemo(
+    () =>
+      results.filter(
+        (p) =>
+          typeof p.latitude === "number" &&
+          typeof p.longitude === "number" &&
+          !Number.isNaN(p.latitude) &&
+          !Number.isNaN(p.longitude),
+      ),
+    [results],
+  );
 
   const getEmptyResultsMessage = useCallback(
     (autoLoaded: boolean) =>
@@ -185,14 +216,22 @@ export default function PickupPointsScreen() {
             ? { lat: searchContext.latitude, lng: searchContext.longitude }
             : null;
 
-        if (!coords && canGeocodeDelivery(fallbackAddress)) {
-          const deliveryQ = buildDeliveryGeocodeQuery(fallbackAddress);
-          if (deliveryQ) coords = await geocodeQuery(deliveryQ);
+        // When the user is typing their own search, do NOT anchor on the
+        // checkout delivery address first — that made nonsense queries still
+        // show points near Warsaw. Auto-load (empty search) still uses delivery.
+        if (!isTyping) {
+          if (!coords && canGeocodeDelivery(fallbackAddress)) {
+            const deliveryQ = buildDeliveryGeocodeQuery(fallbackAddress);
+            if (deliveryQ) coords = await geocodeQuery(deliveryQ);
+          }
         }
 
         if (!coords) {
-          const queryToGeocode =
-            search.trim() || fallbackAddress.postalCode || fallbackAddress.city;
+          const queryToGeocode = isTyping
+            ? search.trim()
+            : search.trim() ||
+              fallbackAddress.postalCode ||
+              fallbackAddress.city;
           if (queryToGeocode) {
             coords = await geocodeQuery(queryToGeocode);
           }
@@ -321,6 +360,27 @@ export default function PickupPointsScreen() {
     return `${km.toFixed(1)} km`;
   };
 
+  const scrollListToItem = useCallback(
+    (item: PickupPointResult) => {
+      const index = results.findIndex((p) => p.id === item.id);
+      if (index < 0) return;
+      listRef.current?.scrollToOffset({
+        offset: Math.max(0, index * ESTIMATED_ROW_OFFSET - 56),
+        animated: true,
+      });
+    },
+    [results],
+  );
+
+  const onMarkerSelect = useCallback(
+    (item: PickupPointResult) => {
+      Keyboard.dismiss();
+      setSelectedPickupPoint(item);
+      scrollListToItem(item);
+    },
+    [scrollListToItem],
+  );
+
   const contextCity =
     searchContext?.city || fallbackAddress.city || fallbackAddress.postalCode;
 
@@ -355,7 +415,7 @@ export default function PickupPointsScreen() {
     return null;
   };
 
-  // ─── Result Card ─────────────────────────────────────────────────────────
+  // ─── Result row (list + map selection stay in sync) ─────────────────────
   const renderItem = ({ item }: { item: PickupPointResult }) => {
     const isSelected = selectedPickupPoint?.id === item.id;
     const distance = formatDistance(item.distanceKm);
@@ -366,92 +426,97 @@ export default function PickupPointsScreen() {
         onPress={() => {
           Keyboard.dismiss();
           setSelectedPickupPoint(item);
+          if (
+            typeof item.latitude === "number" &&
+            typeof item.longitude === "number"
+          ) {
+            mapRef.current?.focusOn(item.latitude, item.longitude);
+          }
         }}
-        activeOpacity={0.75}
+        activeOpacity={0.72}
       >
-        <View style={styles.cardLeft}>
-          <View
-            style={[
-              styles.lockerBadge,
-              isSelected && styles.lockerBadgeSelected,
-            ]}
-          >
-            <ArchiveBoxIcon
-              size={20}
-              color={isSelected ? Colors.primary[500] : Colors.neutral[400]}
-            />
-          </View>
-        </View>
-
-        <View style={styles.cardBody}>
-          <View style={styles.cardRow}>
-            <Text
-              style={[styles.lockerId, isSelected && styles.lockerIdSelected]}
-            >
-              {item.id}
-            </Text>
-            {distance && (
+        <View
+          style={[styles.cardAccent, isSelected && styles.cardAccentSelected]}
+        />
+        <View style={styles.cardInner}>
+          <View style={styles.cardTopRow}>
+            <View style={styles.cardTitleBlock}>
+              <Text
+                style={[styles.pointId, isSelected && styles.pointIdSelected]}
+                numberOfLines={1}
+              >
+                {item.id}
+              </Text>
+              <Text
+                style={[
+                  styles.pointAddress,
+                  isSelected && styles.pointAddressSelected,
+                ]}
+                numberOfLines={2}
+              >
+                {item.address}
+              </Text>
+            </View>
+            {distance ? (
               <View
                 style={[
-                  styles.distanceBadge,
-                  isSelected && styles.distanceBadgeSelected,
+                  styles.distancePill,
+                  isSelected && styles.distancePillSelected,
                 ]}
               >
                 <Text
                   style={[
-                    styles.distanceText,
-                    isSelected && styles.distanceTextSelected,
+                    styles.distancePillText,
+                    isSelected && styles.distancePillTextSelected,
                   ]}
                 >
                   {distance}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
-          <Text
-            style={[
-              styles.lockerAddress,
-              isSelected && styles.lockerAddressSelected,
-            ]}
-          >
-            {item.address}
-          </Text>
           {!!item.hint && item.hint !== item.id && (
             <Text
-              style={[
-                styles.lockerHint,
-                isSelected && styles.lockerHintSelected,
-              ]}
+              style={[styles.pointMeta, isSelected && styles.pointMetaSelected]}
+              numberOfLines={2}
             >
               {item.hint}
             </Text>
           )}
         </View>
-
-        {isSelected && (
-          <View style={styles.cardCheck}>
-            <CheckCircleIcon size={24} color={Colors.primary[500]} />
-          </View>
+        {isSelected ? (
+          <CheckCircleIcon size={22} color={Colors.primary[500]} />
+        ) : (
+          <View style={styles.cardChevronSpacer} />
         )}
       </TouchableOpacity>
     );
   };
 
-  // ─── List Header ─────────────────────────────────────────────────────────
+  // ─── List header ─────────────────────────────────────────────────────────
   const renderListHeader = () => {
     if (!hasSearched || loading || results.length === 0) return null;
 
-    const label =
+    const title =
       isNearbyLoad && contextCity
-        ? `📍 Nearest to ${contextCity}`
-        : `${results.length} result${results.length !== 1 ? "s" : ""} found`;
+        ? `Near ${contextCity}`
+        : `${results.length} location${results.length !== 1 ? "s" : ""}`;
 
     return (
       <View style={styles.listHeader}>
-        <Text style={styles.listHeaderText}>{label}</Text>
-        {isNearbyLoad && (
+        <Text style={styles.listHeaderKicker}>Pickup points</Text>
+        <Text style={styles.listHeaderTitle}>{title}</Text>
+        {isNearbyLoad ? (
           <Text style={styles.listHeaderSub}>
-            Search above to find lockers in a different area
+            Refine the search above to move to another area.
+          </Text>
+        ) : Platform.OS !== "web" && mapPoints.length > 0 ? (
+          <Text style={styles.listHeaderSub}>
+            Tap a map pin or a row — both stay in sync.
+          </Text>
+        ) : (
+          <Text style={styles.listHeaderSub}>
+            Choose the location that works best for you.
           </Text>
         )}
       </View>
@@ -556,22 +621,73 @@ export default function PickupPointsScreen() {
         </View>
       )}
 
-      {/* ── Results / Empty State ── */}
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        ListHeaderComponent={renderListHeader}
-        ListEmptyComponent={renderEmptyState}
-        contentContainerStyle={[
-          styles.listContent,
-          results.length === 0 && styles.listContentEmpty,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      {/* ── Results: map + list ─────────────────────────────────────────── */}
+      <View style={styles.mainColumn}>
+        {hasSearched &&
+          !loading &&
+          results.length > 0 &&
+          Platform.OS !== "web" &&
+          mapPoints.length > 0 && (
+            <View style={styles.mapSection}>
+              <Text style={styles.mapSectionKicker}>Map</Text>
+              <Text style={styles.mapSectionSubtitle}>
+                Tap a pin to select. The list scrolls to the same location.
+              </Text>
+              <PickupResultsMap
+                ref={mapRef}
+                height={mapHeight}
+                results={results}
+                selectedPickupPoint={selectedPickupPoint}
+                onMarkerSelect={onMarkerSelect}
+              />
+            </View>
+          )}
+
+        {hasSearched &&
+          !loading &&
+          results.length > 0 &&
+          Platform.OS === "web" &&
+          mapPoints.length > 0 && (
+            <View style={styles.webMapBanner}>
+              <MapPinIcon size={16} color={Colors.primary[600]} />
+              <Text style={styles.webMapBannerText}>
+                Interactive map is available on iOS and Android. Use the list
+                below to choose a point.
+              </Text>
+            </View>
+          )}
+
+        {hasSearched &&
+          !loading &&
+          results.length > 0 &&
+          Platform.OS !== "web" &&
+          mapPoints.length === 0 && (
+            <View style={styles.noCoordsBanner}>
+              <Text style={styles.noCoordsBannerText}>
+                Map preview isn’t available for these results. Choose a location
+                from the list.
+              </Text>
+            </View>
+          )}
+
+        <FlatList
+          ref={listRef}
+          data={results}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          ListHeaderComponent={renderListHeader}
+          ListEmptyComponent={renderEmptyState}
+          style={styles.resultList}
+          contentContainerStyle={[
+            styles.listContent,
+            results.length === 0 && styles.listContentEmpty,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
+      </View>
 
       {/* ── Footer ── */}
       <View style={styles.footer}>
@@ -721,132 +837,203 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
   },
 
+  // ── Main column (map + scrollable list) ─────────────────────────────────
+  mainColumn: {
+    flex: 1,
+    minHeight: 0,
+  },
+  mapSection: {
+    paddingHorizontal: 16,
+    marginBottom: 6,
+  },
+  mapSectionKicker: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.neutral[500],
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  mapSectionSubtitle: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  webMapBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.primary[50],
+    borderWidth: 1,
+    borderColor: Colors.primary[200],
+  },
+  webMapBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.text.secondary,
+    lineHeight: 18,
+  },
+  noCoordsBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.neutral[100],
+    borderWidth: 1,
+    borderColor: Colors.neutral[200],
+  },
+  noCoordsBannerText: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    lineHeight: 18,
+  },
+  resultList: {
+    flex: 1,
+  },
+
   // ── List ─────────────────────────────────────────────────────────────────
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 20,
   },
   listContentEmpty: {
     flexGrow: 1,
   },
   separator: {
-    height: 8,
+    height: 10,
   },
 
-  // ── List Header ──────────────────────────────────────────────────────────
+  // ── List header ──────────────────────────────────────────────────────────
   listHeader: {
-    paddingTop: 4,
-    paddingBottom: 10,
+    paddingTop: 2,
+    paddingBottom: 14,
   },
-  listHeaderText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.text.secondary,
+  listHeaderKicker: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.neutral[500],
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.75,
+    marginBottom: 4,
+  },
+  listHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: Colors.text.primary,
+    letterSpacing: -0.3,
   },
   listHeaderSub: {
-    fontSize: 12,
-    color: Colors.neutral[400],
-    marginTop: 2,
+    fontSize: 13,
+    color: Colors.text.secondary,
+    marginTop: 6,
+    lineHeight: 18,
   },
 
-  // ── Result Card ──────────────────────────────────────────────────────────
+  // ── Result row ──────────────────────────────────────────────────────────
   card: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 1,
     borderColor: Colors.neutral[200],
-    padding: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardSelected: {
-    borderColor: Colors.primary[400],
-    backgroundColor: Colors.primary[50] || "#EFF6FF",
+    borderColor: Colors.primary[300],
+    backgroundColor: Colors.primary[50],
     shadowColor: Colors.primary[500],
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
     elevation: 3,
   },
-  cardLeft: {
-    marginRight: 12,
-    paddingTop: 1,
-  },
-  lockerBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+  cardAccent: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 2,
+    marginRight: 14,
     backgroundColor: Colors.neutral[100],
-    justifyContent: "center",
-    alignItems: "center",
   },
-  lockerBadgeSelected: {
-    backgroundColor: Colors.primary[100] || "#DBEAFE",
+  cardAccentSelected: {
+    backgroundColor: Colors.primary[500],
   },
-  cardBody: {
+  cardInner: {
     flex: 1,
+    minWidth: 0,
   },
-  cardRow: {
+  cardTopRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 3,
+    gap: 12,
   },
-  lockerId: {
+  cardTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  pointId: {
     fontSize: 15,
     fontWeight: "700",
     color: Colors.text.primary,
-    letterSpacing: 0.3,
-    flex: 1,
-    marginRight: 8,
+    letterSpacing: 0.2,
   },
-  lockerIdSelected: {
-    color: Colors.primary[700] || Colors.primary[500],
+  pointIdSelected: {
+    color: Colors.primary[800],
   },
-  distanceBadge: {
+  pointAddress: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  pointAddressSelected: {
+    color: Colors.text.primary,
+  },
+  distancePill: {
+    marginTop: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
     backgroundColor: Colors.neutral[100],
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: Colors.neutral[200],
   },
-  distanceBadgeSelected: {
-    backgroundColor: Colors.primary[100] || "#DBEAFE",
+  distancePillSelected: {
+    backgroundColor: "#FFFFFF",
+    borderColor: Colors.primary[200],
   },
-  distanceText: {
+  distancePillText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Colors.text.secondary,
   },
-  distanceTextSelected: {
-    color: Colors.primary[600] || Colors.primary[500],
+  distancePillTextSelected: {
+    color: Colors.primary[700],
   },
-  lockerAddress: {
-    fontSize: 13,
-    color: Colors.text.secondary,
-    lineHeight: 18,
-  },
-  lockerAddressSelected: {
-    color: Colors.primary[700] || Colors.text.secondary,
-  },
-  lockerHint: {
+  pointMeta: {
     fontSize: 12,
-    color: Colors.neutral[400],
-    fontStyle: "italic",
-    marginTop: 3,
+    color: Colors.neutral[500],
+    marginTop: 8,
     lineHeight: 16,
   },
-  lockerHintSelected: {
-    color: Colors.primary[500],
+  pointMetaSelected: {
+    color: Colors.neutral[600],
   },
-  cardCheck: {
-    marginLeft: 10,
-    alignSelf: "center",
+  cardChevronSpacer: {
+    width: 22,
+    height: 22,
   },
 
   // ── Empty State ──────────────────────────────────────────────────────────

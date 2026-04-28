@@ -1,6 +1,10 @@
 import { fetchSendcloudServicePoints } from "./sendcloudService";
 import { fetchInPostPointPayloads } from "./inpostService";
 import { providerSupportsPickupSearch } from "../shippingProviders/registry";
+import {
+  carrierDisplayNameToFurgonetkaCode,
+  fetchFurgonetkaServicePoints,
+} from "./furgonetkaService";
 
 export interface PickupPointResult {
   id: string;
@@ -225,10 +229,6 @@ export const fetchPickupPoints = async (
   context: PickupPointSearchContext,
   fallbackAddress?: PickupPointSearchContext,
 ) => {
-  if (!providerSupportsPickupSearch(carrierName)) {
-    return [];
-  }
-
   const query = context.query?.trim() || "";
   const city = context.city?.trim() || fallbackAddress?.city?.trim() || "";
   const postalCode =
@@ -236,6 +236,53 @@ export const fetchPickupPoints = async (
   const country =
     context.country?.trim() || fallbackAddress?.country?.trim() || "";
   const hasNearbyFallback = !!city || looksLikePostalCode(postalCode);
+
+  // Furgonetka-first: any carrier we can route through Furgonetka's
+  // /points/map gets handled here. This is the new canonical path and works
+  // for InPost Paczkomat, DPD Pickup, DHL Parcelshop, FedEx Punkt, Orlen
+  // Paczka, UPS Access Point, GLS, Poczta Polska, etc. — all in one call.
+  const furgonetkaCode = carrierDisplayNameToFurgonetkaCode(carrierName);
+  if (furgonetkaCode) {
+    const queryToGeocode = query || postalCode || city;
+    if (
+      query.length < 3 &&
+      !hasNearbyFallback &&
+      typeof context.latitude !== "number"
+    ) {
+      return [];
+    }
+
+    const result = await fetchFurgonetkaServicePoints({
+      carriers: [furgonetkaCode],
+      postcode: postalCode || undefined,
+      city: city || undefined,
+      lat: context.latitude,
+      lng: context.longitude,
+      country_code: country === "Poland" ? "PL" : undefined,
+      limit: 50,
+    });
+
+    if (result.success && result.points.length > 0) {
+      const mapped: PickupPointResult[] = result.points.map((p) => ({
+        id: p.id,
+        address: p.address || `${p.city}, ${p.postcode}`,
+        hint: p.opening_hours
+          ? `${p.carrier_display} • ${p.opening_hours}`
+          : p.carrier_display,
+        latitude: p.lat ?? undefined,
+        longitude: p.lng ?? undefined,
+        distanceKm: p.distance_km ?? undefined,
+      }));
+      return sortPickupPoints(mapped, context).slice(0, 20);
+    }
+
+    if (result.success) return [];
+    // If Furgonetka errored we still try the legacy paths below for InPost.
+  }
+
+  if (!providerSupportsPickupSearch(carrierName)) {
+    return [];
+  }
 
   if (query.length < 3 && !hasNearbyFallback) {
     return [];
@@ -248,7 +295,7 @@ export const fetchPickupPoints = async (
     if (proxiedResult.success) {
       const pickupPoints = dedupeInPostPayloads(proxiedResult.payloads);
       if (pickupPoints.length > 0) {
-        return sortPickupPoints(pickupPoints, context).slice(0, 8);
+        return sortPickupPoints(pickupPoints, context).slice(0, 20);
       }
     }
 
@@ -256,7 +303,7 @@ export const fetchPickupPoints = async (
       searchUrls.map((url) => fetch(url).then((response) => response.json())),
     );
     const pickupPoints = dedupeInPostPayloads(responses);
-    return sortPickupPoints(pickupPoints, context).slice(0, 8);
+    return sortPickupPoints(pickupPoints, context).slice(0, 20);
   }
 
   const sendcloudAddressQuery = query || postalCode || city;
@@ -267,7 +314,11 @@ export const fetchPickupPoints = async (
       address: sendcloudAddressQuery,
     });
 
-    if (sendcloudResult.success && sendcloudResult.servicePoints.length > 0) {
+    if (
+      sendcloudResult.success &&
+      sendcloudResult.servicePoints &&
+      sendcloudResult.servicePoints.length > 0
+    ) {
       const mapped = sendcloudResult.servicePoints.map((servicePoint) => ({
         id: servicePoint.name,
         address: servicePoint.address,
@@ -276,7 +327,7 @@ export const fetchPickupPoints = async (
         longitude: servicePoint.longitude,
       }));
 
-      return sortPickupPoints(mapped, context).slice(0, 8);
+      return sortPickupPoints(mapped, context).slice(0, 20);
     }
   }
 

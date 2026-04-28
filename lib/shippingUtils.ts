@@ -91,10 +91,166 @@ export interface SellerShippingConfig {
     local_pickup: { enabled: boolean };
   };
   providers: CarrierConfig[];
+  /**
+   * Furgonetka service codes the seller wants to offer at checkout. The
+   * `LOCKED_FURGONETKA_CARRIERS` are always implicit even if missing here.
+   * When this field is undefined we fall back to the full catalog.
+   */
+  furgonetka_carriers?: string[];
   // Legacy aliases kept for backward compatibility with older readers.
   local_pickup: boolean;
   carriers: CarrierConfig[];
 }
+
+/** Metadata for the Furgonetka services we expose in the seller settings UI. */
+export interface FurgonetkaCarrierMeta {
+  code: string;
+  display_name: string;
+  service_type: "home_delivery" | "locker_pickup" | "pickup_point";
+  /** UI hint for the seller. */
+  blurb: string;
+  /** When true: always on, can't be untoggled by the seller. */
+  locked: boolean;
+}
+
+/**
+ * Catalog of Furgonetka services we surface to sellers. The first two are
+ * **locked-on** for every seller (so every cart has a locker option AND a
+ * home-courier option). The rest are opt-in.
+ *
+ * NOTE: A carrier appearing here doesn't guarantee it'll quote for a given
+ * route — Furgonetka still has to have an agreement for it on the platform
+ * account. If a service is missing from the rates response, the seller's
+ * Furgonetka panel needs that carrier's agreement accepted.
+ */
+export const FURGONETKA_CARRIER_CATALOG: FurgonetkaCarrierMeta[] = [
+  // ─── Lockers (24/7 self-service) ───
+  {
+    code: "inpost",
+    display_name: "InPost Paczkomat",
+    service_type: "locker_pickup",
+    blurb: "Most popular locker network in Poland — 24 000+ Paczkomats. Buyers expect this option.",
+    locked: true,
+  },
+  {
+    code: "allegro",
+    display_name: "Allegro One Box",
+    service_type: "locker_pickup",
+    blurb: "Allegro's fast-growing locker network — popular with younger buyers.",
+    locked: false,
+  },
+  {
+    code: "orlen",
+    display_name: "ORLEN Paczkomat",
+    service_type: "locker_pickup",
+    blurb: "Orlen's locker network at petrol stations and partner shops.",
+    locked: false,
+  },
+
+  // ─── Parcel shops (staffed pickup points) ───
+  {
+    code: "dpd_pickup",
+    display_name: "DPD Pickup",
+    service_type: "pickup_point",
+    blurb: "DPD parcel-shops for buyers who prefer staffed pickup over lockers.",
+    locked: false,
+  },
+  {
+    code: "fedex",
+    display_name: "FedEx Punkt",
+    service_type: "pickup_point",
+    blurb: "FedEx parcel-shop network across Poland.",
+    locked: false,
+  },
+  {
+    code: "ups",
+    display_name: "UPS Access Point",
+    service_type: "pickup_point",
+    blurb: "UPS-affiliated kiosks and shops.",
+    locked: false,
+  },
+  {
+    code: "furgonetkaPunkt",
+    display_name: "Furgonetka Punkt",
+    service_type: "pickup_point",
+    blurb: "Furgonetka's own pickup network — usually one of the cheapest.",
+    locked: false,
+  },
+
+  // ─── Home delivery (door-to-door courier) ───
+  {
+    code: "dpd",
+    display_name: "DPD",
+    service_type: "home_delivery",
+    blurb: "Reliable next-day home delivery — the home-courier baseline.",
+    locked: true,
+  },
+  {
+    code: "inpost_kurier",
+    display_name: "InPost Courier",
+    service_type: "home_delivery",
+    blurb: "InPost's home-courier alternative for buyers without a nearby Paczkomat.",
+    locked: false,
+  },
+  {
+    code: "dhl",
+    display_name: "DHL",
+    service_type: "home_delivery",
+    blurb: "International-grade home delivery within Poland.",
+    locked: false,
+  },
+  {
+    code: "gls",
+    display_name: "GLS",
+    service_type: "home_delivery",
+    blurb: "Cost-effective courier popular for B2B.",
+    locked: false,
+  },
+  {
+    code: "poczta",
+    display_name: "Poczta Polska",
+    service_type: "home_delivery",
+    blurb: "Polish national post — broadest geographic coverage.",
+    locked: false,
+  },
+  {
+    code: "ambroexpress",
+    display_name: "Ambro Express",
+    service_type: "home_delivery",
+    blurb: "Budget Polish courier — cheapest option for non-urgent items.",
+    locked: false,
+  },
+  {
+    code: "meest",
+    display_name: "Meest",
+    service_type: "home_delivery",
+    blurb: "Polish-Ukrainian cross-border carrier — handy for the Ukrainian diaspora market.",
+    locked: false,
+  },
+];
+
+/** Service codes that are always on for every seller. */
+export const LOCKED_FURGONETKA_CARRIERS = FURGONETKA_CARRIER_CATALOG.filter(
+  (c) => c.locked,
+).map((c) => c.code);
+
+/**
+ * Resolve the effective list of Furgonetka carriers for a seller. Locked
+ * carriers are always included; the rest comes from the seller's saved
+ * preference, falling back to the full catalog when the seller hasn't
+ * customised yet.
+ */
+export const getEffectiveFurgonetkaCarriers = (
+  config: Pick<SellerShippingConfig, "furgonetka_carriers"> | null | undefined,
+): string[] => {
+  const saved = config?.furgonetka_carriers;
+  const optional = FURGONETKA_CARRIER_CATALOG.filter((c) => !c.locked).map(
+    (c) => c.code,
+  );
+  const optInList = Array.isArray(saved) ? saved : optional;
+  const merged = new Set<string>([...LOCKED_FURGONETKA_CARRIERS, ...optInList]);
+  return Array.from(merged);
+};
 
 export const COUNTRY_PROVIDER_TEMPLATES: Record<string, CarrierTemplate[]> = {
   Poland: [
