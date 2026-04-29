@@ -17,6 +17,8 @@ import {
   Platform,
   Alert,
   useWindowDimensions,
+  InputAccessoryView,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -50,6 +52,7 @@ const PickupResultsMap =
 
 const MIN_SEARCH_LENGTH = 3;
 const SEARCH_DEBOUNCE_MS = 500;
+const SEARCH_INPUT_ACCESSORY_ID = "pickupPointsSearchAccessory";
 
 // Free geocoding via OpenStreetMap Nominatim — no API key required
 const geocodeQuery = async (
@@ -298,30 +301,65 @@ export default function PickupPointsScreen() {
       });
       const { latitude, longitude } = pos.coords;
 
-      // Reverse-geocode to get a human-readable label for the search bar.
-      // Prefer city name over postal code — postal codes used as a text query
-      // can accidentally match a different city (e.g. "94107" → Łódź 94-107).
-      let label = "Near me";
+      let areaLabel: string | null = null;
+      let cityForContext: string | undefined;
       try {
         const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`;
         const res = await fetch(url, {
           headers: { "User-Agent": "Culturer/1.0" },
         });
         const data = await res.json();
-        const addr = data?.address;
-        // City name first — InPost's text search handles city names reliably.
-        if (addr?.city || addr?.town || addr?.village)
-          label = (addr.city ?? addr.town ?? addr.village) as string;
-        else if (addr?.postcode) label = addr.postcode as string;
+        const addr = data?.address as Record<string, string> | undefined;
+        cityForContext = (addr?.city ||
+          addr?.town ||
+          addr?.village ||
+          addr?.municipality) as string | undefined;
+
+        const road = [addr?.road || addr?.pedestrian, addr?.house_number]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        const district =
+          addr?.suburb ||
+          addr?.neighbourhood ||
+          addr?.quarter ||
+          addr?.city_district;
+        const pc = addr?.postcode?.trim();
+
+        if (road && district && cityForContext) {
+          areaLabel = `${road} · ${district}`;
+        } else if (road && cityForContext) {
+          areaLabel = pc
+            ? `${road}, ${pc} ${cityForContext}`
+            : `${road}, ${cityForContext}`;
+        } else if (district && cityForContext) {
+          areaLabel = `${district}, ${cityForContext}`;
+        } else if (typeof data?.display_name === "string") {
+          const parts = data.display_name
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+          areaLabel = parts.slice(0, 3).join(" · ");
+        } else if (cityForContext) {
+          areaLabel = pc ? `${pc} · ${cityForContext}` : cityForContext;
+        } else if (pc) {
+          areaLabel = pc;
+        }
+        if (areaLabel && areaLabel.length > 64)
+          areaLabel = `${areaLabel.slice(0, 61)}…`;
       } catch {
-        // keep "Near me" label, coords alone still drive sortPickupPoints
+        areaLabel = null;
       }
 
-      // Store label for display only — NOT as the InPost text query.
-      // Pass it as a separate field so the fetch effect can show a label
-      // without feeding a city name into the text search alongside relative_point.
+      const resolvedLabel = areaLabel || "your current location";
+
       setSearch("");
-      setSearchContext({ latitude, longitude, city: label });
+      setSearchContext({
+        latitude,
+        longitude,
+        city: cityForContext,
+        areaLabel: resolvedLabel,
+      });
       setError(null);
     } catch {
       Alert.alert(
@@ -381,8 +419,19 @@ export default function PickupPointsScreen() {
     [scrollListToItem],
   );
 
-  const contextCity =
-    searchContext?.city || fallbackAddress.city || fallbackAddress.postalCode;
+  /** One line for list header / chrome when results are “near” an auto anchor. */
+  const locationHeaderLine = useMemo(() => {
+    if (searchContext?.latitude != null) {
+      return (
+        searchContext.areaLabel || searchContext.city || "your current position"
+      );
+    }
+    const fa = fallbackAddress;
+    const pcCity = [fa.postalCode, fa.city].filter(Boolean).join(" ").trim();
+    if (pcCity) return pcCity;
+    if (fa.query && fa.city) return `${fa.query}, ${fa.city}`.slice(0, 64);
+    return fa.city || fa.postalCode || null;
+  }, [searchContext, fallbackAddress]);
 
   // ─── Empty / Intro State ──────────────────────────────────────────────────
   const renderEmptyState = () => {
@@ -498,8 +547,8 @@ export default function PickupPointsScreen() {
     if (!hasSearched || loading || results.length === 0) return null;
 
     const title =
-      isNearbyLoad && contextCity
-        ? `Near ${contextCity}`
+      isNearbyLoad && locationHeaderLine
+        ? `Near ${locationHeaderLine}`
         : `${results.length} location${results.length !== 1 ? "s" : ""}`;
 
     return (
@@ -525,6 +574,20 @@ export default function PickupPointsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {Platform.OS === "ios" && (
+        <InputAccessoryView nativeID={SEARCH_INPUT_ACCESSORY_ID}>
+          <View style={styles.keyboardAccessory}>
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              style={styles.keyboardAccessoryBtn}
+              hitSlop={12}
+            >
+              <Text style={styles.keyboardAccessoryDone}>Done</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      )}
+
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -552,8 +615,8 @@ export default function PickupPointsScreen() {
         />
         {/* When GPS is active, show city label as non-editable chip */}
         {searchContext?.latitude != null && !search ? (
-          <Text style={styles.gpsLabel} numberOfLines={1}>
-            📍 {searchContext.city ?? "Near me"}
+          <Text style={styles.gpsLabel} numberOfLines={2}>
+            📍 {searchContext.areaLabel || searchContext.city || "Near me"}
           </Text>
         ) : (
           <TextInput
@@ -569,7 +632,12 @@ export default function PickupPointsScreen() {
             }}
             autoCorrect={false}
             autoCapitalize="none"
-            returnKeyType="search"
+            returnKeyType="done"
+            blurOnSubmit
+            onSubmitEditing={() => Keyboard.dismiss()}
+            inputAccessoryViewID={
+              Platform.OS === "ios" ? SEARCH_INPUT_ACCESSORY_ID : undefined
+            }
             clearButtonMode="never"
           />
         )}
@@ -732,6 +800,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F9FAFB",
   },
+  keyboardAccessory: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#ECEFF1",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.neutral[300],
+  },
+  keyboardAccessoryBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  keyboardAccessoryDone: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.primary[600],
+  },
 
   // ── Header ──────────────────────────────────────────────────────────────
   header: {
@@ -765,7 +852,7 @@ const styles = StyleSheet.create({
   // ── Search ───────────────────────────────────────────────────────────────
   searchContainer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     backgroundColor: "#FFFFFF",
     marginHorizontal: 16,
     marginTop: 12,
@@ -787,22 +874,27 @@ const styles = StyleSheet.create({
   },
   gpsLabel: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.primary[600] || Colors.primary[500],
     fontWeight: "500",
     padding: 0,
+    lineHeight: 20,
   },
   searchIcon: {
     marginRight: 8,
+    marginTop: Platform.OS === "ios" ? 3 : 5,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
     color: Colors.text.primary,
     padding: 0,
+    minHeight: 22,
+    paddingTop: Platform.OS === "ios" ? 1 : 4,
   },
   clearBtn: {
     marginLeft: 6,
+    marginTop: Platform.OS === "ios" ? 2 : 4,
     padding: 2,
   },
   nearMeBtn: {

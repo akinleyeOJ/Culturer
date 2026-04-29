@@ -22,6 +22,8 @@ export interface PickupPointSearchContext {
   country?: string;
   latitude?: number;
   longitude?: number;
+  /** Human-readable area for UI (street / district); may differ from `city`. */
+  areaLabel?: string;
 }
 
 const INPOST_POINTS_API = "https://api-shipx-pl.easypack24.net/v1/points";
