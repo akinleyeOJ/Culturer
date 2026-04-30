@@ -19,6 +19,7 @@ import {
   useWindowDimensions,
   InputAccessoryView,
   Pressable,
+  InteractionManager,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -54,20 +55,37 @@ const MIN_SEARCH_LENGTH = 3;
 const SEARCH_DEBOUNCE_MS = 500;
 const SEARCH_INPUT_ACCESSORY_ID = "pickupPointsSearchAccessory";
 
+type GeocodeHit = { lat: number; lng: number; label?: string };
+
+const labelFromNominatimDisplayName = (displayName: string): string => {
+  const parts = displayName
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((p) => !/^poland|polska$/i.test(p));
+  const line = parts.slice(0, 3).join(" · ");
+  if (line.length > 68) return `${line.slice(0, 65)}…`;
+  return line;
+};
+
 // Free geocoding via OpenStreetMap Nominatim — no API key required
-const geocodeQuery = async (
-  query: string,
-): Promise<{ lat: number; lng: number } | null> => {
+const geocodeQuery = async (query: string): Promise<GeocodeHit | null> => {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=pl&format=json&limit=1`;
     const res = await fetch(url, { headers: { "User-Agent": "Culturer/1.0" } });
     const data = await res.json();
-    if (data?.[0])
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    const row = data?.[0];
+    if (!row) return null;
+    const lat = parseFloat(row.lat);
+    const lng = parseFloat(row.lon);
+    const label =
+      typeof row.display_name === "string"
+        ? labelFromNominatimDisplayName(row.display_name)
+        : undefined;
+    return { lat, lng, label };
   } catch {
     return null;
   }
-  return null;
 };
 
 /** Build a Nominatim query from checkout shipping fields — more specific than a bare street fragment. */
@@ -148,6 +166,10 @@ export default function PickupPointsScreen() {
   const [isNearbyLoad, setIsNearbyLoad] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  /** Human label from geocoding the checkout address (not "postcode · city" only). */
+  const [deliveryAreaChrome, setDeliveryAreaChrome] = useState<string | null>(
+    null,
+  );
 
   const requestIdRef = useRef(0);
   const searchInputRef = useRef<TextInput>(null);
@@ -174,12 +196,15 @@ export default function PickupPointsScreen() {
     [carrierName],
   );
 
-  // Auto-focus search input on mount
+  // Focus after transition + layout so the keyboard rises from the bottom
+  // (see root Stack `pickup-points` animation: "fade").
   useEffect(() => {
-    const timer = setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 400);
-    return () => clearTimeout(timer);
+    const outer = setTimeout(() => {
+      InteractionManager.runAfterInteractions(() => {
+        searchInputRef.current?.focus();
+      });
+    }, 480);
+    return () => clearTimeout(outer);
   }, []);
 
   // Fetch pickup points when search or context changes
@@ -208,16 +233,22 @@ export default function PickupPointsScreen() {
       try {
         setError(null);
 
+        if (isTyping) {
+          setDeliveryAreaChrome(null);
+        }
+
         // Reference point for distance + InPost relative_point:
         // 1) Explicit GPS from "Use my location"
         // 2) Geocode full checkout delivery address (NOT the locker search box) —
         //    typing "lukowa" alone resolves to the village Łukowa, which wrongly
         //    makes Warszawa Łukowa 1 look hundreds of km away.
         // 3) Fall back to geocoding search / city / postcode only when no delivery hint.
-        let coords =
+        let coords: { lat: number; lng: number } | null =
           searchContext?.latitude != null && searchContext?.longitude != null
             ? { lat: searchContext.latitude, lng: searchContext.longitude }
             : null;
+
+        let chromeFromGeocode: string | undefined;
 
         // When the user is typing their own search, do NOT anchor on the
         // checkout delivery address first — that made nonsense queries still
@@ -225,7 +256,11 @@ export default function PickupPointsScreen() {
         if (!isTyping) {
           if (!coords && canGeocodeDelivery(fallbackAddress)) {
             const deliveryQ = buildDeliveryGeocodeQuery(fallbackAddress);
-            if (deliveryQ) coords = await geocodeQuery(deliveryQ);
+            const hit = deliveryQ ? await geocodeQuery(deliveryQ) : null;
+            if (hit) {
+              coords = { lat: hit.lat, lng: hit.lng };
+              chromeFromGeocode = hit.label;
+            }
           }
         }
 
@@ -236,8 +271,22 @@ export default function PickupPointsScreen() {
               fallbackAddress.postalCode ||
               fallbackAddress.city;
           if (queryToGeocode) {
-            coords = await geocodeQuery(queryToGeocode);
+            const hit = await geocodeQuery(queryToGeocode);
+            if (hit) {
+              coords = { lat: hit.lat, lng: hit.lng };
+              if (!chromeFromGeocode && hit.label) {
+                chromeFromGeocode = hit.label;
+              }
+            }
           }
+        }
+
+        if (requestId !== requestIdRef.current) return;
+
+        if (searchContext?.latitude != null) {
+          setDeliveryAreaChrome(null);
+        } else if (!isTyping) {
+          setDeliveryAreaChrome(chromeFromGeocode ?? null);
         }
 
         const pickupPoints = await fetchPickupPoints(
@@ -354,6 +403,7 @@ export default function PickupPointsScreen() {
       const resolvedLabel = areaLabel || "your current location";
 
       setSearch("");
+      setDeliveryAreaChrome(null);
       setSearchContext({
         latitude,
         longitude,
@@ -385,6 +435,7 @@ export default function PickupPointsScreen() {
   const handleClearSearch = () => {
     setSearch("");
     setSearchContext(null);
+    setDeliveryAreaChrome(null);
     setHasSearched(false);
     setResults([]);
     setError(null);
@@ -426,12 +477,12 @@ export default function PickupPointsScreen() {
         searchContext.areaLabel || searchContext.city || "your current position"
       );
     }
+    if (deliveryAreaChrome) return deliveryAreaChrome;
     const fa = fallbackAddress;
-    const pcCity = [fa.postalCode, fa.city].filter(Boolean).join(" ").trim();
-    if (pcCity) return pcCity;
-    if (fa.query && fa.city) return `${fa.query}, ${fa.city}`.slice(0, 64);
+    const streetCity = [fa.query, fa.city].filter(Boolean).join(" · ").trim();
+    if (streetCity) return streetCity.slice(0, 68);
     return fa.city || fa.postalCode || null;
-  }, [searchContext, fallbackAddress]);
+  }, [searchContext, fallbackAddress, deliveryAreaChrome]);
 
   // ─── Empty / Intro State ──────────────────────────────────────────────────
   const renderEmptyState = () => {
@@ -628,6 +679,7 @@ export default function PickupPointsScreen() {
             onChangeText={(text) => {
               setSearch(text);
               setSearchContext(null);
+              setDeliveryAreaChrome(null);
               setError(null);
             }}
             autoCorrect={false}

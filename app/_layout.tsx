@@ -31,6 +31,13 @@ export default function RootLayout() {
                   }}
                 />
                 <Stack.Screen
+                  name="pickup-points"
+                  options={{
+                    headerShown: false,
+                    animation: "fade",
+                  }}
+                />
+                <Stack.Screen
                   name="filter"
                   options={{
                     headerShown: false,
