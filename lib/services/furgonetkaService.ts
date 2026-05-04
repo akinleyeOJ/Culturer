@@ -8,6 +8,7 @@
 //   - app/pickup-points.tsx                   (point search)
 //   - app/profile/order-details/[id].tsx      (label generation)
 
+import type { CarrierConfig, WeightTier } from "../shippingUtils";
 import { supabase } from "../supabase";
 
 // ---------- Types ----------
@@ -103,14 +104,109 @@ export interface FurgonetkaServicePointsRequest {
   limit?: number;
 }
 
-export interface FurgonetkaCreateShipmentResponse {
+export type FurgonetkaCreateShipmentRequest = {
+  order_id: string;
+};
+
+/**
+ * JSON body from `furgonetka-create-shipment` on success (HTTP 200, `success: true`).
+ * `stub: true` until Phase 4 implements Furgonetka REST + DB insert; then `stub: false` and
+ * string fields are non-null (except `qr_code_url` / `furgonetka_quote_id` when absent).
+ */
+export type FurgonetkaCreateShipmentApiBody = {
   success: true;
-  shipment_id: string;
-  furgonetka_shipment_id: string;
-  tracking_number: string;
-  tracking_url: string;
-  label_url: string;
-  qr_code_url?: string | null;
+  order_id: string;
+  stub: boolean;
+  message?: string;
+  shipment_db_id: string | null;
+  furgonetka_shipment_id: string | null;
+  furgonetka_quote_id: string | null;
+  tracking_number: string | null;
+  tracking_url: string | null;
+  label_url: string | null;
+  qr_code_url: string | null;
+};
+
+/** Narrow result for app code after {@link createFurgonetkaShipment}. */
+export type FurgonetkaCreateShipmentResult =
+  | {
+      success: true;
+      stub: true;
+      message: string;
+      order_id: string;
+    }
+  | {
+      success: true;
+      stub: false;
+      order_id: string;
+      shipment_db_id: string;
+      furgonetka_shipment_id: string;
+      furgonetka_quote_id: string | null;
+      tracking_number: string;
+      tracking_url: string;
+      label_url: string;
+      qr_code_url: string | null;
+    }
+  | { success: false; error: string };
+
+/** @deprecated Use {@link FurgonetkaCreateShipmentApiBody} — kept for older references. */
+export type FurgonetkaCreateShipmentResponse = FurgonetkaCreateShipmentApiBody;
+
+/**
+ * Snapshot stored in `orders.shipping_method_details` (JSONB). Used by
+ * `furgonetka-create-shipment` to map carrier + quote + locker without guessing
+ * from display names. Older rows may omit `furgonetka_*` fields.
+ */
+export interface OrderShippingMethodDetails {
+  /** Buyer-facing label (e.g. "InPost Paczkomat"); matches `carrier_name` usage. */
+  carrier: string;
+  type: "locker_pickup" | "local_pickup" | "home_delivery";
+  pricing_mode: "local_pickup" | "provider_direct";
+  quote_amount: number | null;
+  quote_currency: string | null;
+  quote_id: string | null;
+  /** Furgonetka calculate-price carrier code (`inpost`, `dpd_pickup`, …). */
+  furgonetka_carrier: string | null;
+  /** REST service id for parcel creation. */
+  furgonetka_service_id: number | null;
+  furgonetka_service_type: FurgonetkaServiceType | null;
+  weight_tier: WeightTier;
+  total_weight_grams: number;
+  handling_fee: number;
+  locker: { id: string; address: string } | null;
+}
+
+/** Builds the checkout payload for `orders.shipping_method_details`. */
+export function buildOrderShippingMethodDetails(
+  carrier: CarrierConfig,
+  opts: {
+    cartWeightTier: WeightTier;
+    totalWeightGrams: number;
+    locker: { id: string; address: string } | null;
+  },
+): OrderShippingMethodDetails {
+  const type =
+    carrier.type === "locker"
+      ? "locker_pickup"
+      : carrier.type === "pickup"
+        ? "local_pickup"
+        : "home_delivery";
+  return {
+    carrier: carrier.name,
+    type,
+    pricing_mode:
+      carrier.type === "pickup" ? "local_pickup" : "provider_direct",
+    quote_amount: carrier.quote_amount ?? null,
+    quote_currency: carrier.quote_currency ?? null,
+    quote_id: carrier.quote_id ?? null,
+    furgonetka_carrier: carrier.furgonetka_carrier ?? null,
+    furgonetka_service_id: carrier.furgonetka_service_id ?? null,
+    furgonetka_service_type: carrier.furgonetka_service_type ?? null,
+    weight_tier: opts.cartWeightTier,
+    total_weight_grams: opts.totalWeightGrams,
+    handling_fee: 0,
+    locker: opts.locker,
+  };
 }
 
 // ---------- API calls ----------
@@ -133,10 +229,7 @@ export const fetchFurgonetkaRates = async (
   req: FurgonetkaRatesRequest,
 ): Promise<FurgonetkaRatesResponse | FurgonetkaRatesError> => {
   try {
-    const data = await invoke<FurgonetkaRatesResponse>(
-      "furgonetka-rates",
-      req,
-    );
+    const data = await invoke<FurgonetkaRatesResponse>("furgonetka-rates", req);
     return {
       success: true,
       rates: Array.isArray(data.rates) ? data.rates : [],
@@ -201,25 +294,53 @@ export const fetchFurgonetkaServicePoints = async (
  * from the order-details screen; the Edge Function picks the carrier the
  * buyer chose at checkout and re-quotes with the locker id (if any).
  */
-export const createFurgonetkaShipment = async (orderId: string) => {
+export const createFurgonetkaShipment = async (
+  orderId: string,
+): Promise<FurgonetkaCreateShipmentResult> => {
   try {
-    const data = await invoke<FurgonetkaCreateShipmentResponse>(
+    const data = await invoke<FurgonetkaCreateShipmentApiBody>(
       "furgonetka-create-shipment",
       { order_id: orderId },
     );
+    if (data.stub) {
+      return {
+        success: true,
+        stub: true,
+        message:
+          data.message ??
+          "Label creation is not implemented yet (Phase 4). Order validated.",
+        order_id: data.order_id,
+      };
+    }
+    if (
+      !data.shipment_db_id ||
+      !data.furgonetka_shipment_id ||
+      !data.tracking_number ||
+      !data.tracking_url ||
+      !data.label_url
+    ) {
+      return {
+        success: false,
+        error: "Incomplete label response from server",
+      };
+    }
     return {
-      success: true as const,
-      shipment_id: data.shipment_id,
+      success: true,
+      stub: false,
+      order_id: data.order_id,
+      shipment_db_id: data.shipment_db_id,
       furgonetka_shipment_id: data.furgonetka_shipment_id,
+      furgonetka_quote_id: data.furgonetka_quote_id,
       tracking_number: data.tracking_number,
       tracking_url: data.tracking_url,
       label_url: data.label_url,
       qr_code_url: data.qr_code_url ?? null,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
-      success: false as const,
-      error: err?.message || "Failed to create shipment",
+      success: false,
+      error:
+        err instanceof Error ? err.message : String(err),
     };
   }
 };

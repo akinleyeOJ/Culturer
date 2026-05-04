@@ -118,13 +118,40 @@ alter table profiles
 | `create-payment-intent` (modify) | Add `capture_method: 'manual'`, `transfer_data.destination`, `application_fee_amount` | existing |
 
 ### Secrets to add in Supabase
+
+OAuth + REST (see `supabase/functions/_shared/furgonetka.ts`):
+
 ```
-FURGONETKA_API_TOKEN
-FURGONETKA_WEBHOOK_SECRET
-STRIPE_CONNECT_CLIENT_ID
-PLATFORM_FEE_PERCENT        # e.g. 5 (for 5% marketplace fee)
-ESCROW_AUTO_RELEASE_DAYS    # e.g. 2
+FURGONETKA_CLIENT_ID
+FURGONETKA_CLIENT_SECRET
+FURGONETKA_USERNAME              # platform Furgonetka login email
+FURGONETKA_PASSWORD              # platform Furgonetka login password
+FURGONETKA_API_BASE              # optional — omit for sandbox; set prod API host for production
+FURGONETKA_OAUTH_BASE            # optional — must match sandbox vs prod account
+FURGONETKA_OAUTH_SCOPE           # optional, default api
+FURGONETKA_LANGUAGE              # optional
 ```
+
+Other Edge Functions:
+
+```
+FURGONETKA_WEBHOOK_SECRET                    # furgonetka-webhook HMAC
+FURGONETKA_DEV_APPEND_LOCKER_FIXTURES       # optional — only on sandbox; append fake locker rows when calculate-price returns none (rates fn ignores this when `FURGONETKA_API_BASE` is not a sandbox host)
+FURGONETKA_PICKUP_NAME | COMPANY | STREET | POSTCODE | CITY | COUNTRY | EMAIL | PHONE   # optional overrides for calculate-price pickup defaults (furgonetka-rates)
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+PLATFORM_FEE_PERCENT                         # e.g. 5 — marketplace fee on Connect intents (create-payment-intent)
+```
+
+Phase 6 (when implemented): `ESCROW_AUTO_RELEASE_DAYS` (cron / release flow).
+
+**Prep 2 — production checklist**
+
+1. Set **production** `FURGONETKA_API_BASE` / `FURGONETKA_OAUTH_BASE` for your live Furgonetka account (or rely on defaults only in sandbox projects).
+2. **Unset** or leave empty `FURGONETKA_DEV_APPEND_LOCKER_FIXTURES` on production; `furgonetka-rates` also refuses fixtures unless the API base URL contains `sandbox`.
+3. Store secrets with Supabase CLI: `supabase secrets set KEY=value --project-ref <ref>` (never commit values).
+4. Stripe: use live **`STRIPE_SECRET_KEY`** / **`STRIPE_WEBHOOK_SECRET`** only on the production Supabase project linked to live Stripe.
+5. App bundle env only toggles client behaviour (e.g. `EXPO_PUBLIC_ENABLE_LIVE_SHIPPING_APIS` in `CLAUDE.md`); never put Furgonetka OAuth secrets in the Expo app — they stay in Supabase Edge secrets.
 
 ---
 
@@ -202,7 +229,7 @@ ESCROW_AUTO_RELEASE_DAYS    # e.g. 2
 
 ### Phase 4 — Label generation post-payment (week 3)
 13. Implement `furgonetka-create-shipment` Edge Function
-14. Trigger it from `stripe-webhook` on `payment_intent.succeeded`
+14. Trigger it from `stripe-webhook`: **`payment_intent.amount_capturable_updated`** (manual capture — buyer authorised; create label here), and **`payment_intent.succeeded`** when **`capture_method` is not `manual`** (immediate charge / legacy path). Skip **`local_pickup`** and skip if a **`shipments`** row already exists (idempotent).
 15. Seller receives push + sees QR/PDF in order details
 16. Delete `inpost-handler/createShipmentFromOrder.ts`
 
@@ -229,12 +256,16 @@ ESCROW_AUTO_RELEASE_DAYS    # e.g. 2
 ## 7. Decisions
 
 1. **Carrier picker UI: NATIVE (locked in).** All carrier + service-point selection is rendered in React Native. No WebView. Adds ~1 week vs. Koszyk WebView but gives full brand control, native performance, and a portfolio-worthy checkout.
-2. **Escrow auto-release window** — 2 days (Vinted-style), 7 days (safe), or 14 days (eBay-style)? *(still needed)*
-3. **Marketplace fee %** — Culturer's cut (for `application_fee_amount`). *(still needed)*
-4. **Keep InPost direct as fallback** or go all-in on Furgonetka? Recommend all-in. *(still needed)*
-5. **Sandbox first?** Build against Furgonetka sandbox, then swap to prod token in Supabase secrets. *(still needed)*
+2. **Escrow auto-release window** — **Prep default: 2 days.** Implement via `ESCROW_AUTO_RELEASE_DAYS` when Phase 6 scheduled release lands (see `stripe-release-escrow` stub).
+3. **Marketplace fee %** — **Prep default: 5%** via `PLATFORM_FEE_PERCENT` (see `create-payment-intent`).
+4. **InPost direct fallback** — **All-in on Furgonetka.** Seller order screen uses `createFurgonetkaShipment`; `createInPostShipmentFromOrder` is deprecated until Phase 7 removes `inpost-handler` create-shipment.
+5. **Sandbox first** — **Yes** for development (default Furgonetka OAuth/API hosts); production uses prod hosts + Supabase secrets only.
 
-Default answers for the remaining four (if no override): `2 days, 5%, all-in, sandbox first`.
+### Prep 7 — Smoke tests
+
+From repo root, after exporting URL/keys (see script header):
+
+`./scripts/smoke-furgonetka-edge.sh`
 
 ---
 

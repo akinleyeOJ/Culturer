@@ -32,6 +32,8 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 })
 
 const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') || '5')
+/** When Phase 6 auto-release runs: days after delivery before releasing escrow. Prep default: 2. */
+const ESCROW_AUTO_RELEASE_DAYS = Number(Deno.env.get('ESCROW_AUTO_RELEASE_DAYS') || '2')
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') {
@@ -74,6 +76,7 @@ serve(async (req) => {
 
         void stripe
         void PLATFORM_FEE_PERCENT
+        void ESCROW_AUTO_RELEASE_DAYS
 
         // TODO(phase-6): capture PI, create Transfer, update orders row.
         return successResponse({

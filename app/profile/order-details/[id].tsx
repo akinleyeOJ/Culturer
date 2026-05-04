@@ -30,7 +30,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import { formatPln } from "../../../lib/formatPln";
 import { getTrackingUrl } from "../../../lib/shippingUtils";
-import { createInPostShipmentFromOrder } from "../../../lib/services/inpostService";
+import { createFurgonetkaShipment } from "../../../lib/services/furgonetkaService";
 import { useAuth } from "../../../contexts/AuthContext";
 import { Colors } from "../../../constants/color";
 
@@ -226,16 +226,12 @@ const OrderDetailsScreen = () => {
     return carrier ? { type: "other" as const, carrier } : null;
   }, [order]);
 
-  const inPostAutoFulfillmentEligible = useMemo(() => {
+  const furgonetkaLabelEligible = useMemo(() => {
     if (!order || user?.id !== order.seller_id) return false;
     const st = String(order.status || "").toLowerCase();
     if (st !== "paid" && st !== "confirmed") return false;
     if (order.tracking_number) return false;
     const d = order.shipping_method_details as Record<string, unknown> | null;
-    const carrier = String(
-      (d?.carrier as string) || order.carrier_name || "",
-    ).toLowerCase();
-    if (!carrier.includes("inpost")) return false;
     const t = String(d?.type || "");
     if (t === "local_pickup") return false;
     if (t === "locker_pickup") {
@@ -316,23 +312,31 @@ const OrderDetailsScreen = () => {
     }
   };
 
-  const handleCreateInPostShipment = async () => {
+  const handleCreateFurgonetkaShipment = async () => {
     if (!order?.id) return;
     try {
       setShipProcessing(true);
-      const result = await createInPostShipmentFromOrder(order.id);
+      const result = await createFurgonetkaShipment(order.id);
       if (!result.success) {
-        Alert.alert("InPost", result.error);
+        Alert.alert("Shipping label", result.error);
+        return;
+      }
+      if (result.stub) {
+        Alert.alert(
+          "Shipping label (test mode)",
+          result.message ||
+            "Order passed validation. Real label API is not enabled yet (Phase 4).",
+        );
         return;
       }
       Alert.alert(
         "Shipment created",
-        `Tracking number: ${result.tracking_number}\n\nThe buyer can track the parcel from this order screen.`,
+        `Tracking: ${result.tracking_number}\n\nYou can open the label from this order when the PDF is ready.`,
       );
       fetchOrderDetails();
     } catch (err) {
       console.error(err);
-      Alert.alert("Error", "Could not create InPost shipment.");
+      Alert.alert("Error", "Could not create shipment.");
     } finally {
       setShipProcessing(false);
     }
@@ -834,22 +838,22 @@ const OrderDetailsScreen = () => {
             // Seller Actions
             <>
               <Text style={styles.actionTitle}>Seller Controls</Text>
-              {currentStatusIndex === 1 && inPostAutoFulfillmentEligible && (
+              {currentStatusIndex === 1 && furgonetkaLabelEligible && (
                 <TouchableOpacity
                   style={[styles.primaryActionButton]}
-                  onPress={handleCreateInPostShipment}
+                  onPress={handleCreateFurgonetkaShipment}
                   disabled={shipProcessing}
                 >
                   {shipProcessing ? (
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <Text style={styles.primaryActionButtonText}>
-                      Create InPost shipment
+                      Generate shipping label
                     </Text>
                   )}
                 </TouchableOpacity>
               )}
-              {currentStatusIndex === 1 && inPostAutoFulfillmentEligible && (
+              {currentStatusIndex === 1 && furgonetkaLabelEligible && (
                 <TouchableOpacity
                   style={[styles.actionButton, { marginBottom: 8 }]}
                   onPress={() => {
@@ -866,7 +870,7 @@ const OrderDetailsScreen = () => {
                   </Text>
                 </TouchableOpacity>
               )}
-              {currentStatusIndex === 1 && !inPostAutoFulfillmentEligible && (
+              {currentStatusIndex === 1 && !furgonetkaLabelEligible && (
                 <TouchableOpacity
                   style={[styles.primaryActionButton]}
                   onPress={() => {

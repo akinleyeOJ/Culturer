@@ -64,6 +64,16 @@ export interface CarrierConfig {
     | "requires_pickup_point"
     | "missing_address"
     | "unavailable";
+  /** Furgonetka API carrier code (`inpost`, `dpd`, …). Set from live rates only. */
+  furgonetka_carrier?: string | null;
+  /** Furgonetka service id for create-shipment (from calculate-price). */
+  furgonetka_service_id?: number | null;
+  /** Matches `FurgonetkaRate.service_type`; persisted on `orders.shipping_method_details`. */
+  furgonetka_service_type?:
+    | "home_delivery"
+    | "locker_pickup"
+    | "pickup_point"
+    | null;
 }
 
 export interface ShippingModeConfig {
@@ -129,14 +139,16 @@ export const FURGONETKA_CARRIER_CATALOG: FurgonetkaCarrierMeta[] = [
     code: "inpost",
     display_name: "InPost Paczkomat",
     service_type: "locker_pickup",
-    blurb: "Most popular locker network in Poland — 24 000+ Paczkomats. Buyers expect this option.",
+    blurb:
+      "Most popular locker network in Poland — 24 000+ Paczkomats. Buyers expect this option.",
     locked: true,
   },
   {
     code: "allegro",
     display_name: "Allegro One Box",
     service_type: "locker_pickup",
-    blurb: "Allegro's fast-growing locker network — popular with younger buyers.",
+    blurb:
+      "Allegro's fast-growing locker network — popular with younger buyers.",
     locked: false,
   },
   {
@@ -152,7 +164,8 @@ export const FURGONETKA_CARRIER_CATALOG: FurgonetkaCarrierMeta[] = [
     code: "dpd_pickup",
     display_name: "DPD Pickup",
     service_type: "pickup_point",
-    blurb: "DPD parcel-shops for buyers who prefer staffed pickup over lockers.",
+    blurb:
+      "DPD parcel-shops for buyers who prefer staffed pickup over lockers.",
     locked: false,
   },
   {
@@ -189,7 +202,8 @@ export const FURGONETKA_CARRIER_CATALOG: FurgonetkaCarrierMeta[] = [
     code: "inpost_kurier",
     display_name: "InPost Courier",
     service_type: "home_delivery",
-    blurb: "InPost's home-courier alternative for buyers without a nearby Paczkomat.",
+    blurb:
+      "InPost's home-courier alternative for buyers without a nearby Paczkomat.",
     locked: false,
   },
   {
@@ -224,7 +238,8 @@ export const FURGONETKA_CARRIER_CATALOG: FurgonetkaCarrierMeta[] = [
     code: "meest",
     display_name: "Meest",
     service_type: "home_delivery",
-    blurb: "Polish-Ukrainian cross-border carrier — handy for the Ukrainian diaspora market.",
+    blurb:
+      "Polish-Ukrainian cross-border carrier — handy for the Ukrainian diaspora market.",
     locked: false,
   },
 ];
@@ -498,6 +513,9 @@ const normalizeCarrier = (carrier: Partial<CarrierConfig>): CarrierConfig => ({
   quote_currency: carrier.quote_currency ?? null,
   quote_id: carrier.quote_id ?? null,
   quote_status: carrier.quote_status,
+  furgonetka_carrier: carrier.furgonetka_carrier ?? null,
+  furgonetka_service_id: carrier.furgonetka_service_id ?? null,
+  furgonetka_service_type: carrier.furgonetka_service_type ?? null,
 });
 
 export const normalizeCountryName = (country: string) => {

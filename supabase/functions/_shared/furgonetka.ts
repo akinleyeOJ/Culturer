@@ -28,10 +28,15 @@
 //   FURGONETKA_CLIENT_SECRET   (required)
 //   FURGONETKA_USERNAME        (required — Culturar's Furgonetka login email)
 //   FURGONETKA_PASSWORD        (required — Culturar's Furgonetka login password)
-//   FURGONETKA_API_BASE        (optional, default = sandbox API host)
-//   FURGONETKA_OAUTH_BASE      (optional, default = sandbox OAuth host)
+//   FURGONETKA_API_BASE        (optional — default sandbox; set production API host in prod)
+//   FURGONETKA_OAUTH_BASE      (optional — default sandbox; must match the account environment)
 //   FURGONETKA_OAUTH_SCOPE     (optional, default = "api")
 //   FURGONETKA_LANGUAGE        (optional, default = "en_GB")
+//
+// Also used by other Edge Functions on the same Supabase project:
+//   FURGONETKA_WEBHOOK_SECRET           — furgonetka-webhook (HMAC)
+//   FURGONETKA_DEV_APPEND_LOCKER_FIXTURES — furgonetka-rates (sandbox dev only; ignored when API base is not sandbox)
+//   FURGONETKA_PICKUP_*                 — optional defaults for calculate-price pickup block (see furgonetka-rates)
 
 const SANDBOX_API_BASE = "https://api.sandbox.furgonetka.pl";
 const SANDBOX_OAUTH_BASE = "https://api.sandbox.furgonetka.pl";

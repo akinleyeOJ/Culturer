@@ -32,12 +32,17 @@ import { useCheckoutShipping } from "../lib/hooks/useCheckoutShipping";
 import { supabase } from "../lib/supabase";
 import { fetchCart, clearCart, CartItem } from "../lib/services/cartService";
 import { trackProductSale } from "../lib/services/productService";
+import { buildOrderShippingMethodDetails } from "../lib/services/furgonetkaService";
 import {
   formatPln,
   parseLoosePrice,
   STRIPE_CHECKOUT_CURRENCY,
 } from "../lib/formatPln";
-import { formatWeight, SHIPPING_LAUNCH_COUNTRY } from "../lib/shippingUtils";
+import {
+  formatWeight,
+  SHIPPING_LAUNCH_COUNTRY,
+  type CarrierConfig,
+} from "../lib/shippingUtils";
 import {
   ChevronLeftIcon,
   LockClosedIcon,
@@ -935,6 +940,27 @@ const Checkout = () => {
     setProcessing(true);
 
     try {
+      if (resolvedSelectedCarrier?.type === "locker" && !selectedLocker?.id) {
+        Alert.alert(
+          "Pickup Point",
+          "Please select a pickup point for this carrier before placing your order.",
+        );
+        setProcessing(false);
+        return;
+      }
+      if (
+        resolvedSelectedCarrier &&
+        resolvedSelectedCarrier.type !== "pickup" &&
+        resolvedSelectedCarrier.quote_status !== "ready"
+      ) {
+        Alert.alert(
+          "Shipping",
+          "This delivery option is not ready yet. Go back to the delivery step and complete carrier or pickup selection.",
+        );
+        setProcessing(false);
+        return;
+      }
+
       // 1. Get Payment Method ID
       let paymentMethodId = stripePaymentMethodId;
 
@@ -998,34 +1024,18 @@ const Checkout = () => {
               payment_method: selectedPaymentMethod,
               carrier_name: resolvedSelectedCarrier?.name || null,
               shipping_method_details: resolvedSelectedCarrier
-                ? {
-                    carrier: resolvedSelectedCarrier.name,
-                    type:
-                      resolvedSelectedCarrier?.type === "locker"
-                        ? "locker_pickup"
-                        : resolvedSelectedCarrier?.type === "pickup"
-                          ? "local_pickup"
-                          : "home_delivery",
-                    pricing_mode:
-                      resolvedSelectedCarrier?.type === "pickup"
-                        ? "local_pickup"
-                        : "provider_direct",
-                    quote_amount: resolvedSelectedCarrier?.quote_amount ?? null,
-                    quote_currency:
-                      resolvedSelectedCarrier?.quote_currency ?? null,
-                    quote_id: resolvedSelectedCarrier?.quote_id ?? null,
-                    weight_tier: cartWeightTier,
-                    total_weight_grams: totalWeightGrams,
-                    handling_fee: 0,
+                ? buildOrderShippingMethodDetails(resolvedSelectedCarrier, {
+                    cartWeightTier,
+                    totalWeightGrams,
                     locker:
-                      resolvedSelectedCarrier?.type === "locker" &&
+                      resolvedSelectedCarrier.type === "locker" &&
                       selectedLocker
                         ? {
                             id: selectedLocker.id,
                             address: selectedLocker.address,
                           }
                         : null,
-                  }
+                  })
                 : null,
             })
             .eq("id", orderIdToUse);
@@ -1049,33 +1059,17 @@ const Checkout = () => {
             carrier_name: resolvedSelectedCarrier?.name || null,
             shipping_zone: shippingZone,
             shipping_method_details: resolvedSelectedCarrier
-              ? {
-                  carrier: resolvedSelectedCarrier.name,
-                  type:
-                    resolvedSelectedCarrier?.type === "locker"
-                      ? "locker_pickup"
-                      : resolvedSelectedCarrier?.type === "pickup"
-                        ? "local_pickup"
-                        : "home_delivery",
-                  pricing_mode:
-                    resolvedSelectedCarrier?.type === "pickup"
-                      ? "local_pickup"
-                      : "provider_direct",
-                  quote_amount: resolvedSelectedCarrier?.quote_amount ?? null,
-                  quote_currency:
-                    resolvedSelectedCarrier?.quote_currency ?? null,
-                  quote_id: resolvedSelectedCarrier?.quote_id ?? null,
-                  weight_tier: cartWeightTier,
-                  total_weight_grams: totalWeightGrams,
-                  handling_fee: 0,
+              ? buildOrderShippingMethodDetails(resolvedSelectedCarrier, {
+                  cartWeightTier,
+                  totalWeightGrams,
                   locker:
-                    resolvedSelectedCarrier?.type === "locker" && selectedLocker
+                    resolvedSelectedCarrier.type === "locker" && selectedLocker
                       ? {
                           id: selectedLocker.id,
                           address: selectedLocker.address,
                         }
                       : null,
-                }
+                })
               : null,
           })
           .select()
@@ -1312,11 +1306,12 @@ const Checkout = () => {
     setCheckingCoupon(false);
   };
 
-  const openPickupPointPicker = () => {
-    if (!selectedCarrier) return;
+  const openPickupPointPicker = (carrierOverride?: CarrierConfig | null) => {
+    const carrier = carrierOverride ?? selectedCarrier;
+    if (!carrier || carrier.type !== "locker") return;
 
     setPickupPointSelectionState({
-      carrierName: selectedCarrier.name,
+      carrierName: carrier.name,
       selection: selectedLocker,
       search: lockerSearch,
       context: lockerSearchContext,
@@ -1324,7 +1319,7 @@ const Checkout = () => {
     router.push({
       pathname: "/pickup-points",
       params: {
-        carrierName: selectedCarrier.name,
+        carrierName: carrier.name,
         address1,
         city,
         zipCode,
@@ -1624,19 +1619,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: Colors.neutral[300],
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+    gap: 10,
   },
   radioOptionSelected: {
     borderColor: Colors.primary[500],
     backgroundColor: Colors.primary[50],
   },
   radioRow: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    minWidth: 0,
+  },
+  radioTextCol: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 4,
   },
   radioCircle: {
     height: 20,
@@ -1662,11 +1666,17 @@ const styles = StyleSheet.create({
   radioSubtitle: {
     fontSize: 13,
     color: Colors.text.secondary,
+    marginTop: 3,
+    lineHeight: 18,
   },
   radioPrice: {
     fontSize: 15,
     fontWeight: "600",
     color: Colors.text.primary,
+    flexShrink: 0,
+    marginLeft: 4,
+    textAlign: "right",
+    minWidth: 72,
   },
   checkboxRow: {
     flexDirection: "row",
@@ -2034,173 +2044,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Locker Selection Styles
-  lockerSection: {
-    marginTop: 12,
-    backgroundColor: "#FAFAFA",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  lockerTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 2,
-  },
-  lockerSubtitle: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginBottom: 12,
-  },
-  pickupLauncher: {
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    padding: 14,
-  },
-  pickupLauncherRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  pickupLauncherCopy: {
-    flex: 1,
-  },
-  pickupLauncherTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  pickupLauncherSubtitle: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 3,
-    lineHeight: 17,
-  },
-  lockerAutocompleteWrap: {
-    position: "relative",
-    zIndex: 30,
-    marginBottom: 8,
-  },
-  lockerSearchIcon: {
-    position: "absolute",
-    left: 12,
-    top: 14,
-    zIndex: 2,
-  },
-  lockerAutocompleteContainer: {
-    flex: 0,
-    width: "100%",
-  },
-  lockerAutocompleteInputContainer: {
-    width: "100%",
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-  },
-  lockerAutocompleteInput: {
-    height: 46,
-    marginTop: 0,
-    marginBottom: 0,
-    paddingLeft: 34,
-    paddingRight: 12,
-    fontSize: 15,
-    color: "#111827",
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-  },
-  lockerAutocompleteList: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    elevation: 6,
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-  },
-  lockerSearchFallbackInput: {
-    height: 46,
-    width: "100%",
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingLeft: 34,
-    paddingRight: 12,
-    fontSize: 15,
-    color: "#111827",
-  },
-  lockerAutocompleteHint: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 8,
-  },
-  lockerStatusBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
-  },
-  lockerStatusText: {
-    fontSize: 13,
-    color: "#6B7280",
-  },
-  lockerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 6,
-  },
-  lockerItemSelected: {
-    borderColor: Colors.primary[500],
-    backgroundColor: Colors.primary[50],
-  },
-  lockerItemContent: {
-    flex: 1,
-  },
-  lockerId: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  lockerAddress: {
-    fontSize: 13,
-    color: "#4B5563",
-    marginTop: 2,
-  },
-  lockerHint: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    fontStyle: "italic",
-    marginTop: 2,
-  },
-  lockerCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Colors.primary[500],
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  // Locker pickup confirmation (carrier row opens map; shown after selection)
   lockerConfirm: {
-    marginTop: 8,
-    padding: 10,
+    marginTop: 12,
+    padding: 12,
     backgroundColor: "#F0FDF4",
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#BBF7D0",
   },
@@ -2208,6 +2057,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#166534",
     fontWeight: "500",
+    lineHeight: 18,
   },
   subSectionTitle: {
     fontSize: 12,

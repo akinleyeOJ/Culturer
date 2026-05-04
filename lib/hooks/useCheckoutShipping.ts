@@ -114,6 +114,9 @@ const rateToCarrierConfig = (
   quote_currency: "PLN",
   quote_id: rate.quote_id,
   quote_status: status,
+  furgonetka_carrier: rate.carrier,
+  furgonetka_service_id: rate.service_id,
+  furgonetka_service_type: rate.service_type,
 });
 
 export const useCheckoutShipping = ({

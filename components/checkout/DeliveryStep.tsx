@@ -77,7 +77,7 @@ interface DeliveryStepProps {
   selectedLocker: PickupPointResult | null;
   setSelectedLocker: (pickupPoint: PickupPointResult | null) => void;
   clearPickupPointDraft: () => void;
-  onOpenPickupPointPicker: () => void;
+  onOpenPickupPointPicker: (carrier?: CarrierConfig | null) => void;
   orderNote: string;
   setOrderNote: (value: string) => void;
 }
@@ -152,18 +152,20 @@ export function DeliveryStep({
   const getCarrierPriceLabel = (carrier: CarrierConfig) => {
     if (carrier.type === "pickup") return "Free";
     if (carrier.quote_status === "loading") return "Loading...";
+    if (carrier.quote_status === "missing_address") return "Enter address";
+    // Show live quote on the right whenever we have it (including lockers
+    // before a pickup point is chosen — avoids crowding the title with text).
+    if (
+      typeof carrier.quote_amount === "number" &&
+      !Number.isNaN(carrier.quote_amount)
+    ) {
+      return `${carrier.quote_currency || "PLN"} ${carrier.quote_amount.toFixed(2)}`;
+    }
     if (
       carrier.type === "locker" &&
       carrier.quote_status === "requires_pickup_point"
     ) {
-      return "Pick point first";
-    }
-    if (carrier.quote_status === "missing_address") return "Enter address";
-    if (
-      carrier.quote_status === "ready" &&
-      typeof carrier.quote_amount === "number"
-    ) {
-      return `${carrier.quote_currency || "PLN"} ${carrier.quote_amount.toFixed(2)}`;
+      return "—";
     }
     return "Unavailable";
   };
@@ -498,8 +500,9 @@ export function DeliveryStep({
             ) : (
               <View style={styles.apiCostHintBox}>
                 <Text style={styles.apiCostHintText}>
-                  Live carrier prices load automatically once your delivery address
-                  is complete (name, email, phone, street, city, postcode).
+                  Live carrier prices load automatically once your delivery
+                  address is complete (name, email, phone, street, city,
+                  postcode).
                 </Text>
               </View>
             )}
@@ -557,17 +560,22 @@ export function DeliveryStep({
                       setSelectedLocker(null);
                       clearPickupPointDraft();
                     }
+                    if (carrier.type === "locker") {
+                      onOpenPickupPointPicker(carrier);
+                    }
                   }}
                 >
                   <View style={styles.radioRow}>
                     <View style={styles.radioCircle}>
                       {isSelected && <View style={styles.radioDot} />}
                     </View>
-                    <View>
-                      <Text style={styles.radioTitle}>{carrier.name}</Text>
-                      <Text style={styles.radioSubtitle}>
+                    <View style={styles.radioTextCol}>
+                      <Text style={styles.radioTitle} numberOfLines={2}>
+                        {carrier.name}
+                      </Text>
+                      <Text style={styles.radioSubtitle} numberOfLines={2}>
                         {carrier.type === "locker"
-                          ? "Locker / Pickup Point"
+                          ? "Tap to choose pickup point"
                           : carrier.type === "pickup"
                             ? sellerShipping?.pickup_location
                               ? `Collect in person • ${sellerShipping.pickup_location}`
@@ -586,58 +594,22 @@ export function DeliveryStep({
         )}
 
         {!loadingRates &&
-        integratedCarrierOptions.length === 0 &&
-        !ratesBlockedReason &&
-        !ratesError &&
-        buyerReadyForQuotes && (
-          <View style={styles.loadingRatesBox}>
-            <Text style={styles.loadingRatesText}>
-              No shipping options are available for this order yet.
+          integratedCarrierOptions.length === 0 &&
+          !ratesBlockedReason &&
+          !ratesError &&
+          buyerReadyForQuotes && (
+            <View style={styles.loadingRatesBox}>
+              <Text style={styles.loadingRatesText}>
+                No shipping options are available for this order yet.
+              </Text>
+            </View>
+          )}
+
+        {selectedCarrier?.type === "locker" && selectedLocker && (
+          <View style={styles.lockerConfirm}>
+            <Text style={styles.lockerConfirmText}>
+              Delivering to: {selectedLocker.id} — {selectedLocker.address}
             </Text>
-          </View>
-        )}
-
-        {selectedCarrier?.type === "locker" && (
-          <View style={styles.lockerSection}>
-            <Text style={styles.lockerTitle}>📮 Select Pickup Point</Text>
-            <Text style={styles.lockerSubtitle}>
-              Open a separate search screen to find pickup points near the typed
-              location.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.pickupLauncher}
-              onPress={onOpenPickupPointPicker}
-            >
-              <View style={styles.pickupLauncherRow}>
-                <View style={styles.pickupLauncherCopy}>
-                  <Text style={styles.pickupLauncherTitle}>
-                    {selectedLocker
-                      ? "Change Pickup Point"
-                      : "Select Pickup Point"}
-                  </Text>
-                  <Text style={styles.pickupLauncherSubtitle}>
-                    {selectedLocker
-                      ? `${selectedLocker.id} • ${selectedLocker.address}`
-                      : `Search ${selectedCarrier.name} pickup points near the buyer's delivery area`}
-                  </Text>
-                </View>
-                <ChevronDownIcon
-                  size={18}
-                  color={Colors.neutral[500]}
-                  style={{ transform: [{ rotate: "-90deg" }] }}
-                />
-              </View>
-            </TouchableOpacity>
-
-            {selectedLocker && (
-              <View style={styles.lockerConfirm}>
-                <Text style={styles.lockerConfirmText}>
-                  ✅ Delivering to: {selectedLocker.id} —{" "}
-                  {selectedLocker.address}
-                </Text>
-              </View>
-            )}
           </View>
         )}
 

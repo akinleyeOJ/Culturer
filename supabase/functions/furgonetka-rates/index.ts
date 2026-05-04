@@ -48,13 +48,15 @@
 //   * **Testing lockers in sandbox:** Furgonetka often returns no locker /
 //     parcel-shop prices on sandbox accounts. Set the Supabase secret
 //     `FURGONETKA_DEV_APPEND_LOCKER_FIXTURES=1` to append synthetic InPost +
-//     DPD Pickup rows when the API returns none — use only on dev/staging.
+//     DPD Pickup rows when the API returns none — only when `FURGONETKA_API_BASE`
+//     is a **sandbox** host; production API never applies fixtures.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   callFurgonetka,
   corsHeaders,
   errorResponse,
+  FURGONETKA_API_BASE,
   successResponse,
 } from "../_shared/furgonetka.ts";
 
@@ -171,7 +173,7 @@ interface ServicePriceRow {
   service_id?: number;
   service?: string;
   available?: boolean;
-  errors?: Array<{ message?: string }>;
+  errors?: { message?: string }[];
   pricing?: {
     price_gross?: number;
     price_net?: number;
@@ -200,7 +202,10 @@ const CULTURAR_PICKUP = {
   phone: Deno.env.get("FURGONETKA_PICKUP_PHONE") || "+48000000000",
 };
 
-const buildPackagePayload = (req: RateRequestBody, carriers: string[] | null) => {
+const buildPackagePayload = (
+  req: RateRequestBody,
+  carriers: string[] | null,
+) => {
   const dims = req.parcel?.dimensions_cm || {};
   const weightKg = Math.max(0.1, (req.parcel?.weight_grams || 0) / 1000);
 
@@ -300,6 +305,10 @@ const mapPriceRow = (row: ServicePriceRow) => {
 const appendLockerFixturesIfEnabled = (
   rates: ReturnType<typeof mapPriceRow>[],
 ): { rates: ReturnType<typeof mapPriceRow>[]; appended: boolean } => {
+  // Never mix synthetic rates with a production API host (prep 2 / prod safety).
+  if (!FURGONETKA_API_BASE.includes("sandbox")) {
+    return { rates, appended: false };
+  }
   const flag = (Deno.env.get("FURGONETKA_DEV_APPEND_LOCKER_FIXTURES") || "")
     .trim()
     .toLowerCase();
@@ -367,9 +376,7 @@ serve(async (req) => {
       .filter((c) => CARRIER_REGISTRY[c] !== undefined);
 
     const requested =
-      explicitCarriers && explicitCarriers.length > 0
-        ? explicitCarriers
-        : null; // null = no filter, ask Furgonetka for everything
+      explicitCarriers && explicitCarriers.length > 0 ? explicitCarriers : null; // null = no filter, ask Furgonetka for everything
 
     const payload = buildPackagePayload(body, requested);
 

@@ -17,9 +17,6 @@ import {
   Platform,
   Alert,
   useWindowDimensions,
-  InputAccessoryView,
-  Pressable,
-  InteractionManager,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -53,7 +50,6 @@ const PickupResultsMap =
 
 const MIN_SEARCH_LENGTH = 3;
 const SEARCH_DEBOUNCE_MS = 500;
-const SEARCH_INPUT_ACCESSORY_ID = "pickupPointsSearchAccessory";
 
 type GeocodeHit = { lat: number; lng: number; label?: string };
 
@@ -196,16 +192,7 @@ export default function PickupPointsScreen() {
     [carrierName],
   );
 
-  // Focus after transition + layout so the keyboard rises from the bottom
-  // (see root Stack `pickup-points` animation: "fade").
-  useEffect(() => {
-    const outer = setTimeout(() => {
-      InteractionManager.runAfterInteractions(() => {
-        searchInputRef.current?.focus();
-      });
-    }, 480);
-    return () => clearTimeout(outer);
-  }, []);
+  // Intentionally no auto-focus: user should see map + list first; tap the field to search.
 
   // Fetch pickup points when search or context changes
   useEffect(() => {
@@ -439,8 +426,6 @@ export default function PickupPointsScreen() {
     setHasSearched(false);
     setResults([]);
     setError(null);
-    // Delay focus slightly so the TextInput is mounted when GPS label clears
-    setTimeout(() => searchInputRef.current?.focus(), 50);
   };
 
   const formatDistance = (km?: number) => {
@@ -625,20 +610,6 @@ export default function PickupPointsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {Platform.OS === "ios" && (
-        <InputAccessoryView nativeID={SEARCH_INPUT_ACCESSORY_ID}>
-          <View style={styles.keyboardAccessory}>
-            <Pressable
-              onPress={() => Keyboard.dismiss()}
-              style={styles.keyboardAccessoryBtn}
-              hitSlop={12}
-            >
-              <Text style={styles.keyboardAccessoryDone}>Done</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
-      )}
-
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -687,9 +658,6 @@ export default function PickupPointsScreen() {
             returnKeyType="done"
             blurOnSubmit
             onSubmitEditing={() => Keyboard.dismiss()}
-            inputAccessoryViewID={
-              Platform.OS === "ios" ? SEARCH_INPUT_ACCESSORY_ID : undefined
-            }
             clearButtonMode="never"
           />
         )}
@@ -803,7 +771,10 @@ export default function PickupPointsScreen() {
             results.length === 0 && styles.listContentEmpty,
           ]}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+          keyboardDismissMode={
+            Platform.OS === "ios" ? "interactive" : "on-drag"
+          }
+          onScrollBeginDrag={() => Keyboard.dismiss()}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
@@ -851,25 +822,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
-  },
-  keyboardAccessory: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: "#ECEFF1",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.neutral[300],
-  },
-  keyboardAccessoryBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  keyboardAccessoryDone: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.primary[600],
   },
 
   // ── Header ──────────────────────────────────────────────────────────────

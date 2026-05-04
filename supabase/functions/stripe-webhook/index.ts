@@ -17,6 +17,77 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 // user MUST set this in Supabase Secrets
 const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
 
+/**
+ * After payment is confirmed, ask `furgonetka-create-shipment` to print a label (Phase 4)
+ * or validate the order (stub). Idempotent: skips local pickup and if `shipments` already exists.
+ * Uses service role — same as future stripe-webhook automation.
+ */
+async function maybeInvokeFurgonetkaCreateShipment(
+    supabaseAdmin: ReturnType<typeof createClient>,
+    orderId: string,
+): Promise<void> {
+    const { data: existingShipment } = await supabaseAdmin
+        .from('shipments')
+        .select('id')
+        .eq('order_id', orderId)
+        .maybeSingle()
+
+    if (existingShipment) {
+        console.log(`furgonetka-create-shipment skipped: shipment already exists for order ${orderId}`)
+        return
+    }
+
+    const { data: orderRow } = await supabaseAdmin
+        .from('orders')
+        .select('shipping_method_details')
+        .eq('id', orderId)
+        .maybeSingle()
+
+    const raw = orderRow?.shipping_method_details
+    const details =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+            ? (raw as Record<string, unknown>)
+            : {}
+    const shipType = String(details.type || '').toLowerCase()
+    if (shipType === 'local_pickup') {
+        console.log(`furgonetka-create-shipment skipped: local_pickup for order ${orderId}`)
+        return
+    }
+
+    const baseUrl = (Deno.env.get('SUPABASE_URL') || '').replace(/\/$/, '')
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    if (!baseUrl || !serviceKey) {
+        console.error(
+            'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — cannot invoke furgonetka-create-shipment',
+        )
+        return
+    }
+
+    const url = `${baseUrl}/functions/v1/furgonetka-create-shipment`
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ order_id: orderId }),
+    })
+
+    const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean
+        error?: string
+        stub?: boolean
+    }
+    if (!res.ok || !json?.success) {
+        const msg = typeof json?.error === 'string' ? json.error : `HTTP ${res.status}`
+        console.error(`furgonetka-create-shipment failed for order ${orderId}:`, msg, json)
+        throw new Error(msg)
+    }
+    console.log(
+        `furgonetka-create-shipment ok for order ${orderId}${json.stub === true ? ' (stub)' : ''}`,
+    )
+}
+
 serve(async (req) => {
     // 1. Verify Request Signature (Security Critical)
     const signature = req.headers.get('Stripe-Signature')
@@ -104,7 +175,12 @@ serve(async (req) => {
 
                     await decrementStock(orderId)
 
-                    // TODO(phase-4): invoke furgonetka-create-shipment here.
+                    try {
+                        await maybeInvokeFurgonetkaCreateShipment(supabaseAdmin, orderId)
+                    } catch (labelErr: unknown) {
+                        // Do not fail the webhook — avoids Stripe retries re-running decrementStock.
+                        console.error('furgonetka-create-shipment after authorisation:', labelErr)
+                    }
                 }
                 break
             }
@@ -146,6 +222,17 @@ serve(async (req) => {
                         .eq('id', orderId)
 
                     if (error) throw error
+
+                    if (!isCaptureOfEscrow) {
+                        try {
+                            await maybeInvokeFurgonetkaCreateShipment(supabaseAdmin, orderId)
+                        } catch (labelErr: unknown) {
+                            console.error(
+                                'furgonetka-create-shipment after direct charge:',
+                                labelErr,
+                            )
+                        }
+                    }
                 }
                 break
             }

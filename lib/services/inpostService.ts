@@ -75,6 +75,9 @@ export interface InPostCalculatedRate {
   error?: string;
 }
 
+/**
+ * @deprecated Prefer `createFurgonetkaShipment` from `furgonetkaService`. Kept for InPost Edge Function until Phase 7 removal.
+ */
 export const createInPostShipmentFromOrder = async (orderId: string) => {
   try {
     const { data, error } = await supabase.functions.invoke("inpost-handler", {
