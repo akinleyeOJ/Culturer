@@ -22,6 +22,7 @@ import { Colors } from '../../constants/color';
 import { CATEGORIES } from '../../constants/categories';
 import { useAuth } from '../../contexts/AuthContext';
 import { uploadProductImages, createListing, fetchProductById, deleteListing } from '../../lib/services/productService';
+import { fetchStripeConnectStatus } from '../../lib/services/stripeConnectService';
 import { ImageZoomModal } from '../../components/ImageZoomModal';
 
 interface ImageFile {
@@ -163,6 +164,30 @@ const EditListingScreen = () => {
         if (!description.trim()) {
             Alert.alert('Missing Description', 'Please provide a general description.');
             return;
+        }
+
+        if (status === 'active') {
+            try {
+                const connect = await fetchStripeConnectStatus();
+                if (!connect.onboarded) {
+                    Alert.alert(
+                        'Payout setup required',
+                        'Connect your bank account with Stripe before publishing items for sale.',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            {
+                                text: 'Set up payouts',
+                                onPress: () => router.push('/profile/stripe-connect' as any),
+                            },
+                        ],
+                    );
+                    return;
+                }
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : 'Could not verify payout status.';
+                Alert.alert('Payout check failed', msg);
+                return;
+            }
         }
 
         try {

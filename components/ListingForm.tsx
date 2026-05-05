@@ -21,6 +21,7 @@ import { Colors } from '../constants/color';
 import { CATEGORIES } from '../constants/categories';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadProductImages, createListing } from '../lib/services/productService';
+import { fetchStripeConnectStatus } from '../lib/services/stripeConnectService';
 import { supabase } from '../lib/supabase';
 import { ImageZoomModal } from './ImageZoomModal';
 
@@ -197,6 +198,30 @@ const ListingForm = ({ onClose, headerTitle = "New Listing", onSuccess }: Listin
                 ]
             );
             return;
+        }
+
+        if (status === 'active') {
+            try {
+                const connect = await fetchStripeConnectStatus();
+                if (!connect.onboarded) {
+                    Alert.alert(
+                        'Payout setup required',
+                        'Connect your bank account with Stripe before listing items for sale. Buyers pay by card and we need your payout account ready first.',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            {
+                                text: 'Set up payouts',
+                                onPress: () => router.push('/profile/stripe-connect' as any),
+                            },
+                        ],
+                    );
+                    return;
+                }
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : 'Could not verify payout status.';
+                Alert.alert('Payout check failed', msg);
+                return;
+            }
         }
 
         if (!title.trim() && status === 'draft') {

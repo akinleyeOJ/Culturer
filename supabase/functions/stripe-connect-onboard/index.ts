@@ -41,7 +41,42 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
     httpClient: Stripe.createFetchHttpClient(),
 })
 
-const APP_URL_SCHEME = Deno.env.get('APP_URL_SCHEME') || 'culturar://'
+/** Static page that redirects to culturar:// (deploy next to STRIPE_CONNECT_PUBLIC_BASE_URL). */
+const STRIPE_CONNECT_CALLBACK_FILE = 'stripe-connect-callback.html'
+
+function stripeConnectCallbackUrl(siteBase: string, mode: 'refresh' | 'return'): string {
+    const u = siteBase.replace(/\/$/, '')
+    return `${u}/${STRIPE_CONNECT_CALLBACK_FILE}?stripe_connect=${mode}`
+}
+
+/**
+ * Stripe Account Links require refresh_url / return_url to be valid **https** URLs
+ * (custom schemes like culturar:// are rejected with "Not a valid URL").
+ * Serve `web-public/stripe-connect-callback.html` at this path on your public site.
+ */
+function connectRedirectUrls(): { refresh_url: string; return_url: string } {
+    const explicitRefresh = Deno.env.get('STRIPE_CONNECT_REFRESH_URL')?.trim()
+    const explicitReturn = Deno.env.get('STRIPE_CONNECT_RETURN_URL')?.trim()
+    const base =
+        Deno.env.get('STRIPE_CONNECT_PUBLIC_BASE_URL')?.trim() ||
+        Deno.env.get('APP_PUBLIC_URL')?.trim()
+
+    if (explicitRefresh && explicitReturn) {
+        return { refresh_url: explicitRefresh, return_url: explicitReturn }
+    }
+    if (base) {
+        return {
+            refresh_url: stripeConnectCallbackUrl(base, 'refresh'),
+            return_url: stripeConnectCallbackUrl(base, 'return'),
+        }
+    }
+    // Matches iOS associated domain culturar.netlify.app — deploy stripe-connect-callback.html there.
+    const fallback = 'https://culturar.netlify.app'
+    return {
+        refresh_url: stripeConnectCallbackUrl(fallback, 'refresh'),
+        return_url: stripeConnectCallbackUrl(fallback, 'return'),
+    }
+}
 
 type OnboardAction = 'status' | 'onboard'
 
@@ -145,10 +180,12 @@ serve(async (req) => {
                 .eq('id', userId)
         }
 
+        const { refresh_url, return_url } = connectRedirectUrls()
+
         const accountLink = await stripe.accountLinks.create({
             account: accountId,
-            refresh_url: `${APP_URL_SCHEME}profile/stripe-connect?refresh=1`,
-            return_url: `${APP_URL_SCHEME}profile/stripe-connect?return=1`,
+            refresh_url,
+            return_url,
             type: 'account_onboarding',
         })
 

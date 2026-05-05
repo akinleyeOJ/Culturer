@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Returning to Culturer</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        color: #1a1a1a;
+        background: #f0f0f0;
+      }
+      #panel {
+        max-width: 28rem;
+        line-height: 1.5;
+      }
+      #hint {
+        font-size: 0.9rem;
+        color: #555;
+        margin-top: 1rem;
+      }
+      #expo-note {
+        font-size: 0.85rem;
+        color: #666;
+        margin-top: 1.25rem;
+        padding-top: 1rem;
+        border-top: 1px solid #ddd;
+      }
+      a {
+        color: #c2410c;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="panel">
+      <p><strong>Returning to Culturer</strong></p>
+      <p id="line-open">Opening the app…</p>
+      <p><a id="open-app" href="culturar://profile/stripe-connect">Tap to open Culturer</a></p>
+      <p id="hint" hidden></p>
+      <p id="expo-note">
+        If Safari says the address is invalid: <strong>Expo Go</strong> does not register the
+        <code>culturar://</code> link — only a real Culturer build does. Use the app switcher to
+        return to Culturer, or test this flow in a <strong>development build</strong>
+        (<code>expo run:ios</code> / Android) or TestFlight.
+      </p>
+    </div>
+    <script>
+      (function () {
+        var q = new URLSearchParams(window.location.search);
+        var mode = q.get("stripe_connect");
+        var target =
+          "culturar://profile/stripe-connect" +
+          (mode === "return"
+            ? "?return=1"
+            : mode === "refresh"
+              ? "?refresh=1"
+              : "");
+
+        var link = document.getElementById("open-app");
+        link.href = target;
+
+        var ua = navigator.userAgent || "";
+        var mobile = /iPhone|iPad|iPod|Android/i.test(ua);
+        var hint = document.getElementById("hint");
+        if (!mobile) {
+          hint.hidden = false;
+          hint.textContent =
+            "On a laptop or PC, the app usually won't open from this page. After Stripe, use your phone, or tap the link above if Culturer is installed.";
+        }
+
+        // Let the browser paint this page first; an immediate redirect in <head> often leaves a blank screen.
+        function tryOpen() {
+          window.location.href = target;
+        }
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            setTimeout(tryOpen, 200);
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
